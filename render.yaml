@@ -7,7 +7,7 @@ services:
     plan: starter
     region: frankfurt
     buildCommand: npm ci --include=dev && npm run build
-    startCommand: npx prisma migrate deploy && npm start
+    startCommand: npx prisma migrate deploy && next start -H 0.0.0.0 -p $PORT
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION

@@ -16,10 +16,16 @@ let pending: Promise<void> | null = null;
 
 export function bootstrap() {
   if (!pending) {
-    pending = run().catch((error) => {
-      pending = null;
-      throw error;
-    });
+    pending = run()
+      .then((done) => {
+        // Another instance still holds the lock. Forget this attempt so the
+        // next request can try again once that connection is gone.
+        if (!done) pending = null;
+      })
+      .catch((error) => {
+        pending = null;
+        throw error;
+      });
   }
   return pending;
 }
@@ -307,21 +313,45 @@ async function seedSamples(db: Db) {
   await db.appMeta.create({ data: { id: "sampleSeeded", value: "yes" } });
 }
 
-async function run() {
-  // Session locks escape Prisma's pool: lock and unlock can land on different
-  // connections, and the next request waits forever. A transaction lock is
-  // tied to the one connection this work uses, and it drops on commit.
-  await prisma.$transaction(
-    async (db) => {
-      await db.$executeRaw`SELECT pg_advisory_xact_lock(8142018)`;
-      await upsertAccounts(db, accountsFromEnv());
-      const flag = await db.appMeta.findUnique({ where: { id: "sampleSeeded" } });
-      if (!flag && (await db.post.count()) === 0) {
-        await seedSamples(db);
-      } else if (!flag) {
-        await db.appMeta.create({ data: { id: "sampleSeeded", value: "existing" } });
-      }
-    },
-    { timeout: 60_000 },
+function lockIsBusy(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /lock timeout|lock_timeout|55P03|unable to start a transaction in the given time|expired transaction/i.test(
+    message,
   );
+}
+
+async function run() {
+  // Never wait on a lock held by the instance we are replacing. try_lock
+  // returns immediately, the timeouts cap every other wait, and a miss is a
+  // skip: account upserts and the sample seed are safe to run later.
+  try {
+    return await prisma.$transaction(
+      async (db) => {
+        await db.$executeRaw`SELECT set_config('lock_timeout', '2s', true)`;
+        await db.$executeRaw`SELECT set_config('statement_timeout', '4s', true)`;
+        const rows = await db.$queryRaw<Array<{ locked: boolean }>>`
+          SELECT pg_try_advisory_xact_lock(8142018) AS locked
+        `;
+        if (!rows[0]?.locked) {
+          console.warn("Bootstrap skipped; another instance holds the lock.");
+          return false;
+        }
+        await upsertAccounts(db, accountsFromEnv());
+        const flag = await db.appMeta.findUnique({ where: { id: "sampleSeeded" } });
+        if (!flag && (await db.post.count()) === 0) {
+          await seedSamples(db);
+        } else if (!flag) {
+          await db.appMeta.create({ data: { id: "sampleSeeded", value: "existing" } });
+        }
+        return true;
+      },
+      { maxWait: 2_000, timeout: 8_000 },
+    );
+  } catch (error) {
+    if (lockIsBusy(error)) {
+      console.warn("Bootstrap skipped; the database lock was busy.");
+      return false;
+    }
+    throw error;
+  }
 }
