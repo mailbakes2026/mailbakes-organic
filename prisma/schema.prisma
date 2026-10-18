@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MANAGEMENT
+  TEAM
+}
+
+enum Platform {
+  INSTAGRAM
+  FACEBOOK
+  TIKTOK
+  LINKEDIN
+  YOUTUBE_SHORTS
+  SNAPCHAT
+}
+
+enum ContentType {
+  FEED
+  REEL
+  STORY
+}
+
+enum PostStatus {
+  DRAFT
+  PENDING_APPROVAL
+  CHANGES_REQUESTED
+  APPROVED
+  REJECTED
+}
+
+enum CommentKind {
+  APPROVAL
+  REJECTION
+  CHANGES
+  NOTE
+}
+
+enum KeyDateKind {
+  LAUNCH
+  KEY_DATE
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  posts        Post[]    @relation("Author")
+  reviews      Post[]    @relation("Reviewer")
+  comments     Comment[]
+  keyDates     KeyDate[]
+}
+
+model Post {
+  id            String      @id @default(cuid())
+  title         String
+  platforms     Platform[]
+  contentType   ContentType
+  plannedDate   DateTime    @db.Date
+  status        PostStatus
+  caption       String
+  creativeNotes String      @default("")
+  authorId      String
+  author        User        @relation("Author", fields: [authorId], references: [id])
+  reviewerId    String?
+  reviewer      User?       @relation("Reviewer", fields: [reviewerId], references: [id])
+  reviewedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  media         Media[]
+  comments      Comment[]
+
+  @@index([plannedDate])
+  @@index([status])
+}
+
+model Comment {
+  id        String      @id @default(cuid())
+  postId    String
+  post      Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User        @relation(fields: [authorId], references: [id])
+  kind      CommentKind
+  body      String
+  createdAt DateTime    @default(now())
+
+  @@index([postId])
+}
+
+model Media {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+}
+
+model KeyDate {
+  id        String      @id @default(cuid())
+  title     String
+  date      DateTime    @db.Date
+  kind      KeyDateKind
+  notes     String      @default("")
+  authorId  String
+  author    User        @relation(fields: [authorId], references: [id])
+  createdAt DateTime    @default(now())
+
+  @@index([date])
+}
+
+model AppMeta {
+  id    String @id
+  value String
+}
