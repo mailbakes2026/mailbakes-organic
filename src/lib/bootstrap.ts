@@ -1,7 +1,9 @@
 import bcrypt from "bcryptjs";
-import type { ContentType, Platform, PostStatus } from "@prisma/client";
+import { Prisma, type ContentType, type Platform, type PostStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/types";
+
+type Db = Prisma.TransactionClient;
 
 type AccountSpec = {
   email: string;
@@ -76,11 +78,11 @@ function accountsFromEnv(): AccountSpec[] {
   return accounts;
 }
 
-async function upsertAccounts(accounts: AccountSpec[]) {
+async function upsertAccounts(db: Db, accounts: AccountSpec[]) {
   for (const account of accounts) {
-    const existing = await prisma.user.findUnique({ where: { email: account.email } });
+    const existing = await db.user.findUnique({ where: { email: account.email } });
     if (!existing) {
-      await prisma.user.create({
+      await db.user.create({
         data: {
           email: account.email,
           name: account.name,
@@ -92,7 +94,7 @@ async function upsertAccounts(accounts: AccountSpec[]) {
     }
     const samePassword = await bcrypt.compare(account.password, existing.passwordHash);
     if (!samePassword || existing.name !== account.name || existing.role !== account.role) {
-      await prisma.user.update({
+      await db.user.update({
         where: { id: existing.id },
         data: {
           name: account.name,
@@ -120,9 +122,9 @@ function svg(title: string, line: string, portrait: boolean) {
   );
 }
 
-async function seedSamples() {
+async function seedSamples(db: Db) {
   if (process.env.SEED_SAMPLE_CONTENT === "false") {
-    await prisma.appMeta.upsert({
+    await db.appMeta.upsert({
       where: { id: "sampleSeeded" },
       update: {},
       create: { id: "sampleSeeded", value: "disabled" },
@@ -130,8 +132,8 @@ async function seedSamples() {
     return;
   }
   const [team, management] = await Promise.all([
-    prisma.user.findFirst({ where: { role: "TEAM" } }),
-    prisma.user.findFirst({ where: { role: "MANAGEMENT" } }),
+    db.user.findFirst({ where: { role: "TEAM" } }),
+    db.user.findFirst({ where: { role: "MANAGEMENT" } }),
   ]);
   if (!team || !management) return;
 
@@ -250,7 +252,7 @@ async function seedSamples() {
     const [year, month, day] = item.plannedDate.split("-").map(Number);
     const reviewed = item.status !== "DRAFT" && item.status !== "PENDING_APPROVAL";
     const image = new Uint8Array(svg(item.title, "MailBakes · Liverpool", Boolean(item.portrait))) as Uint8Array<ArrayBuffer>;
-    await prisma.post.create({
+    await db.post.create({
       data: {
         title: item.title,
         platforms: item.platforms,
@@ -283,7 +285,7 @@ async function seedSamples() {
     });
   }
 
-  await prisma.keyDate.createMany({
+  await db.keyDate.createMany({
     data: [
       {
         title: "Christmas Cake Cards launch",
@@ -302,20 +304,24 @@ async function seedSamples() {
     ],
   });
 
-  await prisma.appMeta.create({ data: { id: "sampleSeeded", value: "yes" } });
+  await db.appMeta.create({ data: { id: "sampleSeeded", value: "yes" } });
 }
 
 async function run() {
-  await prisma.$executeRaw`SELECT pg_advisory_lock(8142018)`;
-  try {
-    await upsertAccounts(accountsFromEnv());
-    const flag = await prisma.appMeta.findUnique({ where: { id: "sampleSeeded" } });
-    if (!flag && (await prisma.post.count()) === 0) {
-      await seedSamples();
-    } else if (!flag) {
-      await prisma.appMeta.create({ data: { id: "sampleSeeded", value: "existing" } });
-    }
-  } finally {
-    await prisma.$executeRaw`SELECT pg_advisory_unlock(8142018)`;
-  }
+  // Session locks escape Prisma's pool: lock and unlock can land on different
+  // connections, and the next request waits forever. A transaction lock is
+  // tied to the one connection this work uses, and it drops on commit.
+  await prisma.$transaction(
+    async (db) => {
+      await db.$executeRaw`SELECT pg_advisory_xact_lock(8142018)`;
+      await upsertAccounts(db, accountsFromEnv());
+      const flag = await db.appMeta.findUnique({ where: { id: "sampleSeeded" } });
+      if (!flag && (await db.post.count()) === 0) {
+        await seedSamples(db);
+      } else if (!flag) {
+        await db.appMeta.create({ data: { id: "sampleSeeded", value: "existing" } });
+      }
+    },
+    { timeout: 60_000 },
+  );
 }

@@ -1,15 +1,10 @@
 import type { Metadata } from "next";
-import { Fraunces, Source_Sans_3 } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const sans = Source_Sans_3({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-source",
-});
-
-const serif = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
+  variable: "--font-inter",
 });
 
 export const metadata: Metadata = {
@@ -21,8 +16,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en-GB">
-      <body className={`${sans.variable} ${serif.variable} antialiased`}>{children}</body>
+    <html lang="en-GB" className={inter.variable}>
+      <body>{children}</body>
     </html>
   );
 }

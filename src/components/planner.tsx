@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { useAppTab } from "@/components/shell";
 import {
   Dialog,
   DialogClose,
@@ -11,9 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   CONTENT_TYPES,
   MAX_UPLOAD_BYTES,
@@ -34,11 +31,7 @@ import type {
   UserDTO,
 } from "@/lib/types";
 
-type Tab = "approval" | "feed" | "calendar";
 type ReviewAction = "approve" | "reject" | "request_changes";
-
-const fieldClass =
-  "h-11 w-full rounded-lg border border-input bg-white px-2.5 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 function londonToday() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -115,6 +108,13 @@ const COMMENT_LABEL = {
   NOTE: "Note",
 };
 
+function statusPill(status: StatusId) {
+  if (status === "APPROVED") return "pill ok";
+  if (status === "REJECTED") return "pill hot";
+  if (status === "PENDING_APPROVAL" || status === "CHANGES_REQUESTED") return "pill warn";
+  return "pill";
+}
+
 export function Planner({
   user,
   posts,
@@ -125,7 +125,7 @@ export function Planner({
   keyDates: KeyDateDTO[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("approval");
+  const { tab } = useAppTab();
   const [platform, setPlatform] = useState<PlatformId>("INSTAGRAM");
   const [showInReview, setShowInReview] = useState(true);
   const [postForm, setPostForm] = useState<PostDTO | "new" | null>(null);
@@ -208,74 +208,51 @@ export function Planner({
 
   return (
     <div>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="page-head">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Social media</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          <h1>Social media</h1>
+          <p className="muted intro">
             Plan posts for Instagram, Facebook, TikTok, LinkedIn, YouTube Shorts and Snapchat.
             Management approves them here before anything is treated as ready. Approving doesn&apos;t
             publish anything.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" className="h-10 bg-white" onClick={() => setKeyOpen(true)}>
+        <div className="row">
+          <button type="button" className="btn ghost" onClick={() => setKeyOpen(true)}>
             + Launch / key date
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            className="h-10"
+            className="btn"
             onClick={() => {
               setPresetDate(null);
               setPostForm("new");
             }}
           >
             + New post
-          </Button>
+          </button>
         </div>
       </div>
 
-      <div className="mt-6 flex gap-6 overflow-x-auto border-b border-border">
-        {(
-          [
-            ["approval", "Posts for approval"],
-            ["feed", "Feed preview"],
-            ["calendar", "Content calendar"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`shrink-0 border-b-2 pb-2 text-sm font-medium ${
-              tab === id ? "border-[#1b3d32] text-[#17261f]" : "border-transparent text-muted-foreground"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {banner ? <p className="mt-4 rounded-lg bg-[#fdecee] px-3 py-2 text-sm text-[#9f2d3a]">{banner}</p> : null}
+      {banner ? <p className="alert crit">{banner}</p> : null}
 
       {tab === "approval" ? (
-        <div className="mt-5 space-y-6">
+        <div>
           <section>
             {waiting.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing waiting for approval.</p>
+              <p className="muted">Nothing waiting for approval.</p>
             ) : (
-              <div className="space-y-3">
-                {waiting.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    user={user}
-                    busy={busy}
-                    onOpen={() => setDetail(post)}
-                    onEdit={() => setPostForm(post)}
-                    onReview={askReview}
-                  />
-                ))}
-              </div>
+              waiting.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  user={user}
+                  busy={busy}
+                  onOpen={() => setDetail(post)}
+                  onEdit={() => setPostForm(post)}
+                  onReview={askReview}
+                />
+              ))
             )}
           </section>
           {changes.length > 0 ? (
@@ -308,50 +285,44 @@ export function Planner({
               ))}
             </Section>
           ) : null}
-          <details className="group">
-            <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium">
-              <span className="inline-block transition group-open:rotate-90">▶</span>
+          <details className="fold">
+            <summary>
               Approved and scheduled posts
-              <span className="text-muted-foreground">{approved.length}</span>
+              <span className="pill">{approved.length}</span>
             </summary>
-            <div className="mt-3 space-y-3">
-              {approved.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nothing approved yet.</p>
-              ) : (
-                approved.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    user={user}
-                    busy={busy}
-                    onOpen={() => setDetail(post)}
-                    onEdit={() => setPostForm(post)}
-                    onReview={askReview}
-                  />
-                ))
-              )}
-            </div>
+            {approved.length === 0 ? (
+              <p className="muted">Nothing approved yet.</p>
+            ) : (
+              approved.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  user={user}
+                  busy={busy}
+                  onOpen={() => setDetail(post)}
+                  onEdit={() => setPostForm(post)}
+                  onReview={askReview}
+                />
+              ))
+            )}
           </details>
           {rejected.length > 0 ? (
-            <details className="group">
-              <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium">
-                <span className="inline-block transition group-open:rotate-90">▶</span>
+            <details className="fold">
+              <summary>
                 Rejected
-                <span className="text-muted-foreground">{rejected.length}</span>
+                <span className="pill">{rejected.length}</span>
               </summary>
-              <div className="mt-3 space-y-3">
-                {rejected.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    user={user}
-                    busy={busy}
-                    onOpen={() => setDetail(post)}
-                    onEdit={() => setPostForm(post)}
-                    onReview={askReview}
-                  />
-                ))}
-              </div>
+              {rejected.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  user={user}
+                  busy={busy}
+                  onOpen={() => setDetail(post)}
+                  onEdit={() => setPostForm(post)}
+                  onReview={askReview}
+                />
+              ))}
             </details>
           ) : null}
         </div>
@@ -387,7 +358,7 @@ export function Planner({
       ) : null}
 
       <Dialog open={postForm !== null} onOpenChange={(open) => !open && setPostForm(null)}>
-        <DialogContent showCloseButton={false} className="max-h-[92dvh] overflow-y-auto sm:max-w-xl">
+        <DialogContent showCloseButton={false} className="sheet-form">
           {postForm ? (
             <PostForm
               user={user}
@@ -404,7 +375,7 @@ export function Planner({
       </Dialog>
 
       <Dialog open={keyOpen} onOpenChange={setKeyOpen}>
-        <DialogContent showCloseButton={false} className="sm:max-w-md">
+        <DialogContent showCloseButton={false}>
           <KeyDateForm
             onClose={() => setKeyOpen(false)}
             onSaved={() => {
@@ -416,7 +387,7 @@ export function Planner({
       </Dialog>
 
       <Dialog open={Boolean(openPost)} onOpenChange={(open) => !open && setDetail(null)}>
-        <DialogContent showCloseButton={false} className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
+        <DialogContent showCloseButton={false} className="sheet-form">
           {openPost ? (
             <PostDetail
               post={openPost}
@@ -436,7 +407,7 @@ export function Planner({
       </Dialog>
 
       <Dialog open={Boolean(story)} onOpenChange={(open) => !open && setStory(null)}>
-        <DialogContent showCloseButton={false} className="bg-[#111] text-white sm:max-w-sm">
+        <DialogContent showCloseButton={false} className="story-sheet">
           {story ? (
             <StoryViewer
               items={story.items}
@@ -449,9 +420,10 @@ export function Planner({
       </Dialog>
 
       <Dialog open={Boolean(prompt)} onOpenChange={(open) => !open && setPrompt(null)}>
-        <DialogContent showCloseButton={false} className="sm:max-w-md">
+        <DialogContent showCloseButton={false}>
           {prompt ? (
             <form
+              className="stack"
               onSubmit={(event) => {
                 event.preventDefault();
                 void sendReview(prompt.id, prompt.action, prompt.comment);
@@ -465,19 +437,19 @@ export function Planner({
                     : "Tell the team what to change. Nothing is published."}
                 </DialogDescription>
               </DialogHeader>
-              <Textarea
-                className="mt-4 min-h-28 bg-white text-base"
+              <textarea
+                rows={5}
                 value={prompt.comment}
                 onChange={(event) => setPrompt({ ...prompt, comment: event.target.value })}
                 required
               />
-              <div className="mt-4 flex justify-end gap-2">
-                <Button type="button" variant="outline" className="h-10 bg-white" onClick={() => setPrompt(null)}>
+              <div className="row">
+                <button type="button" className="btn ghost" onClick={() => setPrompt(null)}>
                   Cancel
-                </Button>
-                <Button type="submit" className="h-10" disabled={busy}>
+                </button>
+                <button type="submit" className="btn" disabled={busy}>
                   {prompt.action === "reject" ? "Reject" : "Request changes"}
-                </Button>
+                </button>
               </div>
             </form>
           ) : null}
@@ -485,29 +457,26 @@ export function Planner({
       </Dialog>
 
       <Dialog open={Boolean(activeKey)} onOpenChange={(open) => !open && setActiveKey(null)}>
-        <DialogContent showCloseButton={false} className="sm:max-w-md">
+        <DialogContent showCloseButton={false}>
           {activeKey ? (
-            <div>
+            <div className="stack">
               <DialogHeader>
                 <DialogTitle>{activeKey.title}</DialogTitle>
                 <DialogDescription>
                   {activeKey.kind === "LAUNCH" ? "Launch" : "Key date"} · {formatDay(activeKey.date)}
                 </DialogDescription>
               </DialogHeader>
-              {activeKey.notes ? <p className="mt-3 text-sm">{activeKey.notes}</p> : null}
-              <div className="mt-4 flex justify-end gap-2">
-                <DialogClose render={<Button variant="outline" type="button" className="h-10 bg-white" />}>
-                  Close
-                </DialogClose>
-                <Button
+              {activeKey.notes ? <p className="pre">{activeKey.notes}</p> : null}
+              <div className="row">
+                <DialogClose render={<button type="button" className="btn ghost" />}>Close</DialogClose>
+                <button
                   type="button"
-                  variant="destructive"
-                  className="h-10"
+                  className="btn danger"
                   disabled={busy}
                   onClick={() => void removeKeyDate(activeKey.id)}
                 >
                   Delete
-                </Button>
+                </button>
               </div>
             </div>
           ) : null}
@@ -520,8 +489,8 @@ export function Planner({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
-      <div className="space-y-3">{children}</div>
+      <h3>{title}</h3>
+      {children}
     </section>
   );
 }
@@ -543,31 +512,33 @@ function PostCard({
 }) {
   const note = [...post.comments].reverse().find((comment) => comment.kind !== "APPROVAL");
   return (
-    <article className="rounded-xl border border-border bg-white p-4">
-      <button type="button" onClick={onOpen} className="w-full text-left">
-        <div className="flex flex-wrap items-center gap-2">
+    <article className="card">
+      <button type="button" className="post-open" onClick={onOpen}>
+        <div className="row">
           {post.platforms.map((item) => (
-            <span key={item} className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <span className="size-2 rounded-full" style={{ background: platformColour(item) }} />
+            <span key={item} className="plat">
+              <span className="mark" style={{ background: platformColour(item) }} />
               {platformLabel(item)}
             </span>
           ))}
-          <span className="rounded-full bg-[#efeae1] px-2 py-0.5 text-xs">{contentLabel(post.contentType)}</span>
-          <span className="text-xs text-muted-foreground">{statusLabel(post.status)}</span>
+          <span className="pill">{contentLabel(post.contentType)}</span>
+          <span className={statusPill(post.status)}>{statusLabel(post.status)}</span>
         </div>
-        <h3 className="mt-2 font-semibold">{post.title}</h3>
-        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.caption}</p>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <h2>{post.title}</h2>
+        <p className="muted clamp-2">{post.caption}</p>
+        <p className="small muted">
           {post.authorName} · {formatDay(post.plannedDate)}
         </p>
       </button>
       {note ? (
-        <p className="mt-2 rounded-lg bg-[#fff4e8] px-3 py-2 text-sm">
-          <span className="font-medium">{note.authorName}: </span>
-          {note.body}
+        <p className="alert warn">
+          <span>
+            <b>{note.authorName}: </b>
+            {note.body}
+          </span>
         </p>
       ) : null}
-      <div className="mt-3">
+      <div className="row">
         <ReviewButtons post={post} user={user} busy={busy} onEdit={onEdit} onReview={onReview} />
       </div>
     </article>
@@ -589,42 +560,32 @@ function ReviewButtons({
 }) {
   if (user.role !== "MANAGEMENT") {
     return (
-      <Button type="button" variant="outline" className="h-10 bg-white" onClick={onEdit}>
+      <button type="button" className="btn ghost" onClick={onEdit}>
         Edit
-      </Button>
+      </button>
     );
   }
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+    <>
       {post.status !== "APPROVED" ? (
-        <Button type="button" className="h-10" disabled={busy} onClick={() => onReview(post.id, "approve")}>
+        <button type="button" className="btn" disabled={busy} onClick={() => onReview(post.id, "approve")}>
           Approve
-        </Button>
+        </button>
       ) : null}
       {post.status !== "CHANGES_REQUESTED" ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="h-10 bg-white"
-          onClick={() => onReview(post.id, "request_changes")}
-        >
+        <button type="button" className="btn ghost" onClick={() => onReview(post.id, "request_changes")}>
           Request changes
-        </Button>
+        </button>
       ) : null}
       {post.status !== "REJECTED" ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="h-10 bg-white text-destructive"
-          onClick={() => onReview(post.id, "reject")}
-        >
+        <button type="button" className="btn danger" onClick={() => onReview(post.id, "reject")}>
           Reject
-        </Button>
+        </button>
       ) : null}
-      <Button type="button" variant="ghost" className="h-10" onClick={onEdit}>
+      <button type="button" className="btn ghost" onClick={onEdit}>
         Edit
-      </Button>
-    </div>
+      </button>
+    </>
   );
 }
 
@@ -649,73 +610,72 @@ function PostDetail({
 }) {
   const canDelete = user.role === "MANAGEMENT" || (post.authorId === user.id && post.status === "DRAFT");
   return (
-    <div>
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="stack">
+      <div className="sheet-head">
         <DialogHeader>
-          <DialogTitle className="text-lg">{post.title}</DialogTitle>
+          <DialogTitle>{post.title}</DialogTitle>
           <DialogDescription>
             {contentLabel(post.contentType)} · {formatDay(post.plannedDate)} · {statusLabel(post.status)}
           </DialogDescription>
         </DialogHeader>
-        <DialogClose render={<Button variant="outline" type="button" className="h-9 bg-white" />}>
-          Close
-        </DialogClose>
+        <DialogClose render={<button type="button" className="btn ghost sm" />}>Close</DialogClose>
       </div>
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="row">
         {post.platforms.map((item) => (
-          <span key={item} className="inline-flex items-center gap-1 text-xs">
-            <span className="size-2 rounded-full" style={{ background: platformColour(item) }} />
+          <span key={item} className="plat">
+            <span className="mark" style={{ background: platformColour(item) }} />
             {platformLabel(item)}
           </span>
         ))}
+        <span className={statusPill(post.status)}>{statusLabel(post.status)}</span>
       </div>
       {post.contentType === "STORY" ? (
-        <div className="mb-4">
+        <div>
           <StoryFrame post={post} />
-          <Button type="button" variant="outline" className="mt-3 h-10 bg-white" onClick={onPreview}>
+          <button type="button" className="btn ghost" onClick={onPreview}>
             Open story preview
-          </Button>
+          </button>
         </div>
       ) : (
-        <div className="mb-4 grid gap-2">
+        <div className="media-stack">
           {post.media.map((media) =>
             media.mimeType.startsWith("video/") ? (
-              <video key={media.id} src={`/api/media/${media.id}`} controls playsInline className="w-full rounded-lg" />
+              <video key={media.id} src={`/api/media/${media.id}`} controls playsInline />
             ) : (
-              <img key={media.id} src={`/api/media/${media.id}`} alt={post.title} className="w-full rounded-lg" />
+              <img key={media.id} src={`/api/media/${media.id}`} alt={post.title} />
             ),
           )}
         </div>
       )}
-      <p className="whitespace-pre-wrap text-sm">{post.caption}</p>
+      <p className="pre">{post.caption}</p>
       {post.creativeNotes ? (
-        <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">Creative link or notes. </span>
+        <p className="muted pre">
+          <b>Creative link or notes. </b>
           {post.creativeNotes}
         </p>
       ) : null}
       {post.comments.length > 0 ? (
-        <ul className="mt-4 space-y-2">
+        <ul className="notes">
           {post.comments.map((comment) => (
-            <li key={comment.id} className="rounded-lg bg-[#f6f3ec] px-3 py-2 text-sm">
-              <span className="font-medium">
+            <li key={comment.id}>
+              <b>
                 {comment.authorName} · {COMMENT_LABEL[comment.kind]} · {formatWhen(comment.createdAt)}
-              </span>
-              <p className="mt-1">{comment.body}</p>
+              </b>
+              <p>{comment.body}</p>
             </li>
           ))}
         </ul>
       ) : null}
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="row">
         <ReviewButtons post={post} user={user} busy={busy} onEdit={onEdit} onReview={onReview} />
         {canDelete ? (
-          <Button type="button" variant="ghost" className="h-10 text-destructive" disabled={busy} onClick={onDelete}>
+          <button type="button" className="btn danger" disabled={busy} onClick={onDelete}>
             Delete
-          </Button>
+          </button>
         ) : null}
-        <Button type="button" variant="ghost" className="h-10 sm:ml-auto" onClick={onClose}>
+        <button type="button" className="btn ghost" onClick={onClose}>
           Done
-        </Button>
+        </button>
       </div>
     </div>
   );
@@ -724,29 +684,22 @@ function PostDetail({
 function StoryFrame({ post }: { post: PostDTO }) {
   const media = post.media[0];
   return (
-    <div className="relative mx-auto aspect-[9/16] w-[min(100%,280px)] overflow-hidden rounded-[28px] bg-black text-white">
+    <div className="story-frame">
       {media ? (
         media.mimeType.startsWith("video/") ? (
-          <video
-            src={`/api/media/${media.id}`}
-            className="h-full w-full object-cover"
-            autoPlay
-            muted
-            playsInline
-            loop
-          />
+          <video src={`/api/media/${media.id}`} autoPlay muted playsInline loop />
         ) : (
-          <img src={`/api/media/${media.id}`} alt="" className="h-full w-full object-cover" />
+          <img src={`/api/media/${media.id}`} alt="" />
         )
       ) : (
-        <div className="h-full w-full bg-gradient-to-b from-[#ed217a] to-[#1b3d32]" />
+        <div className="story-empty" />
       )}
-      <div className="absolute inset-x-3 top-3 h-1 rounded-full bg-white/30">
-        <div className="h-full w-1/2 rounded-full bg-white" />
+      <div className="story-bar">
+        <i />
       </div>
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4 pt-16">
-        <p className="text-sm font-semibold">MailBakes</p>
-        <p className="mt-1 text-sm">{post.caption}</p>
+      <div className="story-caption">
+        <b>MailBakes</b>
+        <p>{post.caption}</p>
       </div>
     </div>
   );
@@ -766,33 +719,32 @@ function StoryViewer({
   const post = items[index];
   if (!post) return null;
   return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
+    <div className="stack">
+      <div className="sheet-head">
         <DialogHeader>
-          <DialogTitle className="text-white">{post.title}</DialogTitle>
-          <DialogDescription className="text-white/70">
+          <DialogTitle>{post.title}</DialogTitle>
+          <DialogDescription>
             Story · {formatDay(post.plannedDate)} · {statusLabel(post.status)}
           </DialogDescription>
         </DialogHeader>
-        <Button type="button" variant="outline" className="h-9" onClick={onClose}>
+        <button type="button" className="btn ghost sm" onClick={onClose}>
           Close
-        </Button>
+        </button>
       </div>
       <StoryFrame post={post} />
       {items.length > 1 ? (
-        <div className="mt-3 flex justify-between">
-          <Button type="button" variant="outline" className="h-10" disabled={index === 0} onClick={() => onIndex(index - 1)}>
+        <div className="row">
+          <button type="button" className="btn ghost" disabled={index === 0} onClick={() => onIndex(index - 1)}>
             Previous
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant="outline"
-            className="h-10"
+            className="btn ghost"
             disabled={index === items.length - 1}
             onClick={() => onIndex(index + 1)}
           >
             Next
-          </Button>
+          </button>
         </div>
       ) : null}
     </div>
@@ -828,26 +780,25 @@ function Feed({
   const stories = mine.filter((post) => post.contentType === "STORY");
   const feed = mine.filter((post) => post.contentType !== "STORY");
   const hasStories = STORY_PLATFORMS.includes(platform);
+  const dark = platform === "TIKTOK" || platform === "YOUTUBE_SHORTS";
 
   return (
-    <div className="mt-5">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="feed-page">
+      <div className="team-tabs" role="tablist">
         {PLATFORMS.map((item) => (
           <button
             key={item.id}
             type="button"
+            className={platform === item.id ? "on" : ""}
             onClick={() => onPlatform(item.id)}
-            className={`h-9 rounded-lg px-3 text-sm ${
-              platform === item.id ? "bg-[#1b3d32] text-white" : "border border-border bg-white"
-            }`}
           >
             {item.label}
           </button>
         ))}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <p>How the feed will look — newest at the top. Tap a post to open it.</p>
-        <label className="inline-flex items-center gap-2">
+      <div className="feed-tools">
+        <p className="muted">How the feed will look — newest at the top. Tap a post to open it.</p>
+        <label className="check-line">
           <input
             type="checkbox"
             checked={showInReview}
@@ -857,53 +808,45 @@ function Feed({
         </label>
       </div>
       {hasStories ? (
-        <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
+        <div className="story-row">
           {stories.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No stories planned.</p>
+            <p className="muted">No stories planned.</p>
           ) : (
             stories.map((post, index) => (
-              <button key={post.id} type="button" onClick={() => onStory(stories, index)} className="w-16 shrink-0 text-center">
-                <span
-                  className={`mx-auto block size-14 rounded-full p-[2px] ${
-                    post.status === "APPROVED" ? "bg-[#ed217a]" : "border-2 border-dashed border-[#ed217a]"
-                  }`}
-                >
-                  <span className="block h-full w-full overflow-hidden rounded-full bg-white">
-                    {post.media[0] ? (
-                      <img src={`/api/media/${post.media[0].id}`} alt="" className="h-full w-full object-cover" />
-                    ) : null}
+              <button key={post.id} type="button" className="story-bubble" onClick={() => onStory(stories, index)}>
+                <span className={`story-ring${post.status === "APPROVED" ? "" : " waiting"}`}>
+                  <span>
+                    {post.media[0] ? <img src={`/api/media/${post.media[0].id}`} alt="" /> : null}
                   </span>
                 </span>
-                <span className="mt-1 block truncate text-[11px]">{post.title}</span>
+                <small>{post.title}</small>
               </button>
             ))
           )}
         </div>
       ) : null}
-      <div className={`mt-4 ${platform === "YOUTUBE_SHORTS" ? "grid gap-3 sm:grid-cols-3" : "space-y-3"}`}>
+      <div className={`feed-list${platform === "YOUTUBE_SHORTS" ? " shorts" : ""}`}>
         {feed.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No {platformLabel(platform)} posts planned yet.</p>
+          <p className="muted">No {platformLabel(platform)} posts planned yet.</p>
         ) : (
           feed.map((post) => (
             <button
               key={post.id}
               type="button"
               onClick={() => onOpen(post)}
-              className={`w-full overflow-hidden rounded-xl border border-border text-left ${
-                platform === "TIKTOK" || platform === "YOUTUBE_SHORTS" || platform === "SNAPCHAT"
-                  ? "max-w-xs bg-[#111] text-white"
-                  : "max-w-md bg-white"
-              } ${platform === "SNAPCHAT" ? "bg-[#fff6cc] text-[#17261f]" : ""}`}
+              className={`feed-item${dark ? " dark" : ""}${platform === "SNAPCHAT" ? " snap" : ""}`}
             >
-              <FeedMedia post={post} tall={post.contentType === "REEL" || platform === "TIKTOK" || platform === "YOUTUBE_SHORTS"} />
-              <div className="p-3">
-                <p className="text-xs opacity-70">
+              <FeedMedia post={post} tall={post.contentType === "REEL" || dark} />
+              <div className="feed-body">
+                <p className="small muted">
                   MailBakes · {contentLabel(post.contentType)}
                   {post.status !== "APPROVED" ? ` · ${statusLabel(post.status)}` : ""}
                 </p>
-                <p className="mt-1 text-sm font-semibold">{post.title}</p>
-                <p className="mt-1 line-clamp-3 text-sm">{post.caption}</p>
-                <p className="mt-2 text-xs opacity-70">{formatDay(post.plannedDate)}</p>
+                <p>
+                  <b>{post.title}</b>
+                </p>
+                <p className="clamp-3">{post.caption}</p>
+                <p className="small muted">{formatDay(post.plannedDate)}</p>
               </div>
             </button>
           ))
@@ -915,12 +858,12 @@ function Feed({
 
 function FeedMedia({ post, tall }: { post: PostDTO; tall: boolean }) {
   const media = post.media[0];
-  const className = tall ? "aspect-[9/16] w-full object-cover" : "aspect-square w-full object-cover";
-  if (!media) return <div className={`${tall ? "aspect-[9/16]" : "aspect-square"} bg-[#ffe9f2]`} />;
+  const shape = tall ? "tall" : "square";
+  if (!media) return <div className={`media-fallback ${shape}`} />;
   if (media.mimeType.startsWith("video/")) {
-    return <video src={`/api/media/${media.id}`} className={className} muted playsInline />;
+    return <video src={`/api/media/${media.id}`} className={`feed-photo ${shape}`} muted playsInline />;
   }
-  return <img src={`/api/media/${media.id}`} alt="" className={className} />;
+  return <img src={`/api/media/${media.id}`} alt="" className={`feed-photo ${shape}`} />;
 }
 
 function Calendar({
@@ -968,39 +911,31 @@ function Calendar({
   }
 
   return (
-    <div className="mt-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" className="h-10 bg-white" onClick={() => shift(-1)} aria-label="Previous">
-          ‹
-        </Button>
-        <Button type="button" variant="outline" className="h-10 bg-white" onClick={() => onCursor(today)}>
-          Today
-        </Button>
-        <Button type="button" variant="outline" className="h-10 bg-white" onClick={() => shift(1)} aria-label="Next">
-          ›
-        </Button>
-        <h2 className="px-2 text-lg font-semibold">
-          {view === "month" ? formatMonth(cursor) : `${formatDay(range.start)} – ${formatDay(range.end)}`}
-        </h2>
-        <div className="ml-auto flex rounded-lg border border-border bg-white p-0.5">
-          <button
-            type="button"
-            className={`h-9 rounded-md px-3 text-sm ${view === "week" ? "bg-[#1b3d32] text-white" : ""}`}
-            onClick={() => onView("week")}
-          >
+    <div className="stack">
+      <div className="page-head">
+        <div className="row">
+          <button type="button" className="btn ghost" onClick={() => shift(-1)} aria-label="Previous">
+            ‹
+          </button>
+          <button type="button" className="btn ghost" onClick={() => onCursor(today)}>
+            Today
+          </button>
+          <button type="button" className="btn ghost" onClick={() => shift(1)} aria-label="Next">
+            ›
+          </button>
+          <h2>{view === "month" ? formatMonth(cursor) : `${formatDay(range.start)} – ${formatDay(range.end)}`}</h2>
+        </div>
+        <div className="view-toggle">
+          <button type="button" className={view === "week" ? "on" : ""} onClick={() => onView("week")}>
             Week
           </button>
-          <button
-            type="button"
-            className={`h-9 rounded-md px-3 text-sm ${view === "month" ? "bg-[#1b3d32] text-white" : ""}`}
-            onClick={() => onView("month")}
-          >
+          <button type="button" className={view === "month" ? "on" : ""} onClick={() => onView("month")}>
             Month
           </button>
         </div>
       </div>
 
-      <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+      <div className="kpi-row">
         {PLATFORMS.map((item) => (
           <CountCard
             key={item.id}
@@ -1008,38 +943,41 @@ function Calendar({
             label={item.label}
           />
         ))}
-        <CountCard value={visiblePosts.filter((post) => post.status === "APPROVED").length} label="Approved" />
+        <CountCard value={visiblePosts.filter((post) => post.status === "APPROVED").length} label="Approved" tone="green" />
         <CountCard
           value={visiblePosts.filter((post) => post.status === "PENDING_APPROVAL").length}
           label="Waiting for approval"
+          tone="orange"
         />
         <CountCard value={visibleDates.length} label="Launches & key dates" />
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <div className="legend">
         {PLATFORMS.map((item) => (
-          <span key={item.id} className="inline-flex items-center gap-1">
-            <span className="size-2.5 rounded-sm" style={{ background: item.colour }} />
+          <span key={item.id}>
+            <span className="key" style={{ background: item.colour, borderColor: item.colour }} />
             {item.label}
           </span>
         ))}
-        <span className="inline-flex items-center gap-1">
-          <span className="size-2.5 rounded-sm bg-[#f3c1c7]" /> Launch
+        <span>
+          <span className="key launch" /> Launch
         </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="size-2.5 rounded-sm bg-[#f6ddb0]" /> Key date
+        <span>
+          <span className="key event" /> Key date
         </span>
         <span>✓ approved</span>
         <span>○ waiting (dashed)</span>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
-        <div className={`grid min-w-[720px] grid-cols-7 gap-px bg-[#e4dfd4] ${view === "week" ? "min-h-80" : ""}`}>
+      <div>
+        <div className="cal-head">
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-            <div key={day} className="bg-[#f6f3ec] px-2 py-1 text-xs font-medium text-muted-foreground">
+            <div key={day} className="cal-dow">
               {day}
             </div>
           ))}
+        </div>
+        <div className={`cal${view === "week" ? " cal-week" : ""}`}>
           {range.days.map((day) => {
             const outside = view === "month" && day.slice(0, 7) !== range.start.slice(0, 7);
             const dayPosts = posts.filter((post) => post.plannedDate === day && post.status !== "REJECTED");
@@ -1047,46 +985,36 @@ function Calendar({
             return (
               <div
                 key={day}
-                className={`min-h-28 bg-white p-1 ${day === today ? "ring-2 ring-inset ring-[#1b3d32]" : ""} ${
-                  outside ? "bg-[#fbfaf6]" : ""
-                }`}
+                className={`cal-cell${day === today ? " today" : ""}${outside ? " closed" : ""}`}
               >
-                <button type="button" onClick={() => onCreate(day)} className="px-1 text-xs text-muted-foreground">
-                  {Number(day.slice(8))}
+                <button type="button" className="cal-date" onClick={() => onCreate(day)}>
+                  <span>{Number(day.slice(8))}</span>
                 </button>
-                <div className="space-y-1">
-                  {dayKeys.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => onOpenKey(item)}
-                      className={`block w-full truncate rounded px-1 text-left text-[11px] ${
-                        item.kind === "LAUNCH" ? "bg-[#fde8ea] text-[#9f2d3a]" : "bg-[#fff1d6] text-[#8a5a10]"
-                      }`}
-                    >
-                      {item.title}
-                    </button>
-                  ))}
-                  {dayPosts.slice(0, 3).map((post) => (
-                    <button
-                      key={post.id}
-                      type="button"
-                      onClick={() => onOpenPost(post)}
-                      className={`flex w-full items-center gap-1 truncate rounded border px-1 text-left text-[11px] ${
-                        post.status === "APPROVED" ? "border-[#1b3d32]/30" : "border-dashed border-[#1b3d32]/50"
-                      }`}
-                    >
-                      <span className="size-1.5 shrink-0 rounded-full" style={{ background: platformColour(post.platforms[0]) }} />
-                      <span className="truncate">
-                        {post.contentType === "STORY" ? "Story · " : ""}
-                        {post.title}
-                      </span>
-                    </button>
-                  ))}
-                  {dayPosts.length > 3 ? (
-                    <p className="px-1 text-[11px] text-muted-foreground">+{dayPosts.length - 3}</p>
-                  ) : null}
-                </div>
+                {dayKeys.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`cal-chip ${item.kind === "LAUNCH" ? "launch" : "keydate"}`}
+                    onClick={() => onOpenKey(item)}
+                  >
+                    <span className="grow">{item.title}</span>
+                  </button>
+                ))}
+                {dayPosts.slice(0, 3).map((post) => (
+                  <button
+                    key={post.id}
+                    type="button"
+                    className={`cal-chip ${post.status === "APPROVED" ? "approved" : "waiting"}`}
+                    onClick={() => onOpenPost(post)}
+                  >
+                    <span className="mark" style={{ background: platformColour(post.platforms[0]) }} />
+                    <span className="grow">
+                      {post.contentType === "STORY" ? "Story · " : ""}
+                      {post.title}
+                    </span>
+                  </button>
+                ))}
+                {dayPosts.length > 3 ? <p className="small muted">+{dayPosts.length - 3}</p> : null}
               </div>
             );
           })}
@@ -1096,11 +1024,11 @@ function Calendar({
   );
 }
 
-function CountCard({ value, label }: { value: number; label: string }) {
+function CountCard({ value, label, tone }: { value: number; label: string; tone?: "green" | "orange" }) {
   return (
-    <div className="min-w-32 shrink-0 rounded-xl border border-border bg-white px-3 py-2">
-      <p className="text-2xl font-semibold">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
+    <div className={`kpi${tone ? ` ${tone}` : ""}`}>
+      <div className="eyebrow">{label}</div>
+      <div className="kpi-figure">{value}</div>
     </div>
   );
 }
@@ -1175,26 +1103,25 @@ function PostForm({
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <form className="stack" onSubmit={onSubmit}>
+      <div className="sheet-head">
         <DialogHeader>
           <DialogTitle>{initial ? "Edit social post" : "New social post"}</DialogTitle>
           <DialogDescription>Saving a post only adds it to the plan. It is not published.</DialogDescription>
         </DialogHeader>
-        <Button type="button" variant="outline" className="h-9 bg-white" onClick={onClose}>
+        <button type="button" className="btn ghost sm" onClick={onClose}>
           Close
-        </Button>
+        </button>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="title">Post title *</Label>
-          <Input id="title" value={title} onChange={(event) => setTitle(event.target.value)} required className="h-11 bg-white" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="type">Content type *</Label>
+      <label className="field" htmlFor="title">
+        Post title *
+        <input id="title" value={title} onChange={(event) => setTitle(event.target.value)} required />
+      </label>
+      <div className="grid">
+        <label className="field" htmlFor="type">
+          Content type *
           <select
             id="type"
-            className={fieldClass}
             value={contentType}
             onChange={(event) => {
               const next = event.target.value as ContentTypeId;
@@ -1210,109 +1137,99 @@ function PostForm({
               </option>
             ))}
           </select>
+        </label>
+        <label className="field" htmlFor="date">
+          Planned post date *
+          <input id="date" type="date" required value={plannedDate} onChange={(event) => setPlannedDate(event.target.value)} />
+        </label>
+      </div>
+      <div className="field">
+        Platforms *
+        <div className="supplier-pick">
+          {PLATFORMS.map((item) => {
+            const disabled = contentType === "STORY" && !STORY_PLATFORMS.includes(item.id);
+            const selected = platforms.includes(item.id);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                disabled={disabled}
+                className={selected ? "on" : ""}
+                onClick={() => togglePlatform(item.id)}
+              >
+                <span className="mark" style={{ background: item.colour }} /> {item.label}
+              </button>
+            );
+          })}
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="date">Planned post date *</Label>
-          <Input
-            id="date"
-            type="date"
-            required
-            value={plannedDate}
-            onChange={(event) => setPlannedDate(event.target.value)}
-            className="h-11 bg-white"
-          />
-        </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label>Platforms *</Label>
-          <div className="flex flex-wrap gap-2">
-            {PLATFORMS.map((item) => {
-              const disabled = contentType === "STORY" && !STORY_PLATFORMS.includes(item.id);
-              const selected = platforms.includes(item.id);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => togglePlatform(item.id)}
-                  className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm disabled:opacity-40 ${
-                    selected ? "border-[#1b3d32] bg-[#1b3d32] text-white" : "border-border bg-white"
-                  }`}
-                >
-                  <span className="size-2 rounded-full" style={{ background: item.colour }} />
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
-          {contentType === "STORY" ? (
-            <p className="text-xs text-muted-foreground">
-              Stories are for Instagram, Facebook and Snapchat. They still need approval, and they show in the calendar.
-            </p>
-          ) : null}
-        </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="status">Status *</Label>
-          <select id="status" className={fieldClass} value={status} onChange={(event) => setStatus(event.target.value as StatusId)}>
-            {statusOptions.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="caption">Caption / content *</Label>
-          <Textarea id="caption" required value={caption} onChange={(event) => setCaption(event.target.value)} className="min-h-28 bg-white text-base" />
-        </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="notes">Creative link or notes</Label>
-          <Textarea id="notes" value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-20 bg-white text-base" />
-        </div>
-        <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="media">Photos & videos (up to 10MB each — for longer videos, put a link in the notes)</Label>
-          {initial?.media.map((media) =>
-            removeIds.includes(media.id) ? null : (
-              <div key={media.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
-                <span className="truncate">{media.fileName}</span>
-                <button type="button" className="text-[#9f2d3a]" onClick={() => setRemoveIds((current) => [...current, media.id])}>
-                  Remove
-                </button>
-              </div>
-            ),
-          )}
-          {files.map((file) => (
-            <div key={file.name + file.size} className="flex items-center justify-between text-sm">
-              <span className="truncate">{file.name}</span>
-              <button type="button" onClick={() => setFiles((current) => current.filter((item) => item !== file))}>
+        {contentType === "STORY" ? (
+          <p className="small muted">
+            Stories are for Instagram, Facebook and Snapchat. They still need approval, and they show in the calendar.
+          </p>
+        ) : null}
+      </div>
+      <label className="field" htmlFor="status">
+        Status *
+        <select id="status" value={status} onChange={(event) => setStatus(event.target.value as StatusId)}>
+          {statusOptions.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field" htmlFor="caption">
+        Caption / content *
+        <textarea id="caption" required rows={5} value={caption} onChange={(event) => setCaption(event.target.value)} />
+      </label>
+      <label className="field" htmlFor="notes">
+        Creative link or notes
+        <textarea id="notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </label>
+      <div className="field">
+        <span>Photos & videos (up to 10MB each — for longer videos, put a link in the notes)</span>
+        {initial?.media.map((media) =>
+          removeIds.includes(media.id) ? null : (
+            <div key={media.id} className="file-row">
+              <span>{media.fileName}</span>
+              <button type="button" className="subtle link-serious" onClick={() => setRemoveIds((current) => [...current, media.id])}>
                 Remove
               </button>
             </div>
-          ))}
-          <label className="flex h-20 cursor-pointer items-center justify-center rounded-xl border border-dashed border-[#cfc8ba] text-sm">
-            + Add
-            <input
-              id="media"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
-              multiple
-              className="sr-only"
-              onChange={(event) => {
-                const chosen = Array.from(event.target.files ?? []);
-                setFiles((current) => [...current, ...chosen]);
-                event.target.value = "";
-              }}
-            />
-          </label>
-        </div>
+          ),
+        )}
+        {files.map((file) => (
+          <div key={file.name + file.size} className="file-row">
+            <span>{file.name}</span>
+            <button type="button" className="subtle link-serious" onClick={() => setFiles((current) => current.filter((item) => item !== file))}>
+              Remove
+            </button>
+          </div>
+        ))}
+        <label className="file-drop">
+          + Add
+          <input
+            id="media"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+            multiple
+            className="sr-only"
+            onChange={(event) => {
+              const chosen = Array.from(event.target.files ?? []);
+              setFiles((current) => [...current, ...chosen]);
+              event.target.value = "";
+            }}
+          />
+        </label>
       </div>
-      {error ? <p className="mt-3 text-sm text-[#9f2d3a]">{error}</p> : null}
-      <div className="mt-4 flex justify-end gap-2">
-        <Button type="button" variant="outline" className="h-10 bg-white" onClick={onClose}>
+      {error ? <p className="error">{error}</p> : null}
+      <div className="row">
+        <button type="button" className="btn ghost" onClick={onClose}>
           Cancel
-        </Button>
-        <Button type="submit" className="h-10" disabled={saving}>
+        </button>
+        <button type="submit" className="btn" disabled={saving}>
           {saving ? "Saving…" : "Save"}
-        </Button>
+        </button>
       </div>
     </form>
   );
@@ -1346,45 +1263,43 @@ function KeyDateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <form className="stack" onSubmit={onSubmit}>
+      <div className="sheet-head">
         <DialogHeader>
           <DialogTitle>Launch / key date</DialogTitle>
           <DialogDescription>Shows on the content calendar. It is not a social post.</DialogDescription>
         </DialogHeader>
-        <Button type="button" variant="outline" className="h-9 bg-white" onClick={onClose}>
+        <button type="button" className="btn ghost sm" onClick={onClose}>
           Close
-        </Button>
+        </button>
       </div>
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="key-title">Title *</Label>
-          <Input id="key-title" required value={title} onChange={(event) => setTitle(event.target.value)} className="h-11 bg-white" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="key-date">Date *</Label>
-          <Input id="key-date" type="date" required value={date} onChange={(event) => setDate(event.target.value)} className="h-11 bg-white" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="key-kind">Type *</Label>
-          <select id="key-kind" className={fieldClass} value={kind} onChange={(event) => setKind(event.target.value as "LAUNCH" | "KEY_DATE")}>
-            <option value="LAUNCH">Launch</option>
-            <option value="KEY_DATE">Key date</option>
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="key-notes">Notes</Label>
-          <Textarea id="key-notes" value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-20 bg-white text-base" />
-        </div>
-      </div>
-      {error ? <p className="mt-3 text-sm text-[#9f2d3a]">{error}</p> : null}
-      <div className="mt-4 flex justify-end gap-2">
-        <Button type="button" variant="outline" className="h-10 bg-white" onClick={onClose}>
+      <label className="field" htmlFor="key-title">
+        Title *
+        <input id="key-title" required value={title} onChange={(event) => setTitle(event.target.value)} />
+      </label>
+      <label className="field" htmlFor="key-date">
+        Date *
+        <input id="key-date" type="date" required value={date} onChange={(event) => setDate(event.target.value)} />
+      </label>
+      <label className="field" htmlFor="key-kind">
+        Type *
+        <select id="key-kind" value={kind} onChange={(event) => setKind(event.target.value as "LAUNCH" | "KEY_DATE")}>
+          <option value="LAUNCH">Launch</option>
+          <option value="KEY_DATE">Key date</option>
+        </select>
+      </label>
+      <label className="field" htmlFor="key-notes">
+        Notes
+        <textarea id="key-notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </label>
+      {error ? <p className="error">{error}</p> : null}
+      <div className="row">
+        <button type="button" className="btn ghost" onClick={onClose}>
           Cancel
-        </Button>
-        <Button type="submit" className="h-10" disabled={saving}>
+        </button>
+        <button type="submit" className="btn" disabled={saving}>
           {saving ? "Saving…" : "Save"}
-        </Button>
+        </button>
       </div>
     </form>
   );

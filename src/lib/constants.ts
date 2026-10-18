@@ -43,7 +43,7 @@ export function platformLabel(id: PlatformId) {
 }
 
 export function platformColour(id: PlatformId) {
-  return PLATFORMS.find((item) => item.id === id)?.colour ?? "#1b3d32";
+  return PLATFORMS.find((item) => item.id === id)?.colour ?? "#1E1A1C";
 }
 
 export function contentLabel(id: ContentTypeId) {
