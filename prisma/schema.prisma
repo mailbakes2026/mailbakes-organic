@@ -47,6 +47,11 @@ enum KeyDateKind {
   KEY_DATE
 }
 
+enum MediaRole {
+  ATTACHMENT
+  REEL_COVER
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -101,14 +106,15 @@ model Comment {
 }
 
 model Media {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   postId    String
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  role      MediaRole @default(ATTACHMENT)
   fileName  String
   mimeType  String
   sizeBytes Int
   data      Bytes
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([postId])
 }

@@ -51,6 +51,7 @@ export type PostDTO = {
   createdAt: string;
   updatedAt: string;
   media: MediaDTO[];
+  reelCover: MediaDTO | null;
   comments: CommentDTO[];
 };
 

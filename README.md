@@ -27,7 +27,7 @@ Passwords are read from the environment on startup. Change `MANAGEMENT_PASSWORD`
 
 ## What is stored
 
-Posts, comments, key dates and uploaded files live in Postgres. A post has a planned date and a posting time in Europe/London. Posts saved before times were added still show on their date. Files are kept in the database (up to 10MB each), so they survive a Render redeploy. The web service disk is ephemeral — do not move uploads onto local disk unless you also attach a Render disk.
+Posts, comments, key dates and uploaded files live in Postgres. A post has a planned date and a posting time in Europe/London. Posts saved before times were added still show on their date. A reel can also have a cover image, stored with the other files. Older reels without a cover keep using their existing image. Files are kept in the database (up to 10MB each), so they survive a Render redeploy. The web service disk is ephemeral — do not move uploads onto local disk unless you also attach a Render disk.
 
 Longer videos are not uploaded. Put a link in “Creative link or notes”.
 

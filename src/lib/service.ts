@@ -46,7 +46,7 @@ const postSelect = {
   author: { select: { name: true } },
   reviewer: { select: { name: true } },
   media: {
-    select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+    select: { id: true, role: true, fileName: true, mimeType: true, sizeBytes: true },
     orderBy: { createdAt: "asc" as const },
   },
   comments: {
@@ -100,7 +100,11 @@ function serializePost(post: PostRow): PostDTO {
     reviewedAt: post.reviewedAt?.toISOString() ?? null,
     createdAt: post.createdAt.toISOString(),
     updatedAt: post.updatedAt.toISOString(),
-    media: post.media,
+    media: post.media.filter((item) => item.role !== "REEL_COVER").map(toMedia),
+    reelCover: (() => {
+      const cover = post.media.find((item) => item.role === "REEL_COVER");
+      return cover ? toMedia(cover) : null;
+    })(),
     comments: post.comments.map((comment) => ({
       id: comment.id,
       kind: comment.kind,
@@ -108,6 +112,15 @@ function serializePost(post: PostRow): PostDTO {
       createdAt: comment.createdAt.toISOString(),
       authorName: comment.author.name,
     })),
+  };
+}
+
+function toMedia(item: { id: string; fileName: string; mimeType: string; sizeBytes: number }) {
+  return {
+    id: item.id,
+    fileName: item.fileName,
+    mimeType: item.mimeType,
+    sizeBytes: item.sizeBytes,
   };
 }
 
@@ -238,6 +251,27 @@ async function readFiles(form: FormData) {
   return files;
 }
 
+const COVER_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+async function readCover(form: FormData) {
+  const file = form.get("reelCover");
+  if (!(file instanceof File) || file.size === 0) return null;
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new HttpError(400, `${file.name} is over 10MB.`);
+  }
+  if (!COVER_MIME.has(file.type)) {
+    throw new HttpError(400, "Use a JPEG, PNG, WEBP or GIF for the reel cover, up to 10MB.");
+  }
+  const data = new Uint8Array(await file.arrayBuffer()) as Uint8Array<ArrayBuffer>;
+  return {
+    fileName: (file.name || "reel-cover").slice(0, 180),
+    mimeType: file.type,
+    sizeBytes: data.byteLength,
+    data,
+    role: "REEL_COVER" as const,
+  };
+}
+
 function assertTeamStatus(role: Role, status: PostStatus, previous?: PostStatus) {
   if (role !== "TEAM") return status;
   if (previous === "APPROVED") return "PENDING_APPROVAL" as PostStatus;
@@ -274,6 +308,7 @@ export async function createPost(user: UserDTO, form: FormData) {
   const input = readPostInput(form);
   const status = assertTeamStatus(user.role, input.status);
   const files = await readFiles(form);
+  const cover = input.contentType === "REEL" ? await readCover(form) : null;
   const reviewed =
     user.role === "MANAGEMENT" &&
     (status === "APPROVED" || status === "REJECTED" || status === "CHANGES_REQUESTED");
@@ -291,12 +326,16 @@ export async function createPost(user: UserDTO, form: FormData) {
       reviewerId: reviewed ? user.id : null,
       reviewedAt: reviewed ? new Date() : null,
       media: {
-        create: files.map((file) => ({
-          fileName: file.fileName,
-          mimeType: file.mimeType,
-          sizeBytes: file.sizeBytes,
-          data: file.data,
-        })),
+        create: [
+          ...files.map((file) => ({
+            role: "ATTACHMENT" as const,
+            fileName: file.fileName,
+            mimeType: file.mimeType,
+            sizeBytes: file.sizeBytes,
+            data: file.data,
+          })),
+          ...(cover ? [cover] : []),
+        ],
       },
     },
     select: postSelect,
@@ -307,16 +346,18 @@ export async function createPost(user: UserDTO, form: FormData) {
 export async function updatePost(user: UserDTO, id: string, form: FormData) {
   const existing = await prisma.post.findUnique({
     where: { id },
-    include: { media: { select: { id: true } } },
+    include: { media: { select: { id: true, role: true } } },
   });
   if (!existing) throw new HttpError(404, "That post has gone.");
   const input = readPostInput(form);
   const status = assertTeamStatus(user.role, input.status, existing.status);
   const files = await readFiles(form);
+  const attachments = existing.media.filter((media) => media.role !== "REEL_COVER");
+  const currentCover = existing.media.find((media) => media.role === "REEL_COVER");
   const removeIds = input.removeMediaIds.filter((mediaId) =>
-    existing.media.some((media) => media.id === mediaId),
+    attachments.some((media) => media.id === mediaId),
   );
-  const remaining = existing.media.length - removeIds.length;
+  const remaining = attachments.length - removeIds.length;
   if (remaining + files.length > MAX_FILES) {
     throw new HttpError(400, `You can attach up to ${MAX_FILES} files.`);
   }
@@ -330,10 +371,14 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
     user.role === "MANAGEMENT" &&
     status !== existing.status &&
     (status === "APPROVED" || status === "REJECTED" || status === "CHANGES_REQUESTED");
+  const cover = input.contentType === "REEL" ? await readCover(form) : null;
+  const removeCover =
+    Boolean(currentCover) && (input.contentType !== "REEL" || field(form, "removeReelCover") === "true" || Boolean(cover));
 
   const post = await prisma.$transaction(async (tx) => {
-    if (removeIds.length > 0) {
-      await tx.media.deleteMany({ where: { postId: id, id: { in: removeIds } } });
+    const dropIds = [...removeIds, ...(removeCover && currentCover ? [currentCover.id] : [])];
+    if (dropIds.length > 0) {
+      await tx.media.deleteMany({ where: { postId: id, id: { in: dropIds } } });
     }
     return tx.post.update({
       where: { id },
@@ -349,12 +394,16 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
         reviewerId: reviewed ? user.id : undefined,
         reviewedAt: reviewed ? new Date() : undefined,
         media: {
-          create: files.map((file) => ({
-            fileName: file.fileName,
-            mimeType: file.mimeType,
-            sizeBytes: file.sizeBytes,
-            data: file.data,
-          })),
+          create: [
+            ...files.map((file) => ({
+              role: "ATTACHMENT" as const,
+              fileName: file.fileName,
+              mimeType: file.mimeType,
+              sizeBytes: file.sizeBytes,
+              data: file.data,
+            })),
+            ...(cover ? [cover] : []),
+          ],
         },
         comments: notes.length
           ? {

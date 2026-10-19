@@ -212,15 +212,19 @@ export function InstaGrid({
 }
 
 function GridMedia({ post }: { post: PostDTO }) {
-  const media = post.media[0];
-  if (!media) {
-    return (
-      <span className="ig-placeholder">
-        <b>{post.title}</b>
-        <span>{post.caption.length > 90 ? `${post.caption.slice(0, 90).trimEnd()}…` : post.caption}</span>
-      </span>
-    );
+  const placeholder = (
+    <span className="ig-placeholder">
+      <b>{post.title}</b>
+      <span>{post.caption.length > 90 ? `${post.caption.slice(0, 90).trimEnd()}…` : post.caption}</span>
+    </span>
+  );
+  if (post.contentType === "REEL") {
+    const cover = post.reelCover ?? post.media.find((item) => item.mimeType.startsWith("image/")) ?? null;
+    if (!cover) return placeholder;
+    return <img src={`/api/media/${cover.id}`} alt="" />;
   }
+  const media = post.media[0];
+  if (!media) return placeholder;
   if (media.mimeType.startsWith("video/")) {
     return <video src={`/api/media/${media.id}#t=0.1`} muted playsInline preload="metadata" />;
   }

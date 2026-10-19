@@ -44,6 +44,27 @@ button.nav-link {
   cursor: pointer;
 }
 .post-open h2 { font-size: 16px; }
+.post-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; flex: 1; }
+.post-open.has-cover { flex-direction: row; align-items: flex-start; }
+.reel-cover-card {
+  width: 84px;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 8px;
+  flex: none;
+  background: #efefef;
+  display: block;
+}
+.reel-cover-detail { margin: 0; max-width: 220px; }
+.reel-cover-detail img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 12px;
+  display: block;
+  background: #111;
+}
+.reel-cover-detail figcaption { margin-top: 6px; }
 
 .plat {
   display: inline-flex;

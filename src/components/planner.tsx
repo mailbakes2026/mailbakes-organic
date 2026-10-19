@@ -556,7 +556,11 @@ function PostCard({
   const note = [...post.comments].reverse().find((comment) => comment.kind !== "APPROVAL");
   return (
     <article className="card">
-      <button type="button" className="post-open" onClick={onOpen}>
+      <button type="button" className={`post-open${post.reelCover ? " has-cover" : ""}`} onClick={onOpen}>
+        {post.contentType === "REEL" && post.reelCover ? (
+          <img className="reel-cover-card" src={`/api/media/${post.reelCover.id}`} alt="" />
+        ) : null}
+        <span className="post-copy">
         <div className="row">
           {post.platforms.map((item) => (
             <span key={item} className="plat">
@@ -572,6 +576,7 @@ function PostCard({
         <p className="small muted">
           {post.authorName} · {formatSchedule(post.plannedDate, post.plannedTime)}
         </p>
+        </span>
       </button>
       {note ? (
         <p className="alert warn">
@@ -681,6 +686,12 @@ function PostDetail({
         </div>
       ) : (
         <div className="media-stack">
+          {post.contentType === "REEL" && post.reelCover ? (
+            <figure className="reel-cover-detail">
+              <img src={`/api/media/${post.reelCover.id}`} alt="Reel cover" />
+              <figcaption className="small muted">Reel cover</figcaption>
+            </figure>
+          ) : null}
           {post.media.map((media) =>
             media.mimeType.startsWith("video/") ? (
               <video key={media.id} src={`/api/media/${media.id}`} controls playsInline />
@@ -1108,6 +1119,9 @@ function PostForm({
   const [caption, setCaption] = useState(initial?.caption ?? "");
   const [notes, setNotes] = useState(initial?.creativeNotes ?? "");
   const [files, setFiles] = useState<File[]>([]);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [removeCover, setRemoveCover] = useState(false);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [removeIds, setRemoveIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1118,13 +1132,23 @@ function PostForm({
     return item.id === "CHANGES_REQUESTED" && initial?.status === "CHANGES_REQUESTED";
   });
 
+  useEffect(() => {
+    if (!coverFile) {
+      setCoverPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(coverFile);
+    setCoverPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [coverFile]);
+
   function togglePlatform(id: PlatformId) {
     setPlatforms((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const tooBig = files.find((file) => file.size > MAX_UPLOAD_BYTES);
+    const tooBig = [...files, coverFile].find((file) => file && file.size > MAX_UPLOAD_BYTES);
     if (tooBig) {
       setError(`${tooBig.name} is over 10MB. For a longer video, put a link in the notes.`);
       return;
@@ -1141,6 +1165,8 @@ function PostForm({
     body.set("caption", caption);
     body.set("creativeNotes", notes);
     body.set("removeMediaIds", JSON.stringify(removeIds));
+    if (contentType === "REEL" && coverFile) body.set("reelCover", coverFile);
+    else if (contentType === "REEL" && removeCover) body.set("removeReelCover", "true");
     for (const file of files) body.append("media", file);
     const response = await fetch(initial ? `/api/posts/${initial.id}` : "/api/posts", {
       method: initial ? "PATCH" : "POST",
@@ -1251,6 +1277,43 @@ function PostForm({
         Creative link or notes
         <textarea id="notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
       </label>
+      {contentType === "REEL" ? (
+        <div className="field">
+          <span>Reel cover</span>
+          <p className="small muted">1080x1920, cropped to 3:4 on the grid.</p>
+          {initial?.reelCover && !removeCover && !coverFile ? (
+            <div className="file-row">
+              <img className="reel-cover-card" src={`/api/media/${initial.reelCover.id}`} alt="" />
+              <span>{initial.reelCover.fileName}</span>
+              <button type="button" className="subtle link-serious" onClick={() => setRemoveCover(true)}>
+                Remove
+              </button>
+            </div>
+          ) : null}
+          {coverFile ? (
+            <div className="file-row">
+              {coverPreview ? <img className="reel-cover-card" src={coverPreview} alt="" /> : null}
+              <span>{coverFile.name}</span>
+              <button type="button" className="subtle link-serious" onClick={() => setCoverFile(null)}>
+                Remove
+              </button>
+            </div>
+          ) : null}
+          <label className="file-drop">
+            {coverFile || (initial?.reelCover && !removeCover) ? "Replace cover" : "+ Add cover"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="sr-only"
+              onChange={(event) => {
+                setCoverFile(event.target.files?.[0] ?? null);
+                setRemoveCover(false);
+                event.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+      ) : null}
       <div className="field">
         <span>Photos & videos (up to 10MB each — for longer videos, put a link in the notes)</span>
         {contentType === "FEED" ? <p className="small muted">Feed images should be 4:5 (1080x1350).</p> : null}
