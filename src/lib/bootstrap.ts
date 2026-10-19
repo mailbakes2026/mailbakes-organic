@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
+import { ensureIgProfile } from "@/lib/ig-profile";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/types";
 
@@ -176,6 +177,7 @@ async function run() {
         }
         await upsertAccounts(db, accountsFromEnv());
         await removeSamples(db);
+        await ensureIgProfile(db);
         return true;
       },
       { maxWait: 2_000, timeout: 8_000 },

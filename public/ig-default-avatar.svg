@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle cx="100" cy="100" r="100" fill="#F8D5E6"/>
+  <circle cx="100" cy="100" r="78" fill="none" stroke="#ED217A" stroke-width="1.4"/>
+  <defs>
+    <path id="ring" d="M32,100a68,68 0 1,1 0.1,0"/>
+  </defs>
+  <text fill="#ED217A" font-family="Georgia, serif" font-size="11" letter-spacing="2.4">
+    <textPath href="#ring">STRAIGHT TO YOUR MAILBOX · STRAIGHT TO YOUR MAILBOX ·</textPath>
+  </text>
+  <text x="100" y="94" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="36" font-weight="700" fill="#ED217A">Mail</text>
+  <text x="100" y="128" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="36" font-weight="700" fill="#ED217A">Bakes</text>
+</svg>

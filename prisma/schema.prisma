@@ -67,6 +67,9 @@ model Post {
   platforms     Platform[]
   contentType   ContentType
   plannedDate   DateTime    @db.Date
+  // Wall-clock posting time in Europe/London, "HH:MM". Null on posts
+  // created before times were added.
+  plannedTime   String?
   status        PostStatus
   caption       String
   creativeNotes String      @default("")
@@ -126,4 +129,44 @@ model KeyDate {
 model AppMeta {
   id    String @id
   value String
+}
+
+// The MailBakes Instagram header shown on /?view=grid. One row, created
+// once at startup. Later edits are left alone.
+model IgProfile {
+  id             String        @id
+  handle         String
+  displayName    String
+  bio            String
+  link           String
+  postsCount     Int
+  followersCount Int
+  followingCount Int
+  avatarId       String?       @unique
+  avatar         IgMedia?      @relation("IgAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
+  highlights     IgHighlight[]
+  updatedAt      DateTime      @updatedAt
+}
+
+model IgHighlight {
+  id        String    @id @default(cuid())
+  profileId String
+  profile   IgProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title     String
+  position  Int
+  coverId   String?   @unique
+  cover     IgMedia?  @relation("IgCover", fields: [coverId], references: [id], onDelete: SetNull)
+
+  @@index([profileId, position])
+}
+
+model IgMedia {
+  id        String       @id @default(cuid())
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  data      Bytes
+  createdAt DateTime     @default(now())
+  avatarOf  IgProfile?   @relation("IgAvatar")
+  coverOf   IgHighlight? @relation("IgCover")
 }

@@ -27,7 +27,7 @@ Passwords are read from the environment on startup. Change `MANAGEMENT_PASSWORD`
 
 ## What is stored
 
-Posts, comments, key dates and uploaded files live in Postgres. Files are kept in the database (up to 10MB each), so they survive a Render redeploy. The web service disk is ephemeral — do not move uploads onto local disk unless you also attach a Render disk.
+Posts, comments, key dates and uploaded files live in Postgres. A post has a planned date and a posting time in Europe/London. Posts saved before times were added still show on their date. Files are kept in the database (up to 10MB each), so they survive a Render redeploy. The web service disk is ephemeral — do not move uploads onto local disk unless you also attach a Render disk.
 
 Longer videos are not uploaded. Put a link in “Creative link or notes”.
 
@@ -48,7 +48,7 @@ The public URL comes from the service name: `mailbakes-organic` → https://mail
 
 Use the Frankfurt region for the web service and the database so they can use the private connection string. The web service plan is `starter` and the database is `basic-256mb` (Render’s smallest current Postgres). Change the plan names in `render.yaml` if your account uses different ones.
 
-The app starts empty. It no longer creates example posts; any left over from the first version are removed once at startup. Accounts are never touched by that cleanup. The Instagram grid (`/?view=grid`) shows how planned Instagram posts will sit on the profile, newest top left.
+The app starts empty. It no longer creates example posts; any left over from the first version are removed once at startup. Accounts are never touched by that cleanup. The Instagram grid (`/?view=grid`) shows how planned Instagram posts will sit on the MailBakes profile, newest top left, in portrait 3:4 tiles. The header matches the live profile and can be edited from that page.
 
 The start command runs `prisma migrate deploy` before the server listens. `/api/health` checks the database and is the Render health check.
 

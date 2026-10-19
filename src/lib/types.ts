@@ -40,6 +40,7 @@ export type PostDTO = {
   platforms: PlatformId[];
   contentType: ContentTypeId;
   plannedDate: string;
+  plannedTime: string | null;
   status: StatusId;
   caption: string;
   creativeNotes: string;
@@ -66,4 +67,22 @@ export type UserDTO = {
   email: string;
   name: string;
   role: Role;
+};
+
+export type IgHighlightDTO = {
+  id: string;
+  title: string;
+  coverId: string | null;
+};
+
+export type IgProfileDTO = {
+  handle: string;
+  displayName: string;
+  bio: string;
+  link: string;
+  postsCount: number;
+  followersCount: number;
+  followingCount: number;
+  avatarId: string | null;
+  highlights: IgHighlightDTO[];
 };

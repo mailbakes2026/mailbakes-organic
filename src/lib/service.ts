@@ -35,6 +35,7 @@ const postSelect = {
   platforms: true,
   contentType: true,
   plannedDate: true,
+  plannedTime: true,
   status: true,
   caption: true,
   creativeNotes: true,
@@ -89,6 +90,7 @@ function serializePost(post: PostRow): PostDTO {
     platforms: post.platforms,
     contentType: post.contentType,
     plannedDate: dayString(post.plannedDate),
+    plannedTime: post.plannedTime,
     status: post.status,
     caption: post.caption,
     creativeNotes: post.creativeNotes,
@@ -109,6 +111,13 @@ function serializePost(post: PostRow): PostDTO {
   };
 }
 
+function parseTime(value: string) {
+  if (!value) return null;
+  const match = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(value);
+  if (!match) throw new HttpError(400, "Choose a posting time, like 12:00.");
+  return `${match[1]}:${match[2]}`;
+}
+
 function field(form: FormData, name: string) {
   const value = form.get(name);
   return typeof value === "string" ? value.trim() : "";
@@ -119,6 +128,7 @@ type PostInput = {
   platforms: Platform[];
   contentType: ContentType;
   plannedDate: string;
+  plannedTime: string | null;
   status: PostStatus;
   caption: string;
   creativeNotes: string;
@@ -188,6 +198,7 @@ function readPostInput(form: FormData): PostInput {
     platforms: platforms as Platform[],
     contentType: contentType as ContentType,
     plannedDate: field(form, "plannedDate"),
+    plannedTime: parseTime(field(form, "plannedTime")),
     status: status as PostStatus,
     caption,
     creativeNotes,
@@ -243,7 +254,7 @@ function assertTeamStatus(role: Role, status: PostStatus, previous?: PostStatus)
 export async function listPosts(): Promise<PostDTO[]> {
   const posts = await prisma.post.findMany({
     select: postSelect,
-    orderBy: [{ plannedDate: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ plannedDate: "asc" }, { plannedTime: "asc" }, { createdAt: "asc" }],
   });
   return posts.map(serializePost);
 }
@@ -272,6 +283,7 @@ export async function createPost(user: UserDTO, form: FormData) {
       platforms: input.platforms,
       contentType: input.contentType,
       plannedDate: parseDay(input.plannedDate),
+      plannedTime: input.plannedTime,
       status,
       caption: input.caption,
       creativeNotes: input.creativeNotes,
@@ -330,6 +342,7 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
         platforms: input.platforms,
         contentType: input.contentType,
         plannedDate: parseDay(input.plannedDate),
+        plannedTime: input.plannedTime,
         status,
         caption: input.caption,
         creativeNotes: input.creativeNotes,

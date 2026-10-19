@@ -22,8 +22,10 @@ import {
   platformLabel,
   statusLabel,
 } from "@/lib/constants";
+import { InstaGrid } from "@/components/insta-grid";
 import type {
   ContentTypeId,
+  IgProfileDTO,
   KeyDateDTO,
   PlatformId,
   PostDTO,
@@ -55,6 +57,14 @@ function startOfWeek(iso: string) {
   const weekday = date.getUTCDay();
   const diff = weekday === 0 ? -6 : 1 - weekday;
   return addDays(iso, diff);
+}
+
+function formatSchedule(date: string, time: string | null) {
+  return time ? `${formatDay(date)} at ${time}` : formatDay(date);
+}
+
+function byPostingTime(a: PostDTO, b: PostDTO) {
+  return (a.plannedTime ?? "99:99").localeCompare(b.plannedTime ?? "99:99") || a.createdAt.localeCompare(b.createdAt);
 }
 
 function formatDay(iso: string) {
@@ -119,10 +129,12 @@ export function Planner({
   user,
   posts,
   keyDates,
+  profile,
 }: {
   user: UserDTO;
   posts: PostDTO[];
   keyDates: KeyDateDTO[];
+  profile: IgProfileDTO;
 }) {
   const router = useRouter();
   const { tab } = useAppTab();
@@ -337,7 +349,9 @@ export function Planner({
         </div>
       ) : null}
 
-      {tab === "grid" ? <InstaGrid posts={posts} onOpen={setDetail} /> : null}
+      {tab === "grid" ? (
+        <InstaGrid posts={posts} profile={profile} onOpen={setDetail} onChanged={refresh} />
+      ) : null}
 
       {tab === "feed" ? (
         <Feed
@@ -515,126 +529,6 @@ function EmptyStart({ onNew }: { onNew: () => void }) {
   );
 }
 
-function gridLabel(post: PostDTO) {
-  if (post.status === "APPROVED") return "Scheduled";
-  if (post.status === "DRAFT") return "Draft";
-  if (post.status === "CHANGES_REQUESTED") return "Changes";
-  return "In review";
-}
-
-function InstaGrid({ posts, onOpen }: { posts: PostDTO[]; onOpen: (post: PostDTO) => void }) {
-  const [includeDrafts, setIncludeDrafts] = useState(true);
-  const tiles = posts
-    .filter(
-      (post) =>
-        post.platforms.includes("INSTAGRAM") &&
-        post.contentType !== "STORY" &&
-        post.status !== "REJECTED" &&
-        (includeDrafts || post.status === "APPROVED"),
-    )
-    .sort((a, b) => b.plannedDate.localeCompare(a.plannedDate) || b.createdAt.localeCompare(a.createdAt));
-  const scheduled = tiles.filter((post) => post.status === "APPROVED").length;
-  const stories = posts.filter(
-    (post) => post.platforms.includes("INSTAGRAM") && post.contentType === "STORY" && post.status !== "REJECTED",
-  ).length;
-
-  return (
-    <div className="ig-page">
-      <div className="feed-tools">
-        <p className="muted">How the MailBakes Instagram profile will look. Newest post top left. Tap a tile to open it.</p>
-        <label className="check-line">
-          <input type="checkbox" checked={includeDrafts} onChange={(event) => setIncludeDrafts(event.target.checked)} />
-          Include drafts and posts in review
-        </label>
-      </div>
-      <div className="ig-phone">
-        <header className="ig-head">
-          <div className="ig-avatar">
-            <span>
-              <img src="/icon.svg" alt="MailBakes" />
-            </span>
-          </div>
-          <div className="ig-stats">
-            <div>
-              <b>{tiles.length}</b>
-              <small>posts</small>
-            </div>
-            <div>
-              <b>{scheduled}</b>
-              <small>scheduled</small>
-            </div>
-            <div>
-              <b>{stories}</b>
-              <small>stories</small>
-            </div>
-          </div>
-        </header>
-        <div className="ig-bio">
-          <b>mailbakes</b>
-          <span className="muted small">Bakery</span>
-          <p>Cake in a card. Through the letterbox. 🍰💌</p>
-          <a href="https://mailbakes.com" target="_blank" rel="noreferrer">
-            mailbakes.com
-          </a>
-        </div>
-        <div className="ig-tabs" aria-hidden="true">
-          <span className="on">▦ Posts</span>
-          <span>▶ Reels</span>
-        </div>
-        {tiles.length === 0 ? (
-          <div className="ig-empty">
-            <p>
-              <b>No posts yet</b>
-            </p>
-            <p className="muted small">
-              When your social media manager adds Instagram posts, they&apos;ll fill this grid in order.
-            </p>
-          </div>
-        ) : (
-          <div className="ig-grid">
-            {tiles.map((post) => (
-              <button
-                key={post.id}
-                type="button"
-                className={`ig-tile${post.status === "APPROVED" ? "" : " pending"}`}
-                onClick={() => onOpen(post)}
-                title={post.title}
-              >
-                <GridMedia post={post} />
-                {post.contentType === "REEL" ? (
-                  <span className="ig-reel" aria-label="Reel">
-                    ▶
-                  </span>
-                ) : null}
-                <span className="ig-meta">
-                  <span>{formatDay(post.plannedDate)}</span>
-                  <span className="ig-state">{gridLabel(post)}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function GridMedia({ post }: { post: PostDTO }) {
-  const media = post.media[0];
-  if (!media) {
-    return (
-      <span className="ig-placeholder">
-        <b>{post.title}</b>
-        <span>{post.caption.length > 90 ? `${post.caption.slice(0, 90).trimEnd()}…` : post.caption}</span>
-      </span>
-    );
-  }
-  if (media.mimeType.startsWith("video/")) {
-    return <video src={`/api/media/${media.id}#t=0.1`} muted playsInline preload="metadata" />;
-  }
-  return <img src={`/api/media/${media.id}`} alt="" loading="lazy" />;
-}
-
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
@@ -676,7 +570,7 @@ function PostCard({
         <h2>{post.title}</h2>
         <p className="muted clamp-2">{post.caption}</p>
         <p className="small muted">
-          {post.authorName} · {formatDay(post.plannedDate)}
+          {post.authorName} · {formatSchedule(post.plannedDate, post.plannedTime)}
         </p>
       </button>
       {note ? (
@@ -764,7 +658,7 @@ function PostDetail({
         <DialogHeader>
           <DialogTitle>{post.title}</DialogTitle>
           <DialogDescription>
-            {contentLabel(post.contentType)} · {formatDay(post.plannedDate)} · {statusLabel(post.status)}
+            {contentLabel(post.contentType)} · {formatSchedule(post.plannedDate, post.plannedTime)} · {statusLabel(post.status)}
           </DialogDescription>
         </DialogHeader>
         <DialogClose render={<button type="button" className="btn ghost sm" />}>Close</DialogClose>
@@ -873,7 +767,7 @@ function StoryViewer({
         <DialogHeader>
           <DialogTitle>{post.title}</DialogTitle>
           <DialogDescription>
-            Story · {formatDay(post.plannedDate)} · {statusLabel(post.status)}
+            Story · {formatSchedule(post.plannedDate, post.plannedTime)} · {statusLabel(post.status)}
           </DialogDescription>
         </DialogHeader>
         <button type="button" className="btn ghost sm" onClick={onClose}>
@@ -925,7 +819,12 @@ function Feed({
 }) {
   const mine = posts
     .filter((post) => post.platforms.includes(platform) && visible(post, showInReview))
-    .sort((a, b) => b.plannedDate.localeCompare(a.plannedDate) || b.createdAt.localeCompare(a.createdAt));
+    .sort(
+      (a, b) =>
+        b.plannedDate.localeCompare(a.plannedDate) ||
+        (b.plannedTime ?? "").localeCompare(a.plannedTime ?? "") ||
+        b.createdAt.localeCompare(a.createdAt),
+    );
   const stories = mine.filter((post) => post.contentType === "STORY");
   const feed = mine.filter((post) => post.contentType !== "STORY");
   const hasStories = STORY_PLATFORMS.includes(platform);
@@ -995,7 +894,7 @@ function Feed({
                   <b>{post.title}</b>
                 </p>
                 <p className="clamp-3">{post.caption}</p>
-                <p className="small muted">{formatDay(post.plannedDate)}</p>
+                <p className="small muted">{formatSchedule(post.plannedDate, post.plannedTime)}</p>
               </div>
             </button>
           ))
@@ -1129,7 +1028,9 @@ function Calendar({
         <div className={`cal${view === "week" ? " cal-week" : ""}`}>
           {range.days.map((day) => {
             const outside = view === "month" && day.slice(0, 7) !== range.start.slice(0, 7);
-            const dayPosts = posts.filter((post) => post.plannedDate === day && post.status !== "REJECTED");
+            const dayPosts = posts
+              .filter((post) => post.plannedDate === day && post.status !== "REJECTED")
+              .sort(byPostingTime);
             const dayKeys = keyDates.filter((item) => item.date === day);
             return (
               <div
@@ -1157,6 +1058,7 @@ function Calendar({
                     onClick={() => onOpenPost(post)}
                   >
                     <span className="mark" style={{ background: platformColour(post.platforms[0]) }} />
+                    {post.plannedTime ? <span className="cal-time">{post.plannedTime}</span> : null}
                     <span className="grow">
                       {post.contentType === "STORY" ? "Story · " : ""}
                       {post.title}
@@ -1199,6 +1101,7 @@ function PostForm({
   const [platforms, setPlatforms] = useState<PlatformId[]>(initial?.platforms ?? ["INSTAGRAM"]);
   const [contentType, setContentType] = useState<ContentTypeId>(initial?.contentType ?? "FEED");
   const [plannedDate, setPlannedDate] = useState(initial?.plannedDate ?? presetDate ?? londonToday());
+  const [plannedTime, setPlannedTime] = useState(initial?.plannedTime ?? "12:00");
   const [status, setStatus] = useState<StatusId>(
     initial?.status === "APPROVED" && user.role === "TEAM" ? "PENDING_APPROVAL" : initial?.status ?? "PENDING_APPROVAL",
   );
@@ -1233,6 +1136,7 @@ function PostForm({
     body.set("platforms", JSON.stringify(platforms));
     body.set("contentType", contentType);
     body.set("plannedDate", plannedDate);
+    body.set("plannedTime", plannedTime);
     body.set("status", status);
     body.set("caption", caption);
     body.set("creativeNotes", notes);
@@ -1291,6 +1195,18 @@ function PostForm({
           Planned post date *
           <input id="date" type="date" required value={plannedDate} onChange={(event) => setPlannedDate(event.target.value)} />
         </label>
+        <label className="field" htmlFor="time">
+          Posting time *
+          <input
+            id="time"
+            type="time"
+            required
+            step={60}
+            value={plannedTime}
+            onChange={(event) => setPlannedTime(event.target.value)}
+          />
+          <p className="small muted">Europe/London. New posts start at 12:00.</p>
+        </label>
       </div>
       <div className="field">
         Platforms *
@@ -1337,6 +1253,7 @@ function PostForm({
       </label>
       <div className="field">
         <span>Photos & videos (up to 10MB each — for longer videos, put a link in the notes)</span>
+        {contentType === "FEED" ? <p className="small muted">Feed images should be 4:5 (1080x1350).</p> : null}
         {initial?.media.map((media) =>
           removeIds.includes(media.id) ? null : (
             <div key={media.id} className="file-row">
