@@ -236,7 +236,16 @@ export function Planner({
 
       {banner ? <p className="alert crit">{banner}</p> : null}
 
-      {tab === "approval" ? (
+      {tab === "approval" && posts.length === 0 ? (
+        <EmptyStart
+          onNew={() => {
+            setPresetDate(null);
+            setPostForm("new");
+          }}
+        />
+      ) : null}
+
+      {tab === "approval" && posts.length > 0 ? (
         <div>
           <section>
             {waiting.length === 0 ? (
@@ -327,6 +336,8 @@ export function Planner({
           ) : null}
         </div>
       ) : null}
+
+      {tab === "grid" ? <InstaGrid posts={posts} onOpen={setDetail} /> : null}
 
       {tab === "feed" ? (
         <Feed
@@ -484,6 +495,144 @@ export function Planner({
       </Dialog>
     </div>
   );
+}
+
+function EmptyStart({ onNew }: { onNew: () => void }) {
+  return (
+    <div className="empty-start">
+      <div className="empty-start-badge" aria-hidden="true">
+        <img src="/icon.svg" alt="" />
+      </div>
+      <h2>Your social media manager is starting soon</h2>
+      <p className="muted">
+        Nothing&apos;s been planned yet. New posts will appear here for approval as soon as they&apos;re
+        added, and you can see how they&apos;ll sit on the profile in the Instagram grid.
+      </p>
+      <button type="button" className="btn" onClick={onNew}>
+        + Add the first post
+      </button>
+    </div>
+  );
+}
+
+function gridLabel(post: PostDTO) {
+  if (post.status === "APPROVED") return "Scheduled";
+  if (post.status === "DRAFT") return "Draft";
+  if (post.status === "CHANGES_REQUESTED") return "Changes";
+  return "In review";
+}
+
+function InstaGrid({ posts, onOpen }: { posts: PostDTO[]; onOpen: (post: PostDTO) => void }) {
+  const [includeDrafts, setIncludeDrafts] = useState(true);
+  const tiles = posts
+    .filter(
+      (post) =>
+        post.platforms.includes("INSTAGRAM") &&
+        post.contentType !== "STORY" &&
+        post.status !== "REJECTED" &&
+        (includeDrafts || post.status === "APPROVED"),
+    )
+    .sort((a, b) => b.plannedDate.localeCompare(a.plannedDate) || b.createdAt.localeCompare(a.createdAt));
+  const scheduled = tiles.filter((post) => post.status === "APPROVED").length;
+  const stories = posts.filter(
+    (post) => post.platforms.includes("INSTAGRAM") && post.contentType === "STORY" && post.status !== "REJECTED",
+  ).length;
+
+  return (
+    <div className="ig-page">
+      <div className="feed-tools">
+        <p className="muted">How the MailBakes Instagram profile will look. Newest post top left. Tap a tile to open it.</p>
+        <label className="check-line">
+          <input type="checkbox" checked={includeDrafts} onChange={(event) => setIncludeDrafts(event.target.checked)} />
+          Include drafts and posts in review
+        </label>
+      </div>
+      <div className="ig-phone">
+        <header className="ig-head">
+          <div className="ig-avatar">
+            <span>
+              <img src="/icon.svg" alt="MailBakes" />
+            </span>
+          </div>
+          <div className="ig-stats">
+            <div>
+              <b>{tiles.length}</b>
+              <small>posts</small>
+            </div>
+            <div>
+              <b>{scheduled}</b>
+              <small>scheduled</small>
+            </div>
+            <div>
+              <b>{stories}</b>
+              <small>stories</small>
+            </div>
+          </div>
+        </header>
+        <div className="ig-bio">
+          <b>mailbakes</b>
+          <span className="muted small">Bakery</span>
+          <p>Cake in a card. Through the letterbox. 🍰💌</p>
+          <a href="https://mailbakes.com" target="_blank" rel="noreferrer">
+            mailbakes.com
+          </a>
+        </div>
+        <div className="ig-tabs" aria-hidden="true">
+          <span className="on">▦ Posts</span>
+          <span>▶ Reels</span>
+        </div>
+        {tiles.length === 0 ? (
+          <div className="ig-empty">
+            <p>
+              <b>No posts yet</b>
+            </p>
+            <p className="muted small">
+              When your social media manager adds Instagram posts, they&apos;ll fill this grid in order.
+            </p>
+          </div>
+        ) : (
+          <div className="ig-grid">
+            {tiles.map((post) => (
+              <button
+                key={post.id}
+                type="button"
+                className={`ig-tile${post.status === "APPROVED" ? "" : " pending"}`}
+                onClick={() => onOpen(post)}
+                title={post.title}
+              >
+                <GridMedia post={post} />
+                {post.contentType === "REEL" ? (
+                  <span className="ig-reel" aria-label="Reel">
+                    ▶
+                  </span>
+                ) : null}
+                <span className="ig-meta">
+                  <span>{formatDay(post.plannedDate)}</span>
+                  <span className="ig-state">{gridLabel(post)}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GridMedia({ post }: { post: PostDTO }) {
+  const media = post.media[0];
+  if (!media) {
+    return (
+      <span className="ig-placeholder">
+        <b>{post.title}</b>
+        <span>{post.caption.length > 90 ? `${post.caption.slice(0, 90).trimEnd()}…` : post.caption}</span>
+      </span>
+    );
+  }
+  if (media.mimeType.startsWith("video/")) {
+    return <video src={`/api/media/${media.id}#t=0.1`} muted playsInline preload="metadata" />;
+  }
+  return <img src={`/api/media/${media.id}`} alt="" loading="lazy" />;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

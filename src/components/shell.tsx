@@ -1,9 +1,11 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { UserDTO } from "@/lib/types";
 
-export type AppTab = "approval" | "feed" | "calendar";
+export type AppTab = "approval" | "grid" | "feed" | "calendar";
+
+const TAB_IDS: AppTab[] = ["approval", "grid", "feed", "calendar"];
 
 const TabContext = createContext<{ tab: AppTab; setTab: (tab: AppTab) => void } | null>(null);
 
@@ -15,12 +17,27 @@ export function useAppTab() {
 
 const LINKS: { id: AppTab; label: string }[] = [
   { id: "approval", label: "Posts for approval" },
+  { id: "grid", label: "Instagram grid" },
   { id: "feed", label: "Feed preview" },
   { id: "calendar", label: "Content calendar" },
 ];
 
 export function Shell({ user, children }: { user: UserDTO; children: React.ReactNode }) {
-  const [tab, setTab] = useState<AppTab>("approval");
+  const [tab, setTabState] = useState<AppTab>("approval");
+
+  // Each tab has its own address (/?view=grid) so it can be bookmarked or shared.
+  useEffect(() => {
+    const view = new URLSearchParams(window.location.search).get("view") as AppTab | null;
+    if (view && TAB_IDS.includes(view)) setTabState(view);
+  }, []);
+
+  function setTab(next: AppTab) {
+    setTabState(next);
+    const url = new URL(window.location.href);
+    if (next === "approval") url.searchParams.delete("view");
+    else url.searchParams.set("view", next);
+    window.history.replaceState(null, "", url.toString());
+  }
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });

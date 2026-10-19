@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { Prisma, type ContentType, type Platform, type PostStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/types";
 
@@ -112,205 +112,43 @@ async function upsertAccounts(db: Db, accounts: AccountSpec[]) {
   }
 }
 
-function svg(title: string, line: string, portrait: boolean) {
-  const height = portrait ? 1920 : 1080;
-  const escape = (value: string) =>
-    value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="${height}" viewBox="0 0 1080 ${height}">
-      <rect width="1080" height="${height}" fill="#fff8f3"/>
-      <rect width="1080" height="36" fill="#ed217a"/>
-      <text x="72" y="220" font-family="Georgia" font-size="48" fill="#dc376e">MailBakes</text>
-      <text x="72" y="${portrait ? 860 : 520}" font-family="Georgia" font-size="72" fill="#1e1a1c">${escape(title)}</text>
-      <text x="72" y="${portrait ? 980 : 620}" font-family="Georgia" font-size="36" fill="#5c5148">${escape(line)}</text>
-      <text x="72" y="${height - 120}" font-family="Georgia" font-size="32" fill="#dc376e">Cake in a card. Through the letterbox.</text>
-    </svg>`,
-  );
-}
+// The app used to seed example posts. They were removed on 19 Oct 2026 so the
+// social media manager starts from a clean slate. This one-off cleanup removes
+// any of those examples still in the database (matched by title and their
+// generated SVG artwork, so real posts are never touched). Accounts are left alone.
+const SAMPLE_POST_TITLES = [
+  "A letterbox birthday",
+  "Packed for the post",
+  "This morning's bake",
+  "Made in Liverpool",
+  "The letterbox test",
+  "Dispatch day",
+  "Christmas Cake Cards",
+  "Just because",
+  "Win a Cake Card",
+];
+const SAMPLE_KEY_DATES = ["Christmas Cake Cards launch", "Halloween delivery cut-off"];
 
-async function seedSamples(db: Db) {
-  if (process.env.SEED_SAMPLE_CONTENT === "false") {
-    await db.appMeta.upsert({
-      where: { id: "sampleSeeded" },
-      update: {},
-      create: { id: "sampleSeeded", value: "disabled" },
+async function removeSamples(db: Db) {
+  const done = await db.appMeta.findUnique({ where: { id: "samplesRemoved" } });
+  if (done) return;
+  const seeded = await db.appMeta.findUnique({ where: { id: "sampleSeeded" } });
+  if (seeded?.value === "yes") {
+    const candidates = await db.post.findMany({
+      where: { title: { in: SAMPLE_POST_TITLES } },
+      select: { id: true, title: true, media: { select: { fileName: true } } },
     });
-    return;
+    const ids = candidates
+      .filter((post) => post.media.length === 1 && post.media[0].fileName === `${post.title}.svg`)
+      .map((post) => post.id);
+    if (ids.length > 0) await db.post.deleteMany({ where: { id: { in: ids } } });
+    await db.keyDate.deleteMany({ where: { title: { in: SAMPLE_KEY_DATES } } });
   }
-  const [team, management] = await Promise.all([
-    db.user.findFirst({ where: { role: "TEAM" } }),
-    db.user.findFirst({ where: { role: "MANAGEMENT" } }),
-  ]);
-  if (!team || !management) return;
-
-  const posts: {
-    title: string;
-    platforms: Platform[];
-    contentType: ContentType;
-    plannedDate: string;
-    status: PostStatus;
-    caption: string;
-    creativeNotes: string;
-    comment?: { kind: "CHANGES" | "REJECTION" | "APPROVAL"; body: string };
-    portrait?: boolean;
-  }[] = [
-    {
-      title: "A letterbox birthday",
-      platforms: ["INSTAGRAM", "FACEBOOK"],
-      contentType: "FEED",
-      plannedDate: "2026-10-16",
-      status: "APPROVED",
-      caption:
-        "Two slices, one card, straight through the letterbox. Vanilla and chocolate fudge, with their message printed inside. Baked this morning in Liverpool.",
-      creativeNotes: "Use the pink heart card photo.",
-      comment: { kind: "APPROVAL", body: "Approved." },
-    },
-    {
-      title: "Packed for the post",
-      platforms: ["TIKTOK", "INSTAGRAM"],
-      contentType: "REEL",
-      plannedDate: "2026-10-20",
-      status: "PENDING_APPROVAL",
-      caption: "From the tin to the letterbox. Freshly baked, wrapped, and posted the same day.",
-      creativeNotes: "Short vertical film of packing a two-slice card.",
-    },
-    {
-      title: "This morning's bake",
-      platforms: ["INSTAGRAM", "FACEBOOK", "SNAPCHAT"],
-      contentType: "STORY",
-      plannedDate: "2026-10-18",
-      status: "PENDING_APPROVAL",
-      caption: "Lemon drizzle and red velvet on the bench. 400 Cake Cards before lunch.",
-      creativeNotes: "Story frame, full bleed of the tray.",
-      portrait: true,
-    },
-    {
-      title: "Made in Liverpool",
-      platforms: ["LINKEDIN"],
-      contentType: "FEED",
-      plannedDate: "2026-10-22",
-      status: "APPROVED",
-      caption:
-        "MailBakes started in a family kitchen. Every Cake Card is now baked in our Liverpool bakery and handed to Royal Mail the same day. A small way to be there, even when you can't.",
-      creativeNotes: "Bakery exterior, natural light.",
-      comment: { kind: "APPROVAL", body: "Approved." },
-    },
-    {
-      title: "The letterbox test",
-      platforms: ["YOUTUBE_SHORTS", "TIKTOK"],
-      contentType: "REEL",
-      plannedDate: "2026-10-24",
-      status: "PENDING_APPROVAL",
-      caption:
-        "Does it actually fit? One-slice and two-slice Cake Cards are made for a standard UK letterbox. A four-slice pack needs someone home.",
-      creativeNotes: "Film a real letterbox, not a mock-up.",
-    },
-    {
-      title: "Dispatch day",
-      platforms: ["SNAPCHAT", "INSTAGRAM"],
-      contentType: "STORY",
-      plannedDate: "2026-10-19",
-      status: "APPROVED",
-      caption: "Bags packed, labels on, off to Royal Mail. Order before 4pm and we bake today.",
-      creativeNotes: "Story sticker: Order by 4pm.",
-      portrait: true,
-      comment: { kind: "APPROVAL", body: "Approved." },
-    },
-    {
-      title: "Christmas Cake Cards",
-      platforms: ["INSTAGRAM", "FACEBOOK", "TIKTOK"],
-      contentType: "FEED",
-      plannedDate: "2026-10-28",
-      status: "CHANGES_REQUESTED",
-      caption:
-        "Christmas designs are nearly ready. A little cake, a proper message, through their letterbox.",
-      creativeNotes: "Waiting on the robin card photo.",
-      comment: {
-        kind: "CHANGES",
-        body: "Can we wait until the robin design photo is in? The caption's lovely, but the creative still says coming soon.",
-      },
-    },
-    {
-      title: "Just because",
-      platforms: ["INSTAGRAM"],
-      contentType: "FEED",
-      plannedDate: "2026-11-01",
-      status: "DRAFT",
-      caption: "No occasion needed. Sometimes the post is just: we made cake, and it fits through a letterbox.",
-      creativeNotes: "",
-    },
-    {
-      title: "Win a Cake Card",
-      platforms: ["INSTAGRAM"],
-      contentType: "FEED",
-      plannedDate: "2026-10-21",
-      status: "REJECTED",
-      caption: "Giveaway: tell us who you'd send a Cake Card to.",
-      creativeNotes: "",
-      comment: {
-        kind: "REJECTION",
-        body: "Let's skip giveaways this month and keep the feed on the bakery and the letterbox. Happy to look at it again in the new year.",
-      },
-    },
-  ];
-
-  for (const item of posts) {
-    const [year, month, day] = item.plannedDate.split("-").map(Number);
-    const reviewed = item.status !== "DRAFT" && item.status !== "PENDING_APPROVAL";
-    const image = new Uint8Array(svg(item.title, "MailBakes · Liverpool", Boolean(item.portrait))) as Uint8Array<ArrayBuffer>;
-    await db.post.create({
-      data: {
-        title: item.title,
-        platforms: item.platforms,
-        contentType: item.contentType,
-        plannedDate: new Date(Date.UTC(year, month - 1, day)),
-        status: item.status,
-        caption: item.caption,
-        creativeNotes: item.creativeNotes,
-        authorId: team.id,
-        reviewerId: reviewed || item.comment ? management.id : null,
-        reviewedAt: item.comment ? new Date("2026-10-17T09:30:00Z") : null,
-        media: {
-          create: {
-            fileName: `${item.title}.svg`,
-            mimeType: "image/svg+xml",
-            sizeBytes: image.length,
-            data: image,
-          },
-        },
-        comments: item.comment
-          ? {
-              create: {
-                authorId: management.id,
-                kind: item.comment.kind,
-                body: item.comment.body,
-              },
-            }
-          : undefined,
-      },
-    });
-  }
-
-  await db.keyDate.createMany({
-    data: [
-      {
-        title: "Christmas Cake Cards launch",
-        date: new Date(Date.UTC(2026, 9, 22)),
-        kind: "LAUNCH",
-        notes: "Designs go on the site. Social can start the same day.",
-        authorId: management.id,
-      },
-      {
-        title: "Halloween delivery cut-off",
-        date: new Date(Date.UTC(2026, 9, 30)),
-        kind: "KEY_DATE",
-        notes: "Order by 4pm for a next-day letterbox delivery.",
-        authorId: team.id,
-      },
-    ],
+  await db.appMeta.upsert({
+    where: { id: "samplesRemoved" },
+    update: {},
+    create: { id: "samplesRemoved", value: new Date().toISOString() },
   });
-
-  await db.appMeta.create({ data: { id: "sampleSeeded", value: "yes" } });
 }
 
 function lockIsBusy(error: unknown) {
@@ -323,7 +161,7 @@ function lockIsBusy(error: unknown) {
 async function run() {
   // Never wait on a lock held by the instance we are replacing. try_lock
   // returns immediately, the timeouts cap every other wait, and a miss is a
-  // skip: account upserts and the sample seed are safe to run later.
+  // skip: account upserts and the sample cleanup are safe to run later.
   try {
     return await prisma.$transaction(
       async (db) => {
@@ -337,12 +175,7 @@ async function run() {
           return false;
         }
         await upsertAccounts(db, accountsFromEnv());
-        const flag = await db.appMeta.findUnique({ where: { id: "sampleSeeded" } });
-        if (!flag && (await db.post.count()) === 0) {
-          await seedSamples(db);
-        } else if (!flag) {
-          await db.appMeta.create({ data: { id: "sampleSeeded", value: "existing" } });
-        }
+        await removeSamples(db);
         return true;
       },
       { maxWait: 2_000, timeout: 8_000 },

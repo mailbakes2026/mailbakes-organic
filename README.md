@@ -48,7 +48,7 @@ The public URL comes from the service name: `mailbakes-organic` → https://mail
 
 Use the Frankfurt region for the web service and the database so they can use the private connection string. The web service plan is `starter` and the database is `basic-256mb` (Render’s smallest current Postgres). Change the plan names in `render.yaml` if your account uses different ones.
 
-Example posts are created once, on the first boot, unless `SEED_SAMPLE_CONTENT` is `false`. Delete them in the app when you start the real plan. After that first boot they are not created again.
+The app starts empty. It no longer creates example posts; any left over from the first version are removed once at startup. Accounts are never touched by that cleanup. The Instagram grid (`/?view=grid`) shows how planned Instagram posts will sit on the profile, newest top left.
 
 The start command runs `prisma migrate deploy` before the server listens. `/api/health` checks the database and is the Render health check.
 

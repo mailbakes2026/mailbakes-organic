@@ -23,7 +23,7 @@ services:
       - key: TEAM_NAME
         value: Content team
       - key: SEED_SAMPLE_CONTENT
-        value: "true"
+        value: "false"
       - key: MANAGEMENT_EMAIL
         sync: false
       - key: MANAGEMENT_PASSWORD
