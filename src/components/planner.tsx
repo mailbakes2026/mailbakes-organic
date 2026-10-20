@@ -27,14 +27,17 @@ import {
 } from "@/lib/constants";
 import { InstaGrid, TikTokGrid } from "@/components/insta-grid";
 import { PostStatsForm } from "@/components/post-stats";
+import { Connections } from "@/components/connections";
 import { NoteForm, NotesBoard } from "@/components/notes-board";
 import { Reports } from "@/components/reports";
 import { MediaCarousel } from "@/components/media-carousel";
 import type {
   ContentTypeId,
+  ConnectionCardDTO,
   IgProfileDTO,
   KeyDateDTO,
   NoteDTO,
+  OrganicReportDTO,
   PlatformId,
   PostDTO,
   StatusId,
@@ -144,12 +147,18 @@ export function Planner({
   keyDates,
   profile,
   notes,
+  connections,
+  organic,
+  notice,
 }: {
   user: UserDTO;
   posts: PostDTO[];
   keyDates: KeyDateDTO[];
   profile: IgProfileDTO;
   notes: NoteDTO[];
+  connections: ConnectionCardDTO[];
+  organic: OrganicReportDTO;
+  notice: string | null;
 }) {
   const router = useRouter();
   const { tab } = useAppTab();
@@ -379,7 +388,13 @@ export function Planner({
         />
       ) : null}
 
-      {tab === "reports" ? <Reports posts={posts} onChanged={refresh} /> : null}
+      {tab === "connections" ? (
+        <Connections cards={connections} canManage={user.role === "MANAGEMENT"} notice={notice} />
+      ) : null}
+
+      {tab === "reports" ? (
+        <Reports posts={posts} organic={organic} connections={connections} onChanged={refresh} />
+      ) : null}
 
       {tab === "calendar" ? (
         <Calendar

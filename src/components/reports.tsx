@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { PostStatsForm } from "@/components/post-stats";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { addMetric, followerAt, organicBag } from "@/lib/connections/model";
 import { CHANNELS, contentLabel, platformLabel } from "@/lib/constants";
 import {
   addDays,
@@ -23,7 +24,7 @@ import {
   weekSummary,
   type MetricName,
 } from "@/lib/report-math";
-import type { PostDTO } from "@/lib/types";
+import type { ConnectionCardDTO, OrganicReportDTO, PlatformId, PostDTO } from "@/lib/types";
 
 function formatDay(iso: string) {
   const [year, month, day] = iso.split("-").map(Number);
@@ -54,7 +55,29 @@ function Delta({ current, previous }: { current: number; previous: number }) {
   return <span className={`wow wow-${deltaTone(current, previous)}`}>{formatDelta(current, previous)}</span>;
 }
 
-export function Reports({ posts, onChanged }: { posts: PostDTO[]; onChanged: () => void }) {
+function followerSum(points: OrganicReportDTO["followers"], platforms: PlatformId[], end: string) {
+  let total = 0;
+  let seen = false;
+  for (const platform of platforms) {
+    const value = followerAt(points, platform, end);
+    if (value == null) continue;
+    total += value;
+    seen = true;
+  }
+  return seen ? total : null;
+}
+
+export function Reports({
+  posts,
+  organic,
+  connections,
+  onChanged,
+}: {
+  posts: PostDTO[];
+  organic: OrganicReportDTO;
+  connections: ConnectionCardDTO[];
+  onChanged: () => void;
+}) {
   const [cursor, setCursor] = useState(londonToday);
   const [editing, setEditing] = useState<PostDTO | null>(null);
   const range = weekRange(cursor);
@@ -69,6 +92,7 @@ export function Reports({ posts, onChanged }: { posts: PostDTO[]; onChanged: () 
   const missed = ranked.length > 1 ? ranked[ranked.length - 1] : null;
   const summary = weekSummary(weekPosts, previousPosts);
   const openStats = editing ? posts.find((post) => post.id === editing.id) ?? editing : null;
+  const reconnecting = connections.filter((card) => card.status === "NEEDS_RECONNECT");
 
   return (
     <div className="stack reports">
@@ -77,7 +101,7 @@ export function Reports({ posts, onChanged }: { posts: PostDTO[]; onChanged: () 
           <h2>Week of {formatWeek(range.start, range.end)}</h2>
           <p className="muted">
             Approved posts, counted on the week of their planned date. A post on both Instagram and Facebook counts once
-            under Meta. Numbers are typed in for now.
+            under Meta. Typed-in stats stay as they are. Connected accounts fill the rest each day.
           </p>
         </div>
         <div className="row">
@@ -92,6 +116,12 @@ export function Reports({ posts, onChanged }: { posts: PostDTO[]; onChanged: () 
           </button>
         </div>
       </div>
+      {reconnecting.length > 0 ? (
+        <p className="alert crit">
+          {reconnecting.map((card) => card.label).join(", ")} need{reconnecting.length === 1 ? "s" : ""} reconnecting on
+          Connections before those stats can update.
+        </p>
+      ) : null}
 
       <section>
         <h3>Posts published</h3>
@@ -147,16 +177,33 @@ export function Reports({ posts, onChanged }: { posts: PostDTO[]; onChanged: () 
                   channel.platforms.map((platform) => statFor(post, platform)),
                 );
                 const previousStats = previous.flatMap((post) => channel.platforms.map((platform) => statFor(post, platform)));
-                const views = sumMetric(currentStats, "views");
-                const prevViews = sumMetric(previousStats, "views");
-                const metric = (key: MetricName) => sumMetric(currentStats, key);
+                const extra = organicBag(
+                  channel.platforms,
+                  new Set(currentPosts.map((post) => post.id)),
+                  organic.posts,
+                  organic.days,
+                  range.start,
+                  range.end,
+                );
+                const prevExtra = organicBag(
+                  channel.platforms,
+                  new Set(previous.map((post) => post.id)),
+                  organic.posts,
+                  organic.days,
+                  previousRange.start,
+                  previousRange.end,
+                );
+                const metric = (key: MetricName) => addMetric(sumMetric(currentStats, key), extra[key]);
+                const prevMetric = (key: MetricName) => addMetric(sumMetric(previousStats, key), prevExtra[key]);
+                const views = metric("views");
+                const prevViews = prevMetric("views");
                 const interactions = ["likes", "comments", "shares", "saves"].reduce<number | null>((sum, key) => {
-                  const value = sumMetric(currentStats, key as MetricName);
+                  const value = metric(key as MetricName);
                   if (value == null) return sum;
                   return (sum ?? 0) + value;
                 }, null);
                 const prevInteractions = ["likes", "comments", "shares", "saves"].reduce<number | null>((sum, key) => {
-                  const value = sumMetric(previousStats, key as MetricName);
+                  const value = prevMetric(key as MetricName);
                   if (value == null) return sum;
                   return (sum ?? 0) + value;
                 }, null);
@@ -171,7 +218,10 @@ export function Reports({ posts, onChanged }: { posts: PostDTO[]; onChanged: () 
                       </span>
                       {channel.short === channel.label ? null : ` ${channel.label}`}
                     </td>
-                    <td>{currentPosts.length}</td>
+                    <td>
+                      {currentPosts.length}
+                      {extra.posts > 0 ? <div className="small muted">+{extra.posts} from the account</div> : null}
+                    </td>
                     <td>{formatCount(views)}</td>
                     <td>{formatCount(metric("likes"))}</td>
                     <td>{formatCount(metric("comments"))}</td>
@@ -198,6 +248,28 @@ export function Reports({ posts, onChanged }: { posts: PostDTO[]; onChanged: () 
               })}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section>
+        <h3>Followers</h3>
+        <p className="small muted">Latest count pulled from each connected account, compared with the end of last week.</p>
+        <div className="kpi-row">
+          {CHANNELS.map((channel) => {
+            const current = followerSum(organic.followers, channel.platforms, range.end);
+            const previous = followerSum(organic.followers, channel.platforms, previousRange.end);
+            return (
+              <div key={channel.id} className="kpi" style={{ borderLeftColor: channel.colour }}>
+                <div className="eyebrow">{channel.label}</div>
+                <div className="kpi-figure">{formatCount(current)}</div>
+                {current != null && previous != null ? (
+                  <Delta current={current} previous={previous} />
+                ) : (
+                  <span className="small muted">Not synced yet</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -255,7 +327,11 @@ export function Reports({ posts, onChanged }: { posts: PostDTO[]; onChanged: () 
                           ) : null}
                         </td>
                         <td>{platformLabel(platform)}</td>
-                        <td>{formatCount(stat?.views ?? null)}</td>
+                        <td>
+                          {formatCount(stat?.views ?? null)}
+                          {stat?.source === "API" ? <div className="small muted">Synced</div> : null}
+                          {stat?.source === "MANUAL" ? <div className="small muted">Typed in</div> : null}
+                        </td>
                         <td>{formatCount(interactionsOf(stat))}</td>
                         <td>{formatRate(engagementOf(stat))}</td>
                         <td>

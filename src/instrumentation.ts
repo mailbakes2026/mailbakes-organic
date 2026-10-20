@@ -8,4 +8,6 @@ export async function register() {
   void bootstrap().catch((error) => {
     console.error("Bootstrap failed.", error);
   });
+  const { startDailySync } = await import("@/lib/connections/schedule");
+  startDailySync();
 }

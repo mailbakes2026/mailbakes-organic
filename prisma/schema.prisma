@@ -64,6 +64,22 @@ enum NoteStatus {
   DONE
 }
 
+// One login for a platform account. META covers the Instagram professional
+// account and its Facebook Page. Paid ad accounts are not stored here.
+enum ConnectionPlatform {
+  META
+  TIKTOK
+  YOUTUBE
+  LINKEDIN
+  SNAPCHAT
+}
+
+enum ConnectionState {
+  DISCONNECTED
+  CONNECTED
+  NEEDS_RECONNECT
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -77,6 +93,7 @@ model User {
   comments     Comment[]
   keyDates     KeyDate[]
   notes        Note[]
+  connections  PlatformConnection[]
 }
 
 model Post {
@@ -102,6 +119,7 @@ model Post {
   comments      Comment[]
   stats         PostStat[]
   fromNote      Note?
+  externalPosts ExternalPost[]
 
   @@index([plannedDate])
   @@index([status])
@@ -202,6 +220,78 @@ model NoteImage {
   createdAt DateTime @default(now())
 
   @@index([noteId])
+}
+
+model PlatformConnection {
+  id              String             @id @default(cuid())
+  platform        ConnectionPlatform @unique
+  status          ConnectionState    @default(DISCONNECTED)
+  accountId       String             @default("")
+  accountName     String             @default("")
+  accountMeta     Json               @default("{}")
+  accessTokenEnc  String             @default("")
+  refreshTokenEnc String             @default("")
+  expiresAt       DateTime?
+  scopes          String             @default("")
+  lastSyncedAt    DateTime?
+  lastSyncError   String             @default("")
+  connectedById   String?
+  connectedBy     User?              @relation(fields: [connectedById], references: [id])
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+// Organic posts pulled from a connected account. A typed-in PostStat is never
+// overwritten when matchedPostId points at a post someone edited by hand.
+model ExternalPost {
+  id            String    @id @default(cuid())
+  platform      Platform
+  externalId    String
+  title         String
+  caption       String    @default("")
+  publishedOn   DateTime  @db.Date
+  permalink     String    @default("")
+  views         Int?
+  likes         Int?
+  comments      Int?
+  shares        Int?
+  saves         Int?
+  linkClicks    Int?
+  matchedPostId String?
+  matchedPost   Post?     @relation(fields: [matchedPostId], references: [id], onDelete: SetNull)
+  syncedAt      DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([platform, externalId])
+  @@index([publishedOn])
+  @@index([matchedPostId])
+}
+
+model FollowerSnapshot {
+  id        String   @id @default(cuid())
+  platform  Platform
+  day       DateTime @db.Date
+  followers Int
+  createdAt DateTime @default(now())
+
+  @@unique([platform, day])
+}
+
+// Day totals for an account when a platform reports a rollup rather than one row per post.
+model AccountDayStat {
+  id         String   @id @default(cuid())
+  platform   Platform
+  day        DateTime @db.Date
+  views      Int?
+  likes      Int?
+  comments   Int?
+  shares     Int?
+  saves      Int?
+  linkClicks Int?
+  updatedAt  DateTime @updatedAt
+
+  @@unique([platform, day])
 }
 
 model AppMeta {

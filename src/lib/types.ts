@@ -102,6 +102,60 @@ export type KeyDateDTO = {
   notes: string;
 };
 
+export type ConnectionStatus = "SETUP_NEEDED" | "DISCONNECTED" | "CONNECTED" | "NEEDS_RECONNECT";
+
+export type ConnectionCardDTO = {
+  id: string;
+  slug: string;
+  label: string;
+  blurb: string;
+  status: ConnectionStatus;
+  accountName: string;
+  lastSyncedAt: string | null;
+  lastSyncError: string;
+  missing: string[];
+  storageReady: boolean;
+  redirectUri: string;
+  setup: string[];
+};
+
+export type OrganicPostDTO = {
+  platform: PlatformId;
+  externalId: string;
+  title: string;
+  publishedOn: string;
+  matchedPostId: string | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  linkClicks: number | null;
+};
+
+export type OrganicDayDTO = {
+  platform: PlatformId;
+  day: string;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  linkClicks: number | null;
+};
+
+export type FollowerPointDTO = {
+  platform: PlatformId;
+  day: string;
+  followers: number;
+};
+
+export type OrganicReportDTO = {
+  posts: OrganicPostDTO[];
+  followers: FollowerPointDTO[];
+  days: OrganicDayDTO[];
+};
+
 export type UserDTO = {
   id: string;
   email: string;
