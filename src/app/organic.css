@@ -597,8 +597,12 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+  object-position: center;
   display: block;
-  background: #f8d5e6;
+  background: #fff5f8;
+}
+.ig-avatar-ring img.is-logo {
+  object-fit: cover;
 }
 .ig-handleline,
 .ig-name,
@@ -782,7 +786,7 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
 .ig-empty b { color: #000; }
 
 .ig-editor-avatar { display: flex; align-items: center; gap: 12px; text-transform: none; letter-spacing: 0; }
-.ig-editor-avatar img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: #f8d5e6; }
+.ig-editor-avatar img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; object-position: center; background: #fff5f8; }
 .ig-stat-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .ig-editor-row {
   display: grid;
@@ -874,9 +878,24 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
 }
 .tt-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   padding: 14px 16px 10px;
+}
+.tt-avatar {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #fff;
+}
+.tt-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
 }
 .tt-head b { font-size: 16px; }
 .tt-head span { color: #aaa; font-size: 13px; font-weight: 650; }

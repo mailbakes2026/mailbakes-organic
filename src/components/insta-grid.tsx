@@ -35,6 +35,21 @@ function formatIgStat(value: number) {
   return value.toLocaleString("en-GB");
 }
 
+const LOGO_AVATAR = "/mailbakes-avatar.svg";
+
+function ProfilePhoto({ avatarId, logoClass }: { avatarId: string | null; logoClass?: string }) {
+  const [failed, setFailed] = useState(false);
+  const photo = Boolean(avatarId) && !failed;
+  return (
+    <img
+      src={photo ? `/api/ig-media/${avatarId}` : LOGO_AVATAR}
+      alt="MailBakes"
+      className={photo ? "is-photo" : `is-logo${logoClass ? ` ${logoClass}` : ""}`}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function linkHref(link: string) {
   if (/^https?:\/\//i.test(link)) return link;
   return `https://${link}`;
@@ -110,7 +125,7 @@ export function InstaGrid({
         <div className="ig-top">
           <div className="ig-avatar">
             <div className="ig-avatar-ring">
-              <img src={profile.avatarId ? `/api/ig-media/${profile.avatarId}` : "/ig-default-avatar.svg"} alt="" />
+              <ProfilePhoto avatarId={profile.avatarId} />
             </div>
           </div>
           <div className="ig-handleline">
@@ -292,6 +307,9 @@ export function TikTokGrid({
       </div>
       <div className="tt-phone">
         <div className="tt-head">
+          <span className="tt-avatar">
+            <ProfilePhoto avatarId={profile.avatarId} />
+          </span>
           <b>@{profile.handle}</b>
           <span>TikTok</span>
         </div>
@@ -466,7 +484,7 @@ function ProfileEditor({
   const avatarSrc = avatarPreview
     ? avatarPreview
     : removeAvatar || !profile.avatarId
-      ? "/ig-default-avatar.svg"
+      ? LOGO_AVATAR
       : `/api/ig-media/${profile.avatarId}`;
 
   return (
@@ -475,7 +493,7 @@ function ProfileEditor({
         <DialogHeader>
           <DialogTitle>Edit profile</DialogTitle>
           <DialogDescription>
-            This is the Instagram header on the grid. It does not post anything.
+            This header is the profile on Meta preview and TikTok preview. It does not post anything.
           </DialogDescription>
         </DialogHeader>
         <button type="button" className="btn ghost sm" onClick={onClose}>
@@ -483,11 +501,12 @@ function ProfileEditor({
         </button>
       </div>
       <div className="field">
-        <span>Profile photo</span>
+        <span>Profile picture</span>
+        <p className="small muted">Upload or replace the photo. It is cropped to a circle on both previews.</p>
         <div className="ig-editor-avatar">
-          <img src={avatarSrc} alt="" />
+          <img src={avatarSrc} alt="MailBakes" className={avatarPreview || (profile.avatarId && !removeAvatar) ? "is-photo" : "is-logo"} />
           <label className="ig-file">
-            Upload
+            {profile.avatarId || avatarFile ? "Replace" : "Upload"}
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
@@ -508,7 +527,7 @@ function ProfileEditor({
                 setRemoveAvatar(true);
               }}
             >
-              Use the pink placeholder
+              Use the MailBakes logo
             </button>
           ) : null}
         </div>
