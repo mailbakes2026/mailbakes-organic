@@ -3,9 +3,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { UserDTO } from "@/lib/types";
 
-export type AppTab = "approval" | "grid" | "feed" | "calendar";
+export type AppTab = "approval" | "grid" | "tiktok" | "calendar";
 
-const TAB_IDS: AppTab[] = ["approval", "grid", "feed", "calendar"];
+const TAB_IDS: AppTab[] = ["approval", "grid", "tiktok", "calendar"];
 
 const TabContext = createContext<{ tab: AppTab; setTab: (tab: AppTab) => void } | null>(null);
 
@@ -17,8 +17,8 @@ export function useAppTab() {
 
 const LINKS: { id: AppTab; label: string }[] = [
   { id: "approval", label: "Posts for approval" },
-  { id: "grid", label: "Instagram grid" },
-  { id: "feed", label: "Feed preview" },
+  { id: "grid", label: "Meta preview" },
+  { id: "tiktok", label: "TikTok preview" },
   { id: "calendar", label: "Content calendar" },
 ];
 

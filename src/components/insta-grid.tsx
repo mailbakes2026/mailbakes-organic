@@ -60,6 +60,14 @@ function draftFrom(item: IgHighlightDTO): DraftHighlight {
   return { key: item.id, id: item.id, title: item.title, coverId: item.coverId, file: null, removeCover: false };
 }
 
+function isMetaPost(post: PostDTO) {
+  return (
+    (post.platforms.includes("INSTAGRAM") || post.platforms.includes("FACEBOOK")) &&
+    post.contentType !== "STORY" &&
+    post.status !== "REJECTED"
+  );
+}
+
 export function InstaGrid({
   posts,
   profile,
@@ -73,9 +81,7 @@ export function InstaGrid({
 }) {
   const [includeDrafts, setIncludeDrafts] = useState(true);
   const [editing, setEditing] = useState(false);
-  const planned = posts.filter(
-    (post) => post.platforms.includes("INSTAGRAM") && post.contentType !== "STORY" && post.status !== "REJECTED",
-  );
+  const planned = posts.filter(isMetaPost);
   const scheduled = planned.filter((post) => post.status === "APPROVED").length;
   const tiles = planned
     .filter((post) => includeDrafts || post.status === "APPROVED")
@@ -89,7 +95,9 @@ export function InstaGrid({
   return (
     <div className="ig-page">
       <div className="feed-tools">
-        <p className="muted">How the MailBakes Instagram profile will look. Newest post top left. Tap a tile to open it.</p>
+        <p className="muted">
+          Instagram layout for Meta posts (Instagram and Facebook). Newest top left. Tap a tile to open it.
+        </p>
         <p className="muted small">
           In this plan: {planned.length} {planned.length === 1 ? "post" : "posts"} · {scheduled} scheduled
         </p>
@@ -165,7 +173,7 @@ export function InstaGrid({
             <p>
               <b>No posts yet</b>
             </p>
-            <p>When your social media manager adds Instagram posts, they&apos;ll fill this grid in order.</p>
+            <p>When your social media manager adds Instagram or Facebook posts, they&apos;ll fill this grid in order.</p>
           </div>
         ) : (
           <div className="ig-grid">
@@ -173,11 +181,12 @@ export function InstaGrid({
               <button
                 key={post.id}
                 type="button"
-                className={`ig-tile${post.status === "APPROVED" ? "" : " pending"}`}
+                className={`ig-tile${post.status === "APPROVED" ? "" : " pending"}${post.contentType === "REEL" ? " has-reel" : ""}`}
                 onClick={() => onOpen(post)}
                 title={post.title}
               >
                 <GridMedia post={post} />
+                {post.media.length > 1 ? <MultiIcon /> : null}
                 {post.contentType === "REEL" ? (
                   <span className="ig-reel" aria-label="Reel">
                     ▶
@@ -211,17 +220,32 @@ export function InstaGrid({
   );
 }
 
-function GridMedia({ post }: { post: PostDTO }) {
+function MultiIcon() {
+  return (
+    <span className="ig-multi" aria-label="Multiple">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+        <rect x="4" y="4" width="12" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+      </svg>
+    </span>
+  );
+}
+
+function GridMedia({ post, preferCover = false }: { post: PostDTO; preferCover?: boolean }) {
   const placeholder = (
     <span className="ig-placeholder">
       <b>{post.title}</b>
       <span>{post.caption.length > 90 ? `${post.caption.slice(0, 90).trimEnd()}…` : post.caption}</span>
     </span>
   );
-  if (post.contentType === "REEL") {
-    const cover = post.reelCover ?? post.media.find((item) => item.mimeType.startsWith("image/")) ?? null;
-    if (!cover) return placeholder;
-    return <img src={`/api/media/${cover.id}`} alt="" />;
+  const image = post.reelCover ?? post.media.find((item) => item.mimeType.startsWith("image/")) ?? null;
+  if (post.contentType === "REEL" || preferCover) {
+    if (image) return <img src={`/api/media/${image.id}`} alt="" />;
+    if (preferCover) {
+      const video = post.media.find((item) => item.mimeType.startsWith("video/"));
+      if (video) return <video src={`/api/media/${video.id}#t=0.1`} muted playsInline preload="metadata" />;
+    }
+    return placeholder;
   }
   const media = post.media[0];
   if (!media) return placeholder;
@@ -229,6 +253,94 @@ function GridMedia({ post }: { post: PostDTO }) {
     return <video src={`/api/media/${media.id}#t=0.1`} muted playsInline preload="metadata" />;
   }
   return <img src={`/api/media/${media.id}`} alt="" />;
+}
+
+export function TikTokGrid({
+  posts,
+  profile,
+  onOpen,
+}: {
+  posts: PostDTO[];
+  profile: IgProfileDTO;
+  onOpen: (post: PostDTO) => void;
+}) {
+  const [includeDrafts, setIncludeDrafts] = useState(true);
+  const planned = posts.filter(
+    (post) => post.platforms.includes("TIKTOK") && post.contentType !== "STORY" && post.status !== "REJECTED",
+  );
+  const scheduled = planned.filter((post) => post.status === "APPROVED").length;
+  const tiles = planned
+    .filter((post) => includeDrafts || post.status === "APPROVED")
+    .sort(
+      (a, b) =>
+        b.plannedDate.localeCompare(a.plannedDate) ||
+        (b.plannedTime ?? "").localeCompare(a.plannedTime ?? "") ||
+        b.createdAt.localeCompare(a.createdAt),
+    );
+
+  return (
+    <div className="tt-page">
+      <div className="feed-tools">
+        <p className="muted">How planned TikToks will look. Newest top left. Videos use their cover image.</p>
+        <p className="muted small">
+          In this plan: {planned.length} {planned.length === 1 ? "post" : "posts"} · {scheduled} scheduled
+        </p>
+        <label className="check-line">
+          <input type="checkbox" checked={includeDrafts} onChange={(event) => setIncludeDrafts(event.target.checked)} />
+          Include drafts and posts in review
+        </label>
+      </div>
+      <div className="tt-phone">
+        <div className="tt-head">
+          <b>@{profile.handle}</b>
+          <span>TikTok</span>
+        </div>
+        {tiles.length === 0 ? (
+          <div className="tt-empty">
+            <p>
+              <b>No TikToks yet</b>
+            </p>
+            <p>Posts marked for TikTok will fill this grid.</p>
+          </div>
+        ) : (
+          <div className="tt-grid">
+            {tiles.map((post) => {
+              const video = post.contentType === "REEL" || post.media.some((item) => item.mimeType.startsWith("video/"));
+              return (
+                <button
+                  key={post.id}
+                  type="button"
+                  className={`tt-tile${post.status === "APPROVED" ? "" : " pending"}${video ? " has-reel" : ""}`}
+                  onClick={() => onOpen(post)}
+                  title={post.title}
+                >
+                  <GridMedia post={post} preferCover />
+                  {post.media.length > 1 ? <MultiIcon /> : null}
+                  {video ? (
+                    <span className="ig-reel" aria-label="Video">
+                      ▶
+                    </span>
+                  ) : null}
+                  <span className="ig-meta">
+                    <span>
+                      {formatDay(post.plannedDate)}
+                      {post.plannedTime ? (
+                        <>
+                          <br />
+                          {post.plannedTime}
+                        </>
+                      ) : null}
+                    </span>
+                    <span className="ig-state">{gridLabel(post)}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ProfileEditor({

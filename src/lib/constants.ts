@@ -38,6 +38,42 @@ export const ALLOWED_MIME = new Set([
   "video/quicktime",
 ]);
 
+export type ChannelId = "META" | "TIKTOK" | "SNAPCHAT" | "LINKEDIN" | "YOUTUBE_SHORTS";
+
+/** Calendar grouping. Instagram and Facebook share one Meta badge. */
+export const CHANNELS: {
+  id: ChannelId;
+  label: string;
+  short: string;
+  colour: string;
+  ink: string;
+  platforms: PlatformId[];
+}[] = [
+  {
+    id: "META",
+    label: "Meta",
+    short: "Meta",
+    colour: "#0064E0",
+    ink: "#fff",
+    platforms: ["INSTAGRAM", "FACEBOOK"],
+  },
+  { id: "TIKTOK", label: "TikTok", short: "TikTok", colour: "#111111", ink: "#fff", platforms: ["TIKTOK"] },
+  { id: "SNAPCHAT", label: "Snapchat", short: "Snap", colour: "#F7D31E", ink: "#1E1A1C", platforms: ["SNAPCHAT"] },
+  { id: "LINKEDIN", label: "LinkedIn", short: "in", colour: "#0A66C2", ink: "#fff", platforms: ["LINKEDIN"] },
+  {
+    id: "YOUTUBE_SHORTS",
+    label: "YouTube Shorts",
+    short: "Shorts",
+    colour: "#E11D2E",
+    ink: "#fff",
+    platforms: ["YOUTUBE_SHORTS"],
+  },
+];
+
+export function channelsFor(platforms: PlatformId[]) {
+  return CHANNELS.filter((channel) => channel.platforms.some((id) => platforms.includes(id)));
+}
+
 export function platformLabel(id: PlatformId) {
   return PLATFORMS.find((item) => item.id === id)?.label ?? id;
 }

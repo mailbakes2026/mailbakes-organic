@@ -46,8 +46,8 @@ const postSelect = {
   author: { select: { name: true } },
   reviewer: { select: { name: true } },
   media: {
-    select: { id: true, role: true, fileName: true, mimeType: true, sizeBytes: true },
-    orderBy: { createdAt: "asc" as const },
+    select: { id: true, role: true, fileName: true, mimeType: true, sizeBytes: true, position: true },
+    orderBy: [{ position: "asc" as const }, { createdAt: "asc" as const }],
   },
   comments: {
     select: {
@@ -272,6 +272,65 @@ async function readCover(form: FormData) {
   };
 }
 
+type StoredFile = {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: Uint8Array<ArrayBuffer>;
+};
+
+function readMediaOrder(form: FormData): string[] | null {
+  const raw = field(form, "mediaOrder");
+  if (!raw) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, "Couldn't update the order of the files.");
+  }
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !/^(?:id:.+|new:\d+)$/.test(item))) {
+    throw new HttpError(400, "Couldn't update the order of the files.");
+  }
+  return value;
+}
+
+function orderNewFiles(files: StoredFile[], order: string[] | null) {
+  if (!order) return files.map((file, position) => ({ ...file, position }));
+  const placed: (StoredFile & { position: number })[] = [];
+  const used = new Set<number>();
+  let position = 0;
+  for (const token of order) {
+    if (!token.startsWith("new:")) continue;
+    const index = Number(token.slice(4));
+    if (!Number.isInteger(index) || index < 0 || index >= files.length || used.has(index)) continue;
+    used.add(index);
+    placed.push({ ...files[index], position: position++ });
+  }
+  files.forEach((file, index) => {
+    if (!used.has(index)) placed.push({ ...file, position: position++ });
+  });
+  return placed;
+}
+
+function attachmentOrder(keptIds: string[], createdIds: string[], order: string[] | null) {
+  if (!order) return [...keptIds, ...createdIds];
+  const kept = new Set(keptIds);
+  const ordered: string[] = [];
+  for (const token of order) {
+    if (token.startsWith("id:")) {
+      const id = token.slice(3);
+      if (kept.has(id) && !ordered.includes(id)) ordered.push(id);
+    } else if (token.startsWith("new:")) {
+      const created = createdIds[Number(token.slice(4))];
+      if (created && !ordered.includes(created)) ordered.push(created);
+    }
+  }
+  for (const id of [...keptIds, ...createdIds]) {
+    if (!ordered.includes(id)) ordered.push(id);
+  }
+  return ordered;
+}
+
 function assertTeamStatus(role: Role, status: PostStatus, previous?: PostStatus) {
   if (role !== "TEAM") return status;
   if (previous === "APPROVED") return "PENDING_APPROVAL" as PostStatus;
@@ -307,7 +366,7 @@ export async function listKeyDates(): Promise<KeyDateDTO[]> {
 export async function createPost(user: UserDTO, form: FormData) {
   const input = readPostInput(form);
   const status = assertTeamStatus(user.role, input.status);
-  const files = await readFiles(form);
+  const files = orderNewFiles(await readFiles(form), readMediaOrder(form));
   const cover = input.contentType === "REEL" ? await readCover(form) : null;
   const reviewed =
     user.role === "MANAGEMENT" &&
@@ -333,8 +392,9 @@ export async function createPost(user: UserDTO, form: FormData) {
             mimeType: file.mimeType,
             sizeBytes: file.sizeBytes,
             data: file.data,
+            position: file.position,
           })),
-          ...(cover ? [cover] : []),
+          ...(cover ? [{ ...cover, position: 0 }] : []),
         ],
       },
     },
@@ -346,13 +406,16 @@ export async function createPost(user: UserDTO, form: FormData) {
 export async function updatePost(user: UserDTO, id: string, form: FormData) {
   const existing = await prisma.post.findUnique({
     where: { id },
-    include: { media: { select: { id: true, role: true } } },
+    include: { media: { select: { id: true, role: true, position: true } } },
   });
   if (!existing) throw new HttpError(404, "That post has gone.");
   const input = readPostInput(form);
   const status = assertTeamStatus(user.role, input.status, existing.status);
   const files = await readFiles(form);
-  const attachments = existing.media.filter((media) => media.role !== "REEL_COVER");
+  const order = readMediaOrder(form);
+  const attachments = existing.media
+    .filter((media) => media.role !== "REEL_COVER")
+    .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
   const currentCover = existing.media.find((media) => media.role === "REEL_COVER");
   const removeIds = input.removeMediaIds.filter((mediaId) =>
     attachments.some((media) => media.id === mediaId),
@@ -380,6 +443,32 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
     if (dropIds.length > 0) {
       await tx.media.deleteMany({ where: { postId: id, id: { in: dropIds } } });
     }
+    const createdIds: string[] = [];
+    for (const file of files) {
+      const created = await tx.media.create({
+        data: {
+          postId: id,
+          role: "ATTACHMENT",
+          fileName: file.fileName,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+          data: file.data,
+          position: 0,
+        },
+        select: { id: true },
+      });
+      createdIds.push(created.id);
+    }
+    if (cover) {
+      await tx.media.create({
+        data: { postId: id, ...cover, position: 0 },
+      });
+    }
+    const keptIds = attachments.filter((media) => !removeIds.includes(media.id)).map((media) => media.id);
+    const ordered = attachmentOrder(keptIds, createdIds, order);
+    for (let position = 0; position < ordered.length; position += 1) {
+      await tx.media.update({ where: { id: ordered[position] }, data: { position } });
+    }
     return tx.post.update({
       where: { id },
       data: {
@@ -393,18 +482,6 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
         creativeNotes: input.creativeNotes,
         reviewerId: reviewed ? user.id : undefined,
         reviewedAt: reviewed ? new Date() : undefined,
-        media: {
-          create: [
-            ...files.map((file) => ({
-              role: "ATTACHMENT" as const,
-              fileName: file.fileName,
-              mimeType: file.mimeType,
-              sizeBytes: file.sizeBytes,
-              data: file.data,
-            })),
-            ...(cover ? [cover] : []),
-          ],
-        },
         comments: notes.length
           ? {
               create: notes.map((body) => ({

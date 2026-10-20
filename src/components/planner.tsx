@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppTab } from "@/components/shell";
 import {
@@ -12,17 +12,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  CHANNELS,
   CONTENT_TYPES,
+  MAX_FILES,
   MAX_UPLOAD_BYTES,
   PLATFORMS,
   STATUSES,
   STORY_PLATFORMS,
+  channelsFor,
   contentLabel,
   platformColour,
   platformLabel,
   statusLabel,
 } from "@/lib/constants";
-import { InstaGrid } from "@/components/insta-grid";
+import { InstaGrid, TikTokGrid } from "@/components/insta-grid";
+import { MediaCarousel } from "@/components/media-carousel";
 import type {
   ContentTypeId,
   IgProfileDTO,
@@ -100,7 +104,12 @@ function monthCells(iso: string) {
   const [year, month] = iso.split("-").map(Number);
   const first = `${year}-${String(month).padStart(2, "0")}-01`;
   const start = startOfWeek(first);
-  return Array.from({ length: 42 }, (_, index) => addDays(start, index));
+  const cells = Array.from({ length: 42 }, (_, index) => addDays(start, index));
+  const monthKey = first.slice(0, 7);
+  while (cells.length > 7 && cells.slice(-7).every((day) => day.slice(0, 7) !== monthKey)) {
+    cells.splice(-7, 7);
+  }
+  return cells;
 }
 
 function monthBounds(iso: string) {
@@ -138,8 +147,6 @@ export function Planner({
 }) {
   const router = useRouter();
   const { tab } = useAppTab();
-  const [platform, setPlatform] = useState<PlatformId>("INSTAGRAM");
-  const [showInReview, setShowInReview] = useState(true);
   const [postForm, setPostForm] = useState<PostDTO | "new" | null>(null);
   const [presetDate, setPresetDate] = useState<string | null>(null);
   const [detail, setDetail] = useState<PostDTO | null>(null);
@@ -219,7 +226,7 @@ export function Planner({
   const rejected = posts.filter((post) => post.status === "REJECTED");
 
   return (
-    <div>
+    <div className={`planner${tab === "calendar" ? " cal-open" : ""}`}>
       <div className="page-head">
         <div>
           <h1>Social media</h1>
@@ -353,17 +360,7 @@ export function Planner({
         <InstaGrid posts={posts} profile={profile} onOpen={setDetail} onChanged={refresh} />
       ) : null}
 
-      {tab === "feed" ? (
-        <Feed
-          posts={posts}
-          platform={platform}
-          showInReview={showInReview}
-          onPlatform={setPlatform}
-          onToggleReview={setShowInReview}
-          onOpen={setDetail}
-          onStory={(items, index) => setStory({ items, index })}
-        />
-      ) : null}
+      {tab === "tiktok" ? <TikTokGrid posts={posts} profile={profile} onOpen={setDetail} /> : null}
 
       {tab === "calendar" ? (
         <Calendar
@@ -520,7 +517,7 @@ function EmptyStart({ onNew }: { onNew: () => void }) {
       <h2>Your social media manager is starting soon</h2>
       <p className="muted">
         Nothing&apos;s been planned yet. New posts will appear here for approval as soon as they&apos;re
-        added, and you can see how they&apos;ll sit on the profile in the Instagram grid.
+        added, and you can see how they&apos;ll sit in Meta preview or TikTok preview.
       </p>
       <button type="button" className="btn" onClick={onNew}>
         + Add the first post
@@ -677,29 +674,21 @@ function PostDetail({
         ))}
         <span className={statusPill(post.status)}>{statusLabel(post.status)}</span>
       </div>
+      {post.contentType === "REEL" && post.reelCover ? (
+        <figure className="reel-cover-detail">
+          <img src={`/api/media/${post.reelCover.id}`} alt="Reel cover" />
+          <figcaption className="small muted">Reel cover</figcaption>
+        </figure>
+      ) : null}
       {post.contentType === "STORY" ? (
         <div>
-          <StoryFrame post={post} />
+          <StoryPreview post={post} />
           <button type="button" className="btn ghost" onClick={onPreview}>
             Open story preview
           </button>
         </div>
       ) : (
-        <div className="media-stack">
-          {post.contentType === "REEL" && post.reelCover ? (
-            <figure className="reel-cover-detail">
-              <img src={`/api/media/${post.reelCover.id}`} alt="Reel cover" />
-              <figcaption className="small muted">Reel cover</figcaption>
-            </figure>
-          ) : null}
-          {post.media.map((media) =>
-            media.mimeType.startsWith("video/") ? (
-              <video key={media.id} src={`/api/media/${media.id}`} controls playsInline />
-            ) : (
-              <img key={media.id} src={`/api/media/${media.id}`} alt={post.title} />
-            ),
-          )}
-        </div>
+        <MediaCarousel items={post.media} title={post.title} />
       )}
       <p className="pre">{post.caption}</p>
       {post.creativeNotes ? (
@@ -735,27 +724,71 @@ function PostDetail({
   );
 }
 
-function StoryFrame({ post }: { post: PostDTO }) {
-  const media = post.media[0];
+function StoryStage({
+  post,
+  frame,
+  onFrame,
+}: {
+  post: PostDTO;
+  frame: number;
+  onFrame: (next: number) => void;
+}) {
+  const startX = useRef<number | null>(null);
+  const count = Math.max(post.media.length, 1);
+  const safe = Math.min(Math.max(frame, 0), count - 1);
+  const media = post.media[safe];
   return (
-    <div className="story-frame">
+    <div
+      className="story-frame"
+      onPointerDown={(event) => {
+        if ((event.target as HTMLElement).closest("video, button")) return;
+        startX.current = event.clientX;
+      }}
+      onPointerUp={(event) => {
+        if (startX.current == null) return;
+        const dx = event.clientX - startX.current;
+        startX.current = null;
+        if (dx > 40) onFrame(safe - 1);
+        else if (dx < -40) onFrame(safe + 1);
+      }}
+    >
       {media ? (
         media.mimeType.startsWith("video/") ? (
-          <video src={`/api/media/${media.id}`} autoPlay muted playsInline loop />
+          <video key={media.id} src={`/api/media/${media.id}`} autoPlay muted playsInline loop />
         ) : (
-          <img src={`/api/media/${media.id}`} alt="" />
+          <img key={media.id} src={`/api/media/${media.id}`} alt="" />
         )
       ) : (
         <div className="story-empty" />
       )}
-      <div className="story-bar">
-        <i />
+      <div className="story-progress" aria-hidden="true">
+        {Array.from({ length: count }, (_, segment) => (
+          <i key={segment} className={segment < safe ? "done" : segment === safe ? "on" : ""} />
+        ))}
       </div>
+      {post.media.length > 1 ? (
+        <>
+          <button type="button" className="story-hit left" aria-label="Previous frame" onClick={() => onFrame(safe - 1)} />
+          <button type="button" className="story-hit right" aria-label="Next frame" onClick={() => onFrame(safe + 1)} />
+        </>
+      ) : null}
       <div className="story-caption">
         <b>MailBakes</b>
         <p>{post.caption}</p>
       </div>
     </div>
+  );
+}
+
+function StoryPreview({ post }: { post: PostDTO }) {
+  const [frame, setFrame] = useState(0);
+  const count = Math.max(post.media.length, 1);
+  return (
+    <StoryStage
+      post={post}
+      frame={Math.min(frame, count - 1)}
+      onFrame={(next) => setFrame(Math.max(0, Math.min(count - 1, next)))}
+    />
   );
 }
 
@@ -771,7 +804,35 @@ function StoryViewer({
   onClose: () => void;
 }) {
   const post = items[index];
+  const [frame, setFrame] = useState(0);
+  const landOnEnd = useRef(false);
+  useEffect(() => {
+    const count = Math.max(post?.media.length ?? 1, 1);
+    if (landOnEnd.current) {
+      landOnEnd.current = false;
+      setFrame(count - 1);
+    } else {
+      setFrame(0);
+    }
+  }, [index, post]);
   if (!post) return null;
+  const count = Math.max(post.media.length, 1);
+
+  function onFrame(next: number) {
+    if (next >= count) {
+      if (index < items.length - 1) onIndex(index + 1);
+      return;
+    }
+    if (next < 0) {
+      if (index > 0) {
+        landOnEnd.current = true;
+        onIndex(index - 1);
+      }
+      return;
+    }
+    setFrame(next);
+  }
+
   return (
     <div className="stack">
       <div className="sheet-head">
@@ -779,23 +840,24 @@ function StoryViewer({
           <DialogTitle>{post.title}</DialogTitle>
           <DialogDescription>
             Story · {formatSchedule(post.plannedDate, post.plannedTime)} · {statusLabel(post.status)}
+            {post.media.length > 1 ? ` · frame ${Math.min(frame, count - 1) + 1} of ${post.media.length}` : ""}
           </DialogDescription>
         </DialogHeader>
         <button type="button" className="btn ghost sm" onClick={onClose}>
           Close
         </button>
       </div>
-      <StoryFrame post={post} />
-      {items.length > 1 ? (
+      <StoryStage post={post} frame={frame} onFrame={onFrame} />
+      {items.length > 1 || post.media.length > 1 ? (
         <div className="row">
-          <button type="button" className="btn ghost" disabled={index === 0} onClick={() => onIndex(index - 1)}>
+          <button type="button" className="btn ghost" disabled={index === 0 && frame === 0} onClick={() => onFrame(frame - 1)}>
             Previous
           </button>
           <button
             type="button"
             className="btn ghost"
-            disabled={index === items.length - 1}
-            onClick={() => onIndex(index + 1)}
+            disabled={index === items.length - 1 && frame >= count - 1}
+            onClick={() => onFrame(frame + 1)}
           >
             Next
           </button>
@@ -803,126 +865,6 @@ function StoryViewer({
       ) : null}
     </div>
   );
-}
-
-function visible(post: PostDTO, showInReview: boolean) {
-  if (post.status === "APPROVED") return true;
-  if (!showInReview) return false;
-  return post.status === "PENDING_APPROVAL" || post.status === "CHANGES_REQUESTED";
-}
-
-function Feed({
-  posts,
-  platform,
-  showInReview,
-  onPlatform,
-  onToggleReview,
-  onOpen,
-  onStory,
-}: {
-  posts: PostDTO[];
-  platform: PlatformId;
-  showInReview: boolean;
-  onPlatform: (platform: PlatformId) => void;
-  onToggleReview: (value: boolean) => void;
-  onOpen: (post: PostDTO) => void;
-  onStory: (items: PostDTO[], index: number) => void;
-}) {
-  const mine = posts
-    .filter((post) => post.platforms.includes(platform) && visible(post, showInReview))
-    .sort(
-      (a, b) =>
-        b.plannedDate.localeCompare(a.plannedDate) ||
-        (b.plannedTime ?? "").localeCompare(a.plannedTime ?? "") ||
-        b.createdAt.localeCompare(a.createdAt),
-    );
-  const stories = mine.filter((post) => post.contentType === "STORY");
-  const feed = mine.filter((post) => post.contentType !== "STORY");
-  const hasStories = STORY_PLATFORMS.includes(platform);
-  const dark = platform === "TIKTOK" || platform === "YOUTUBE_SHORTS";
-
-  return (
-    <div className="feed-page">
-      <div className="team-tabs" role="tablist">
-        {PLATFORMS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={platform === item.id ? "on" : ""}
-            onClick={() => onPlatform(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="feed-tools">
-        <p className="muted">How the feed will look — newest at the top. Tap a post to open it.</p>
-        <label className="check-line">
-          <input
-            type="checkbox"
-            checked={showInReview}
-            onChange={(event) => onToggleReview(event.target.checked)}
-          />
-          Include posts still in review
-        </label>
-      </div>
-      {hasStories ? (
-        <div className="story-row">
-          {stories.length === 0 ? (
-            <p className="muted">No stories planned.</p>
-          ) : (
-            stories.map((post, index) => (
-              <button key={post.id} type="button" className="story-bubble" onClick={() => onStory(stories, index)}>
-                <span className={`story-ring${post.status === "APPROVED" ? "" : " waiting"}`}>
-                  <span>
-                    {post.media[0] ? <img src={`/api/media/${post.media[0].id}`} alt="" /> : null}
-                  </span>
-                </span>
-                <small>{post.title}</small>
-              </button>
-            ))
-          )}
-        </div>
-      ) : null}
-      <div className={`feed-list${platform === "YOUTUBE_SHORTS" ? " shorts" : ""}`}>
-        {feed.length === 0 ? (
-          <p className="muted">No {platformLabel(platform)} posts planned yet.</p>
-        ) : (
-          feed.map((post) => (
-            <button
-              key={post.id}
-              type="button"
-              onClick={() => onOpen(post)}
-              className={`feed-item${dark ? " dark" : ""}${platform === "SNAPCHAT" ? " snap" : ""}`}
-            >
-              <FeedMedia post={post} tall={post.contentType === "REEL" || dark} />
-              <div className="feed-body">
-                <p className="small muted">
-                  MailBakes · {contentLabel(post.contentType)}
-                  {post.status !== "APPROVED" ? ` · ${statusLabel(post.status)}` : ""}
-                </p>
-                <p>
-                  <b>{post.title}</b>
-                </p>
-                <p className="clamp-3">{post.caption}</p>
-                <p className="small muted">{formatSchedule(post.plannedDate, post.plannedTime)}</p>
-              </div>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function FeedMedia({ post, tall }: { post: PostDTO; tall: boolean }) {
-  const media = post.media[0];
-  const shape = tall ? "tall" : "square";
-  if (!media) return <div className={`media-fallback ${shape}`} />;
-  if (media.mimeType.startsWith("video/")) {
-    return <video src={`/api/media/${media.id}`} className={`feed-photo ${shape}`} muted playsInline />;
-  }
-  return <img src={`/api/media/${media.id}`} alt="" className={`feed-photo ${shape}`} />;
 }
 
 function Calendar({
@@ -970,7 +912,7 @@ function Calendar({
   }
 
   return (
-    <div className="stack">
+    <div className="stack cal-page">
       <div className="page-head">
         <div className="row">
           <button type="button" className="btn ghost" onClick={() => shift(-1)} aria-label="Previous">
@@ -995,11 +937,11 @@ function Calendar({
       </div>
 
       <div className="kpi-row">
-        {PLATFORMS.map((item) => (
+        {CHANNELS.map((channel) => (
           <CountCard
-            key={item.id}
-            value={visiblePosts.filter((post) => post.platforms.includes(item.id)).length}
-            label={item.label}
+            key={channel.id}
+            value={visiblePosts.filter((post) => channel.platforms.some((id) => post.platforms.includes(id))).length}
+            label={channel.id === "META" ? "Meta" : channel.label}
           />
         ))}
         <CountCard value={visiblePosts.filter((post) => post.status === "APPROVED").length} label="Approved" tone="green" />
@@ -1012,10 +954,12 @@ function Calendar({
       </div>
 
       <div className="legend">
-        {PLATFORMS.map((item) => (
-          <span key={item.id}>
-            <span className="key" style={{ background: item.colour, borderColor: item.colour }} />
-            {item.label}
+        {CHANNELS.map((channel) => (
+          <span key={channel.id}>
+            <span className="cal-tag" style={{ background: channel.colour, color: channel.ink }}>
+              {channel.short}
+            </span>
+            {channel.id === "META" ? "Instagram & Facebook" : channel.label}
           </span>
         ))}
         <span>
@@ -1028,7 +972,7 @@ function Calendar({
         <span>○ waiting (dashed)</span>
       </div>
 
-      <div>
+      <div className="cal-board">
         <div className="cal-head">
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
             <div key={day} className="cal-dow">
@@ -1061,21 +1005,49 @@ function Calendar({
                     <span className="grow">{item.title}</span>
                   </button>
                 ))}
-                {dayPosts.slice(0, 3).map((post) => (
-                  <button
-                    key={post.id}
-                    type="button"
-                    className={`cal-chip ${post.status === "APPROVED" ? "approved" : "waiting"}`}
-                    onClick={() => onOpenPost(post)}
-                  >
-                    <span className="mark" style={{ background: platformColour(post.platforms[0]) }} />
-                    {post.plannedTime ? <span className="cal-time">{post.plannedTime}</span> : null}
-                    <span className="grow">
-                      {post.contentType === "STORY" ? "Story · " : ""}
-                      {post.title}
-                    </span>
-                  </button>
-                ))}
+                {dayPosts.slice(0, 3).map((post) => {
+                  const channels = channelsFor(post.platforms);
+                  const colours = channels.map((channel) => channel.colour);
+                  const bar =
+                    colours.length > 1
+                      ? `linear-gradient(to bottom, ${colours
+                          .map((colour, index) => {
+                            const start = (index / colours.length) * 100;
+                            const end = ((index + 1) / colours.length) * 100;
+                            return `${colour} ${start}% ${end}%`;
+                          })
+                          .join(", ")})`
+                      : colours[0] ?? "#1E1A1C";
+                  return (
+                    <button
+                      key={post.id}
+                      type="button"
+                      className={`cal-chip ${post.status === "APPROVED" ? "approved" : "waiting"}`}
+                      style={{ ["--ch" as string]: bar }}
+                      onClick={() => onOpenPost(post)}
+                    >
+                      <span className="cal-tags">
+                        {channels.map((channel) => (
+                          <span
+                            key={channel.id}
+                            className="cal-tag"
+                            style={{ background: channel.colour, color: channel.ink }}
+                          >
+                            {channel.short}
+                          </span>
+                        ))}
+                      </span>
+                      {post.plannedTime ? <span className="cal-time">{post.plannedTime}</span> : null}
+                      <span className="cal-tick" aria-hidden="true">
+                        {post.status === "APPROVED" ? "✓" : "○"}
+                      </span>
+                      <span className="grow">
+                        {post.contentType === "STORY" ? "Story · " : ""}
+                        {post.title}
+                      </span>
+                    </button>
+                  );
+                })}
                 {dayPosts.length > 3 ? <p className="small muted">+{dayPosts.length - 3}</p> : null}
               </div>
             );
@@ -1094,6 +1066,10 @@ function CountCard({ value, label, tone }: { value: number; label: string; tone?
     </div>
   );
 }
+
+type MediaSlot =
+  | { key: string; kind: "saved"; id: string; name: string }
+  | { key: string; kind: "file"; file: File };
 
 function PostForm({
   user,
@@ -1118,11 +1094,13 @@ function PostForm({
   );
   const [caption, setCaption] = useState(initial?.caption ?? "");
   const [notes, setNotes] = useState(initial?.creativeNotes ?? "");
-  const [files, setFiles] = useState<File[]>([]);
+  const [slots, setSlots] = useState<MediaSlot[]>(() =>
+    (initial?.media ?? []).map((media) => ({ key: media.id, kind: "saved" as const, id: media.id, name: media.fileName })),
+  );
+  const slotSeq = useRef(0);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [removeCover, setRemoveCover] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
-  const [removeIds, setRemoveIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -1142,13 +1120,25 @@ function PostForm({
     return () => URL.revokeObjectURL(url);
   }, [coverFile]);
 
+  function moveSlot(index: number, delta: number) {
+    setSlots((current) => {
+      const target = index + delta;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(target, 0, item);
+      return next;
+    });
+  }
+
   function togglePlatform(id: PlatformId) {
     setPlatforms((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const tooBig = [...files, coverFile].find((file) => file && file.size > MAX_UPLOAD_BYTES);
+    const newFiles = slots.flatMap((slot) => (slot.kind === "file" ? [slot.file] : []));
+    const tooBig = [...newFiles, coverFile].find((file) => file && file.size > MAX_UPLOAD_BYTES);
     if (tooBig) {
       setError(`${tooBig.name} is over 10MB. For a longer video, put a link in the notes.`);
       return;
@@ -1164,10 +1154,20 @@ function PostForm({
     body.set("status", status);
     body.set("caption", caption);
     body.set("creativeNotes", notes);
-    body.set("removeMediaIds", JSON.stringify(removeIds));
+    const kept = new Set(slots.flatMap((slot) => (slot.kind === "saved" ? [slot.id] : [])));
+    body.set(
+      "removeMediaIds",
+      JSON.stringify((initial?.media ?? []).map((media) => media.id).filter((id) => !kept.has(id))),
+    );
+    body.set(
+      "mediaOrder",
+      JSON.stringify(
+        slots.map((slot) => (slot.kind === "saved" ? `id:${slot.id}` : `new:${newFiles.indexOf(slot.file)}`)),
+      ),
+    );
     if (contentType === "REEL" && coverFile) body.set("reelCover", coverFile);
     else if (contentType === "REEL" && removeCover) body.set("removeReelCover", "true");
-    for (const file of files) body.append("media", file);
+    for (const file of newFiles) body.append("media", file);
     const response = await fetch(initial ? `/api/posts/${initial.id}` : "/api/posts", {
       method: initial ? "PATCH" : "POST",
       body,
@@ -1316,21 +1316,33 @@ function PostForm({
       ) : null}
       <div className="field">
         <span>Photos & videos (up to 10MB each — for longer videos, put a link in the notes)</span>
-        {contentType === "FEED" ? <p className="small muted">Feed images should be 4:5 (1080x1350).</p> : null}
-        {initial?.media.map((media) =>
-          removeIds.includes(media.id) ? null : (
-            <div key={media.id} className="file-row">
-              <span>{media.fileName}</span>
-              <button type="button" className="subtle link-serious" onClick={() => setRemoveIds((current) => [...current, media.id])}>
-                Remove
+        {contentType === "FEED" ? (
+          <p className="small muted">Feed images should be 4:5 (1080x1350). Add several for a carousel.</p>
+        ) : null}
+        {contentType === "STORY" ? (
+          <p className="small muted">Each file is a story frame, in this order.</p>
+        ) : null}
+        {contentType === "REEL" ? (
+          <p className="small muted">The clip sits here. The cover above is what the grid shows.</p>
+        ) : null}
+        {slots.length > 1 ? <p className="small muted">Use the arrows to set the order.</p> : null}
+        {slots.map((slot, index) => (
+          <div key={slot.key} className="file-row">
+            <span className="grow">{slot.kind === "saved" ? slot.name : slot.file.name}</span>
+            <span className="file-move">
+              <button type="button" aria-label="Move up" disabled={index === 0} onClick={() => moveSlot(index, -1)}>
+                ↑
               </button>
-            </div>
-          ),
-        )}
-        {files.map((file) => (
-          <div key={file.name + file.size} className="file-row">
-            <span>{file.name}</span>
-            <button type="button" className="subtle link-serious" onClick={() => setFiles((current) => current.filter((item) => item !== file))}>
+              <button
+                type="button"
+                aria-label="Move down"
+                disabled={index === slots.length - 1}
+                onClick={() => moveSlot(index, 1)}
+              >
+                ↓
+              </button>
+            </span>
+            <button type="button" className="subtle link-serious" onClick={() => setSlots((current) => current.filter((item) => item.key !== slot.key))}>
               Remove
             </button>
           </div>
@@ -1345,7 +1357,19 @@ function PostForm({
             className="sr-only"
             onChange={(event) => {
               const chosen = Array.from(event.target.files ?? []);
-              setFiles((current) => [...current, ...chosen]);
+              if (slots.length + chosen.length > MAX_FILES) {
+                setError(`You can attach up to ${MAX_FILES} files.`);
+                event.target.value = "";
+                return;
+              }
+              setError(null);
+              setSlots((current) => [
+                ...current,
+                ...chosen.map((file) => {
+                  slotSeq.current += 1;
+                  return { key: `new-${slotSeq.current}`, kind: "file" as const, file };
+                }),
+              ]);
               event.target.value = "";
             }}
           />

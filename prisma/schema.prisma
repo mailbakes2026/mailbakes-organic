@@ -114,6 +114,8 @@ model Media {
   mimeType  String
   sizeBytes Int
   data      Bytes
+  // Order within the post. Attachments are 0..n-1. Reel covers are not part of that order.
+  position  Int       @default(0)
   createdAt DateTime  @default(now())
 
   @@index([postId])
