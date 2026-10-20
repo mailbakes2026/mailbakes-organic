@@ -70,6 +70,30 @@ export type PostDTO = {
   comments: CommentDTO[];
 };
 
+export type NoteStatusId = "IDEA" | "PLANNED" | "DONE";
+
+export type NoteImageDTO = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+};
+
+export type NoteDTO = {
+  id: string;
+  title: string;
+  description: string;
+  links: string[];
+  platform: PlatformId | null;
+  date: string | null;
+  doThisWeek: boolean;
+  status: NoteStatusId;
+  authorName: string;
+  postId: string | null;
+  images: NoteImageDTO[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type KeyDateDTO = {
   id: string;
   title: string;

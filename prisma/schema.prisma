@@ -58,6 +58,12 @@ enum StatSource {
   API
 }
 
+enum NoteStatus {
+  IDEA
+  PLANNED
+  DONE
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -70,6 +76,7 @@ model User {
   reviews      Post[]    @relation("Reviewer")
   comments     Comment[]
   keyDates     KeyDate[]
+  notes        Note[]
 }
 
 model Post {
@@ -94,6 +101,7 @@ model Post {
   media         Media[]
   comments      Comment[]
   stats         PostStat[]
+  fromNote      Note?
 
   @@index([plannedDate])
   @@index([status])
@@ -160,6 +168,40 @@ model KeyDate {
   createdAt DateTime    @default(now())
 
   @@index([date])
+}
+
+model Note {
+  id          String     @id @default(cuid())
+  title       String
+  description String     @default("")
+  links       String[]   @default([])
+  platform    Platform?
+  date        DateTime?  @db.Date
+  doThisWeek  Boolean    @default(false)
+  status      NoteStatus @default(IDEA)
+  authorId    String
+  author      User       @relation(fields: [authorId], references: [id])
+  postId      String?    @unique
+  post        Post?      @relation(fields: [postId], references: [id], onDelete: SetNull)
+  images      NoteImage[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([date])
+  @@index([authorId])
+}
+
+model NoteImage {
+  id        String   @id @default(cuid())
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@index([noteId])
 }
 
 model AppMeta {

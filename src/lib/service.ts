@@ -592,6 +592,65 @@ export async function updatePostStats(id: string, body: unknown) {
   return serializePost(updated);
 }
 
+export async function turnNoteIntoPost(user: UserDTO, noteId: string) {
+  const note = await prisma.note.findUnique({
+    where: { id: noteId },
+    include: { images: { orderBy: { createdAt: "asc" } } },
+  });
+  if (!note) throw new HttpError(404, "That note has gone.");
+  if (note.postId) {
+    const existing = await prisma.post.findUnique({ where: { id: note.postId }, select: postSelect });
+    if (existing) return serializePost(existing);
+  }
+  const caption = note.description.trim() || note.title;
+  const inspo = note.links.length > 0 ? `Inspo:\n${note.links.join("\n")}` : "";
+  const plannedDate = note.date ?? parseDay(londonToday());
+  const post = await prisma.$transaction(async (tx) => {
+    const created = await tx.post.create({
+      data: {
+        title: note.title.slice(0, 140),
+        platforms: [note.platform ?? "INSTAGRAM"],
+        contentType: "FEED",
+        plannedDate,
+        plannedTime: "12:00",
+        status: "DRAFT",
+        caption: caption.slice(0, 5000),
+        creativeNotes: inspo.slice(0, 5000),
+        authorId: user.id,
+        media: {
+          create: note.images.map((image, position) => ({
+            role: "ATTACHMENT" as const,
+            fileName: image.fileName,
+            mimeType: image.mimeType,
+            sizeBytes: image.sizeBytes,
+            data: new Uint8Array(image.data) as Uint8Array<ArrayBuffer>,
+            position,
+          })),
+        },
+      },
+      select: postSelect,
+    });
+    await tx.note.update({
+      where: { id: note.id },
+      data: {
+        postId: created.id,
+        status: note.status === "DONE" ? "DONE" : "PLANNED",
+      },
+    });
+    return created;
+  });
+  return serializePost(post);
+}
+
+function londonToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export async function deletePost(user: UserDTO, id: string) {
   const post = await prisma.post.findUnique({ where: { id } });
   if (!post) throw new HttpError(404, "That post has gone.");

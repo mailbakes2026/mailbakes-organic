@@ -453,6 +453,16 @@ button.cal-date {
 .cal-chip.waiting { border-style: dashed; border-color: var(--warning); background: var(--warning-soft); }
 .cal-chip.launch { border: 0; background: var(--serious-soft); color: var(--serious); }
 .cal-chip.keydate { border: 0; background: var(--warning-soft); color: var(--warning); }
+.cal-page .cal-chip.note {
+  background: var(--mb-pink-soft);
+  color: var(--mb-pink-deep);
+  border: 1px dashed var(--mb-pink);
+  box-shadow: none;
+  padding-left: 4px;
+}
+.cal-page .cal-chip.note::before { content: none; }
+.cal-tag.note-tag { background: var(--mb-pink); color: #fff; }
+.key.note { background: var(--mb-pink-soft); border: 1px dashed var(--mb-pink); }
 
 .view-toggle { display: flex; gap: 8px; flex-wrap: wrap; }
 .team-tabs button,
@@ -951,6 +961,92 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
 .stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 720px) {
   .report-split, .stat-grid { grid-template-columns: 1fr; }
+}
+
+.note-week {
+  background: var(--mb-pink-soft);
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+.note-week h3 { margin: 0 0 8px; }
+.note-week-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.note-week-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.note-week-title b { font-size: 16px; }
+.note-week-title span {
+  flex: none;
+  color: var(--mb-pink-deep);
+  font-size: 12px;
+  font-weight: 800;
+}
+.note-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.note-column { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.note-column h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.note-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.note-open {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: calc(100% + 24px);
+  margin: -12px -12px 0;
+  border: 0;
+  background: transparent;
+  padding: 0 0 4px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.note-open img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+}
+.note-open .row,
+.note-open h2,
+.note-open p { margin-left: 12px; margin-right: 12px; }
+.note-open h2 { margin-top: 2px; margin-bottom: 0; font-size: 16px; }
+.note-open p { margin-top: 0; margin-bottom: 0; }
+.file-row img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
+}
+@media (max-width: 800px) {
+  .note-columns { grid-template-columns: 1fr; }
 }
 
 .planner.cal-open > .page-head { margin-bottom: 8px; }

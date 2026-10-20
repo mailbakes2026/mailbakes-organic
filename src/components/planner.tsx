@@ -27,12 +27,14 @@ import {
 } from "@/lib/constants";
 import { InstaGrid, TikTokGrid } from "@/components/insta-grid";
 import { PostStatsForm } from "@/components/post-stats";
+import { NoteForm, NotesBoard } from "@/components/notes-board";
 import { Reports } from "@/components/reports";
 import { MediaCarousel } from "@/components/media-carousel";
 import type {
   ContentTypeId,
   IgProfileDTO,
   KeyDateDTO,
+  NoteDTO,
   PlatformId,
   PostDTO,
   StatusId,
@@ -141,15 +143,18 @@ export function Planner({
   posts,
   keyDates,
   profile,
+  notes,
 }: {
   user: UserDTO;
   posts: PostDTO[];
   keyDates: KeyDateDTO[];
   profile: IgProfileDTO;
+  notes: NoteDTO[];
 }) {
   const router = useRouter();
   const { tab } = useAppTab();
   const [postForm, setPostForm] = useState<PostDTO | "new" | null>(null);
+  const [noteForm, setNoteForm] = useState<NoteDTO | "new" | null>(null);
   const [presetDate, setPresetDate] = useState<string | null>(null);
   const [detail, setDetail] = useState<PostDTO | null>(null);
   const [story, setStory] = useState<{ items: PostDTO[]; index: number } | null>(null);
@@ -364,17 +369,29 @@ export function Planner({
 
       {tab === "tiktok" ? <TikTokGrid posts={posts} profile={profile} onOpen={setDetail} /> : null}
 
+      {tab === "notes" ? (
+        <NotesBoard
+          notes={notes}
+          onEdit={setNoteForm}
+          onCreate={() => setNoteForm("new")}
+          onChanged={refresh}
+          onDraft={(post) => setDetail(post)}
+        />
+      ) : null}
+
       {tab === "reports" ? <Reports posts={posts} onChanged={refresh} /> : null}
 
       {tab === "calendar" ? (
         <Calendar
           posts={posts}
+          notes={notes}
           keyDates={keyDates}
           cursor={cursor}
           view={calView}
           onCursor={setCursor}
           onView={setCalView}
           onOpenPost={setDetail}
+          onOpenNote={setNoteForm}
           onOpenKey={setActiveKey}
           onCreate={(date) => {
             setPresetDate(date);
@@ -382,6 +399,29 @@ export function Planner({
           }}
         />
       ) : null}
+
+      <Dialog open={noteForm !== null} onOpenChange={(open) => !open && setNoteForm(null)}>
+        <DialogContent showCloseButton={false} className="sheet-form">
+          {noteForm ? (
+            <div className="stack">
+              <DialogHeader>
+                <DialogTitle>{noteForm === "new" ? "New note" : "Edit note"}</DialogTitle>
+                <DialogDescription>
+                  Ideas and inspo. A date puts this note on the content calendar.
+                </DialogDescription>
+              </DialogHeader>
+              <NoteForm
+                initial={noteForm === "new" ? null : noteForm}
+                onClose={() => setNoteForm(null)}
+                onSaved={() => {
+                  setNoteForm(null);
+                  refresh();
+                }}
+              />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={postForm !== null} onOpenChange={(open) => !open && setPostForm(null)}>
         <DialogContent showCloseButton={false} className="sheet-form">
@@ -880,22 +920,26 @@ function StoryViewer({
 
 function Calendar({
   posts,
+  notes,
   keyDates,
   cursor,
   view,
   onCursor,
   onView,
   onOpenPost,
+  onOpenNote,
   onOpenKey,
   onCreate,
 }: {
   posts: PostDTO[];
+  notes: NoteDTO[];
   keyDates: KeyDateDTO[];
   cursor: string;
   view: "month" | "week";
   onCursor: (iso: string) => void;
   onView: (view: "month" | "week") => void;
   onOpenPost: (post: PostDTO) => void;
+  onOpenNote: (note: NoteDTO) => void;
   onOpenKey: (item: KeyDateDTO) => void;
   onCreate: (date: string) => void;
 }) {
@@ -979,6 +1023,9 @@ function Calendar({
         <span>
           <span className="key event" /> Key date
         </span>
+        <span>
+          <span className="key note" /> Note
+        </span>
         <span>✓ approved</span>
         <span>○ waiting (dashed)</span>
       </div>
@@ -997,6 +1044,11 @@ function Calendar({
             const dayPosts = posts
               .filter((post) => post.plannedDate === day && post.status !== "REJECTED")
               .sort(byPostingTime);
+            const dayNotes = notes.filter((note) => note.date === day);
+            const shownNotes = dayNotes.slice(0, 2);
+            const postRoom = shownNotes.length === 0 ? 3 : Math.max(1, 3 - shownNotes.length);
+            const shownPosts = dayPosts.slice(0, postRoom);
+            const hidden = dayNotes.length - shownNotes.length + dayPosts.length - shownPosts.length;
             const dayKeys = keyDates.filter((item) => item.date === day);
             return (
               <div
@@ -1016,7 +1068,18 @@ function Calendar({
                     <span className="grow">{item.title}</span>
                   </button>
                 ))}
-                {dayPosts.slice(0, 3).map((post) => {
+                {shownNotes.map((note) => (
+                  <button
+                    key={note.id}
+                    type="button"
+                    className="cal-chip note"
+                    onClick={() => onOpenNote(note)}
+                  >
+                    <span className="cal-tag note-tag">Note</span>
+                    <span className="grow">{note.title}</span>
+                  </button>
+                ))}
+                {shownPosts.map((post) => {
                   const channels = channelsFor(post.platforms);
                   const colours = channels.map((channel) => channel.colour);
                   const bar =
@@ -1059,7 +1122,7 @@ function Calendar({
                     </button>
                   );
                 })}
-                {dayPosts.length > 3 ? <p className="small muted">+{dayPosts.length - 3}</p> : null}
+                {hidden > 0 ? <p className="small muted">+{hidden}</p> : null}
               </div>
             );
           })}
