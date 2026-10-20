@@ -925,6 +925,34 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
 .tt-empty p { margin: 4px 0; color: #aaa; }
 .tt-empty b { color: #fff; }
 
+.reports h3 { margin: 4px 0; }
+.wow { font-size: 13px; font-weight: 700; }
+.wow-up { color: var(--good); }
+.wow-down { color: var(--serious); }
+.wow-flat { color: var(--text-muted); font-weight: 600; }
+.report-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.report-split .card { padding: 14px 16px; }
+.card.worked { box-shadow: inset 4px 0 0 var(--good); }
+.card.missed { box-shadow: inset 4px 0 0 var(--serious); }
+.report-summary {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--mb-pink-soft);
+  color: var(--mb-ink);
+}
+.stat-block {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+  margin: 0;
+}
+.stat-block legend { font-weight: 700; padding: 0 6px; }
+.stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 720px) {
+  .report-split, .stat-grid { grid-template-columns: 1fr; }
+}
+
 .planner.cal-open > .page-head { margin-bottom: 8px; }
 .planner.cal-open > .page-head .intro { display: none; }
 @media (min-width: 960px) {

@@ -26,6 +26,8 @@ import {
   statusLabel,
 } from "@/lib/constants";
 import { InstaGrid, TikTokGrid } from "@/components/insta-grid";
+import { PostStatsForm } from "@/components/post-stats";
+import { Reports } from "@/components/reports";
 import { MediaCarousel } from "@/components/media-carousel";
 import type {
   ContentTypeId,
@@ -362,6 +364,8 @@ export function Planner({
 
       {tab === "tiktok" ? <TikTokGrid posts={posts} profile={profile} onOpen={setDetail} /> : null}
 
+      {tab === "reports" ? <Reports posts={posts} onChanged={refresh} /> : null}
+
       {tab === "calendar" ? (
         <Calendar
           posts={posts}
@@ -423,6 +427,7 @@ export function Planner({
               onReview={askReview}
               onDelete={() => void removePost(openPost.id)}
               onPreview={() => setStory({ items: [openPost], index: 0 })}
+              onChanged={refresh}
             />
           ) : null}
         </DialogContent>
@@ -643,6 +648,7 @@ function PostDetail({
   onReview,
   onDelete,
   onPreview,
+  onChanged,
 }: {
   post: PostDTO;
   user: UserDTO;
@@ -652,6 +658,7 @@ function PostDetail({
   onReview: (id: string, action: ReviewAction) => void;
   onDelete: () => void;
   onPreview: () => void;
+  onChanged: () => void;
 }) {
   const canDelete = user.role === "MANAGEMENT" || (post.authorId === user.id && post.status === "DRAFT");
   return (
@@ -697,6 +704,10 @@ function PostDetail({
           {post.creativeNotes}
         </p>
       ) : null}
+      <section>
+        <h3>Performance</h3>
+        <PostStatsForm key={post.stats.map((stat) => `${stat.platform}:${stat.views ?? ""}:${stat.likes ?? ""}`).join("|")} post={post} onSaved={onChanged} />
+      </section>
       {post.comments.length > 0 ? (
         <ul className="notes">
           {post.comments.map((comment) => (

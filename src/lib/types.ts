@@ -26,6 +26,20 @@ export type MediaDTO = {
   sizeBytes: number;
 };
 
+export type StatSourceId = "MANUAL" | "API";
+
+export type PostStatDTO = {
+  platform: PlatformId;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  linkClicks: number | null;
+  source: StatSourceId;
+  syncedAt: string | null;
+};
+
 export type CommentDTO = {
   id: string;
   kind: CommentKindId;
@@ -52,6 +66,7 @@ export type PostDTO = {
   updatedAt: string;
   media: MediaDTO[];
   reelCover: MediaDTO | null;
+  stats: PostStatDTO[];
   comments: CommentDTO[];
 };
 

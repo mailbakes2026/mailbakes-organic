@@ -52,6 +52,12 @@ enum MediaRole {
   REEL_COVER
 }
 
+// MANUAL is typed in. API is reserved for a later platform sync into the same row.
+enum StatSource {
+  MANUAL
+  API
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -87,9 +93,31 @@ model Post {
   updatedAt     DateTime    @updatedAt
   media         Media[]
   comments      Comment[]
+  stats         PostStat[]
 
   @@index([plannedDate])
   @@index([status])
+}
+
+// One row per post per platform. Empty metrics stay null so "not entered" is
+// different from a real zero. A later sync upserts this same row.
+model PostStat {
+  id         String     @id @default(cuid())
+  postId     String
+  post       Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform   Platform
+  views      Int?
+  likes      Int?
+  comments   Int?
+  shares     Int?
+  saves      Int?
+  linkClicks Int?
+  source     StatSource @default(MANUAL)
+  syncedAt   DateTime?
+  updatedAt  DateTime   @updatedAt
+
+  @@unique([postId, platform])
+  @@index([postId])
 }
 
 model Comment {

@@ -59,6 +59,20 @@ const postSelect = {
     },
     orderBy: { createdAt: "asc" as const },
   },
+  stats: {
+    select: {
+      platform: true,
+      views: true,
+      likes: true,
+      comments: true,
+      shares: true,
+      saves: true,
+      linkClicks: true,
+      source: true,
+      syncedAt: true,
+    },
+    orderBy: { platform: "asc" as const },
+  },
 } satisfies Prisma.PostSelect;
 
 type PostRow = Prisma.PostGetPayload<{ select: typeof postSelect }>;
@@ -105,6 +119,17 @@ function serializePost(post: PostRow): PostDTO {
       const cover = post.media.find((item) => item.role === "REEL_COVER");
       return cover ? toMedia(cover) : null;
     })(),
+    stats: post.stats.map((stat) => ({
+      platform: stat.platform,
+      views: stat.views,
+      likes: stat.likes,
+      comments: stat.comments,
+      shares: stat.shares,
+      saves: stat.saves,
+      linkClicks: stat.linkClicks,
+      source: stat.source,
+      syncedAt: stat.syncedAt?.toISOString() ?? null,
+    })),
     comments: post.comments.map((comment) => ({
       id: comment.id,
       kind: comment.kind,
@@ -496,6 +521,75 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
     });
   });
   return serializePost(post);
+}
+
+const METRIC_KEYS = ["views", "likes", "comments", "shares", "saves", "linkClicks"] as const;
+
+function parseMetric(value: unknown, label: string) {
+  if (value == null || value === "") return null;
+  const number = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isInteger(number) || number < 0 || number > 2_000_000_000) {
+    throw new HttpError(400, `${label} needs a whole number, or leave it blank.`);
+  }
+  return number;
+}
+
+export async function updatePostStats(id: string, body: unknown) {
+  const post = await prisma.post.findUnique({ where: { id }, select: { platforms: true } });
+  if (!post) throw new HttpError(404, "That post has gone.");
+  if (!body || typeof body !== "object" || !Array.isArray((body as { stats?: unknown }).stats)) {
+    throw new HttpError(400, "Couldn't read those stats.");
+  }
+  const rows = (body as { stats: unknown[] }).stats;
+  const seen = new Set<string>();
+  const parsed: {
+    platform: Platform;
+    views: number | null;
+    likes: number | null;
+    comments: number | null;
+    shares: number | null;
+    saves: number | null;
+    linkClicks: number | null;
+  }[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") throw new HttpError(400, "Couldn't read those stats.");
+    const record = row as Record<string, unknown>;
+    const platform = String(record.platform ?? "");
+    if (!post.platforms.includes(platform as Platform)) {
+      throw new HttpError(400, "Stats can only be saved for a platform on this post.");
+    }
+    if (seen.has(platform)) throw new HttpError(400, "Each platform only needs one set of stats.");
+    seen.add(platform);
+    const metrics = {
+      views: parseMetric(record.views, "Views"),
+      likes: parseMetric(record.likes, "Likes"),
+      comments: parseMetric(record.comments, "Comments"),
+      shares: parseMetric(record.shares, "Shares"),
+      saves: parseMetric(record.saves, "Saves"),
+      linkClicks: parseMetric(record.linkClicks, "Link clicks"),
+    };
+    if (METRIC_KEYS.some((key) => metrics[key] != null)) {
+      parsed.push({ platform: platform as Platform, ...metrics });
+    }
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.postStat.deleteMany({
+      where:
+        parsed.length === 0
+          ? { postId: id }
+          : { postId: id, platform: { notIn: parsed.map((item) => item.platform) } },
+    });
+    for (const item of parsed) {
+      await tx.postStat.upsert({
+        where: { postId_platform: { postId: id, platform: item.platform } },
+        create: { postId: id, ...item, source: "MANUAL", syncedAt: null },
+        update: { ...item, source: "MANUAL", syncedAt: null },
+      });
+    }
+  });
+  const updated = await prisma.post.findUnique({ where: { id }, select: postSelect });
+  if (!updated) throw new HttpError(404, "That post has gone.");
+  return serializePost(updated);
 }
 
 export async function deletePost(user: UserDTO, id: string) {
