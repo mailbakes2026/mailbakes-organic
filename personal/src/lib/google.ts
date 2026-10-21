@@ -153,7 +153,7 @@ export async function disconnectGoogle() {
 
 export async function getAccessToken() {
   const row = await prisma.googleAccount.findUnique({ where: { id: ACCOUNT_ID } });
-  if (!row?.refreshTokenEnc) throw new SetupError("Connect Google to use the inbox and calendar.");
+  if (!row?.refreshTokenEnc) throw new SetupError("Connect Google to use the inbox, calendar and payslips.");
   const fresh = row.expiresAt && row.accessTokenEnc && row.expiresAt.getTime() > Date.now() + 60_000;
   if (fresh) return decryptSecret(row.accessTokenEnc);
   if (!googleConfigured()) throw new SetupError("Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.");
