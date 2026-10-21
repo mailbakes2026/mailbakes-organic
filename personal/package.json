@@ -1,0 +1,33 @@
+{
+  "name": "mailbakes-personal",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test src/lib/classify.test.ts src/lib/dates.test.ts src/lib/markdown.test.ts src/lib/mime.test.ts src/lib/crypto.test.ts src/lib/secret.test.ts src/lib/shapes.test.ts src/lib/payslip-match.test.ts",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "jose": "^6.2.12",
+    "next": "^15.5.28",
+    "prisma": "^6.19.3",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^15.5.28",
+    "typescript": "^5"
+  }
+}

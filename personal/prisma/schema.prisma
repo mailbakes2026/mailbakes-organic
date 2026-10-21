@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailGroup {
+  MAILBAKES
+  SUPPLIERS
+  INVOICES
+  PERSONAL
+}
+
+enum RunStatus {
+  WAITING
+  NEEDS_MILLIE
+  DONE
+}
+
+// One Google login for millie@mailbakes.com. The refresh token is encrypted.
+model GoogleAccount {
+  id              String    @id
+  email           String    @default("")
+  refreshTokenEnc String
+  accessTokenEnc  String    @default("")
+  expiresAt       DateTime?
+  scopes          String    @default("")
+  lastError       String    @default("")
+  connectedAt     DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// A snapshot of the inbox, written only when Refresh is pressed.
+model InboxMessage {
+  id          String     @id
+  threadId    String
+  group       EmailGroup
+  fromName    String     @default("")
+  fromEmail   String     @default("")
+  subject     String     @default("")
+  snippet     String     @default("")
+  bodyText    String     @default("")
+  receivedAt  DateTime
+  unread      Boolean    @default(false)
+  attachments Json       @default("[]")
+  gmailUrl    String     @default("")
+  fetchedAt   DateTime   @default(now())
+
+  @@index([group])
+  @@index([receivedAt])
+}
+
+model Reminder {
+  id           String    @id @default(cuid())
+  title        String
+  notes        String    @default("")
+  dueOn        DateTime  @db.Date
+  doneAt       DateTime?
+  snoozedUntil DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([dueOn])
+}
+
+model RunItem {
+  id        String    @id @default(cuid())
+  title     String
+  status    RunStatus @default(WAITING)
+  notes     String    @default("")
+  emailUrl  String    @default("")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model Briefing {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  title     String   @default("")
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+}
+
+// Name and Drive folder only. No phone, bank or emergency-contact fields.
+model StaffFolder {
+  id         String   @id @default(cuid())
+  name       String
+  folderId   String
+  folderName String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([name])
+}
+
+enum PayslipOutcome {
+  FILED
+  SKIPPED_DUPLICATE
+  UNMATCHED
+  MISSING
+  FAILED
+}
+
+model PayslipRun {
+  id          String        @id @default(cuid())
+  messageId   String
+  subject     String        @default("")
+  receivedAt  DateTime
+  weekOf      DateTime      @db.Date
+  emailedJess Boolean       @default(false)
+  emailError  String        @default("")
+  createdAt   DateTime      @default(now())
+  lines       PayslipLine[]
+
+  @@index([weekOf])
+  @@index([messageId])
+}
+
+model PayslipLine {
+  id          String         @id @default(cuid())
+  runId       String
+  run         PayslipRun     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  staffName   String         @default("")
+  filename    String         @default("")
+  outcome     PayslipOutcome
+  driveFileId String         @default("")
+  detail      String         @default("")
+
+  @@index([runId])
+}

@@ -1,0 +1,56 @@
+# Standalone blueprint for this folder (no rootDir).
+# In the MailBakes monorepo, Render reads the root render.yaml instead,
+# which points this service at rootDir: personal.
+# Service name mailbakes-personal → https://mailbakes-personal.onrender.com
+# If that hostname is taken, change name and APP_URL together.
+services:
+  - type: web
+    name: mailbakes-personal
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npx prisma migrate deploy && next start -H 0.0.0.0 -p $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mailbakes-personal-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY
+        generateValue: true
+      - key: APP_PASSWORD
+        sync: false
+      - key: APP_NAME
+        value: Millie
+      - key: APP_URL
+        value: https://mailbakes-personal.onrender.com
+      - key: GMAIL_ADDRESS
+        value: millie@mailbakes.com
+      - key: FINANCE_EMAIL
+        value: accounts@mailbakes.com
+      - key: PAUL_EMAIL
+        value: accounts@mailbakes.com
+      - key: JESS_EMAIL
+        value: operations@mailbakes.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: PERSONAL_API_TOKEN
+        sync: false
+      - key: SUPPLIER_DOMAINS
+        sync: false
+      - key: PERSONAL_CALENDAR_NAMES
+        value: personal,home,private,family
+
+databases:
+  - name: mailbakes-personal-db
+    databaseName: mailbakes_personal
+    user: mailbakes
+    plan: basic-256mb
+    region: frankfurt

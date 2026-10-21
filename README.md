@@ -53,3 +53,7 @@ The app starts empty. It no longer creates example posts; any left over from the
 The start command runs `prisma migrate deploy` before the server listens. `/api/health` checks the database and is the Render health check.
 
 This tool does not connect to Meta, TikTok or any other platform. Someone still posts by hand after a post is approved.
+
+## Personal command centre
+
+Millie's own command centre (inbox, calendar, reminders, run-through, briefings and payslips) lives in [`personal/`](personal/README.md). The blueprint deploys it as a second service, `mailbakes-personal`, at https://mailbakes-personal.onrender.com with its own database. See `personal/README.md` for the env vars, the Google redirect URL, and the assistant API.
