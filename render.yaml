@@ -1,7 +1,5 @@
-# Render Blueprint for MailBakes.
-# mailbakes-organic → https://mailbakes-organic.onrender.com
-# mailbakes-personal → https://mailbakes-personal.onrender.com
-# If mailbakes-personal is taken, rename that service and its APP_URL together.
+# Render Blueprint for MailBakes organic social planning.
+# Service name mailbakes-organic → https://mailbakes-organic.onrender.com
 services:
   - type: web
     name: mailbakes-organic
@@ -61,59 +59,9 @@ services:
       - key: SNAPCHAT_CLIENT_SECRET
         sync: false
 
-  - type: web
-    name: mailbakes-personal
-    runtime: node
-    plan: starter
-    region: frankfurt
-    rootDir: personal
-    buildCommand: npm ci --include=dev && npm run build
-    startCommand: npx prisma migrate deploy && next start -H 0.0.0.0 -p $PORT
-    healthCheckPath: /api/health
-    envVars:
-      - key: NODE_VERSION
-        value: "22"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: mailbakes-personal-db
-          property: connectionString
-      - key: SESSION_SECRET
-        generateValue: true
-      - key: TOKEN_ENCRYPTION_KEY
-        generateValue: true
-      - key: APP_PASSWORD
-        sync: false
-      - key: APP_NAME
-        value: Millie
-      - key: APP_URL
-        value: https://mailbakes-personal.onrender.com
-      - key: GMAIL_ADDRESS
-        value: millie@mailbakes.com
-      - key: FINANCE_EMAIL
-        value: accounts@mailbakes.com
-      - key: PAUL_EMAIL
-        value: accounts@mailbakes.com
-      - key: JESS_EMAIL
-        value: operations@mailbakes.com
-      - key: GOOGLE_CLIENT_ID
-        sync: false
-      - key: GOOGLE_CLIENT_SECRET
-        sync: false
-      - key: PERSONAL_API_TOKEN
-        sync: false
-      - key: SUPPLIER_DOMAINS
-        sync: false
-      - key: PERSONAL_CALENDAR_NAMES
-        value: personal,home,private,family
-
 databases:
   - name: mailbakes-organic-db
     databaseName: mailbakes
-    user: mailbakes
-    plan: basic-256mb
-    region: frankfurt
-  - name: mailbakes-personal-db
-    databaseName: mailbakes_personal
     user: mailbakes
     plan: basic-256mb
     region: frankfurt
