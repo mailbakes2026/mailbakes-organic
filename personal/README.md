@@ -33,15 +33,13 @@ Open http://127.0.0.1:3000 and sign in with `APP_PASSWORD`.
 
 The service name `mailbakes-personal` becomes https://mailbakes-personal.onrender.com
 
-This repo's root `render.yaml` already describes that service (`rootDir: personal`) and a database `mailbakes-personal-db`, next to the organic service. `personal/render.yaml` is the same blueprint without `rootDir`, for a copy of this folder on its own.
+Use a new blueprint whose path is `personal/render.yaml`. That file defines only `mailbakes-personal` (Starter, `rootDir: personal`) and `mailbakes-personal-db` (`basic-256mb`). The root `render.yaml` is organic social only. Do not sync that existing blueprint for this app: it would point Render at the live organic service.
 
 1. Push this repo.
-2. In Render, open the existing MailBakes blueprint and sync it (or **New → Blueprint** if this repo is not a blueprint yet). Render reads the root `render.yaml`.
-3. When asked, set the new values below. Leave `SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY` on Render's generated values.
+2. In Render, choose **New → Blueprint**, select this repo, and set the blueprint path to `personal/render.yaml`.
+3. When asked, set `APP_PASSWORD`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `PERSONAL_API_TOKEN`. Leave `SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY` on Render's generated values. `SUPPLIER_DOMAINS` is already blank.
 4. Deploy. The first boot runs the database migration.
-5. If `mailbakes-personal` is already taken, change `name` under the personal service and the `APP_URL` value to the same new name, then sync again. The public URL is `https://<name>.onrender.com`.
-
-The organic service is a different service and database. Syncing the blueprint should leave it in place as long as its name stays `mailbakes-organic`.
+5. If `mailbakes-personal` is already taken, change `name` and the `APP_URL` value to the same new name, then sync again. The public URL is `https://<name>.onrender.com`.
 
 The web service plan is `starter` and the database is `basic-256mb` in Frankfurt, matching organic social.
 
@@ -61,7 +59,7 @@ The web service plan is `starter` and the database is `basic-256mb` in Frankfurt
 | `JESS_EMAIL` | Blueprint | Who can be emailed the PDFs. Default `operations@mailbakes.com`. |
 | `GMAIL_ADDRESS` | Optional | Defaults to `millie@mailbakes.com`. Shown as the account to connect. |
 | `PERSONAL_API_TOKEN` | Millie | Bearer token for the assistant API. At least 16 characters. |
-| `SUPPLIER_DOMAINS` | Optional | Comma-separated domains grouped as Suppliers. |
+| `SUPPLIER_DOMAINS` | Blueprint, optional | Blank by default. Comma-separated domains grouped as Suppliers. |
 | `PERSONAL_CALENDAR_NAMES` | Optional | Default `personal,home,private,family`. Calendar names containing one of these go in the Personal column. Everything else is MailBakes. |
 | `APP_NAME` | Optional | Default `Millie`. |
 

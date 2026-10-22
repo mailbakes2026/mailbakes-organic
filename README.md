@@ -56,4 +56,4 @@ This tool does not connect to Meta, TikTok or any other platform. Someone still 
 
 ## Personal command centre
 
-Millie's own command centre (inbox, calendar, reminders, run-through, briefings and payslips) lives in [`personal/`](personal/README.md). The blueprint deploys it as a second service, `mailbakes-personal`, at https://mailbakes-personal.onrender.com with its own database. See `personal/README.md` for the env vars, the Google redirect URL, and the assistant API.
+Millie's own command centre (inbox, calendar, reminders, run-through, briefings and payslips) lives in [`personal/`](personal/README.md). Deploy it from a separate blueprint whose path is `personal/render.yaml`. The root `render.yaml` stays the organic service only. See `personal/README.md` for the env vars, the Google redirect URL, and the assistant API.

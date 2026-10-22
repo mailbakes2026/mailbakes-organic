@@ -1,6 +1,6 @@
-# Standalone blueprint for this folder (no rootDir).
-# In the MailBakes monorepo, Render reads the root render.yaml instead,
-# which points this service at rootDir: personal.
+# Blueprint for Millie's command centre only.
+# Create a new Render blueprint and set its path to personal/render.yaml.
+# Do not sync the repo root render.yaml: that file is the live organic service.
 # Service name mailbakes-personal → https://mailbakes-personal.onrender.com
 # If that hostname is taken, change name and APP_URL together.
 services:
@@ -9,6 +9,7 @@ services:
     runtime: node
     plan: starter
     region: frankfurt
+    rootDir: personal
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npx prisma migrate deploy && next start -H 0.0.0.0 -p $PORT
     healthCheckPath: /api/health
@@ -43,8 +44,9 @@ services:
         sync: false
       - key: PERSONAL_API_TOKEN
         sync: false
+      # Optional. Blank means no extra supplier domains. Edit later to a comma-separated list.
       - key: SUPPLIER_DOMAINS
-        sync: false
+        value: ""
       - key: PERSONAL_CALENDAR_NAMES
         value: personal,home,private,family
 
