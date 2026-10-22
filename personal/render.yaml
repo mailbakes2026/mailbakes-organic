@@ -11,7 +11,7 @@ services:
     region: frankfurt
     rootDir: personal
     buildCommand: npm ci --include=dev && npm run build
-    startCommand: npx prisma migrate deploy && next start -H 0.0.0.0 -p $PORT
+    startCommand: npx prisma migrate deploy && npm run start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
