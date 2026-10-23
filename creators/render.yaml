@@ -1,0 +1,40 @@
+# Blueprint for the MailBakes creator pipeline only.
+# Create a new Render blueprint and set its path to creators/render.yaml.
+# Do not sync the repo root render.yaml: that file is the live organic service.
+# Do not sync personal/render.yaml either: that file is Millie's command centre.
+# Service name mailbakes-creators → https://mailbakes-creators.onrender.com
+# If that hostname is taken, change name and APP_URL together.
+services:
+  - type: web
+    name: mailbakes-creators
+    runtime: node
+    plan: starter
+    region: frankfurt
+    rootDir: creators
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npx prisma migrate deploy && npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mailbakes-creators-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: APP_PASSWORD
+        sync: false
+      - key: APP_NAME
+        value: Millie
+      - key: APP_URL
+        value: https://mailbakes-creators.onrender.com
+      - key: CREATORS_API_TOKEN
+        sync: false
+
+databases:
+  - name: mailbakes-creators-db
+    databaseName: mailbakes_creators
+    user: mailbakes
+    plan: basic-256mb
+    region: frankfurt
