@@ -10,6 +10,7 @@ export function matchesQuery(
     courier: string;
     declineReason: string;
     postUrl: string;
+    tiktokOrderId?: string;
   },
   query: string,
 ) {
@@ -26,6 +27,7 @@ export function matchesQuery(
     row.courier,
     row.declineReason,
     row.postUrl,
+    row.tiktokOrderId ?? "",
   ]
     .join("\n")
     .toLowerCase();

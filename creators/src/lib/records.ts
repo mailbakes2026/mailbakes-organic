@@ -4,6 +4,7 @@ import { sortCreators } from "@/lib/order";
 import type { CreatorPatch, InquiryInput } from "@/lib/parse";
 import { SEEDED_AT, SHEET_ACTIVITY, buildSeed } from "@/lib/seed-build";
 import { STAGES, type StageSlug } from "@/lib/stages";
+import { postTiktokMessage, type OpsStatus } from "@/lib/ops";
 import { royalMailTrackUrl, safeHttpUrl } from "@/lib/tracking";
 import type { ActivityDTO, CreatorDetail, CreatorDTO, CreatorFields } from "@/lib/types";
 import { applyUpdate } from "@/lib/update";
@@ -64,6 +65,11 @@ type CreatorRow = {
   orders: number | null;
   rating: number | null;
   worksWell: boolean;
+  tiktokOrderId: string;
+  tiktokMessage: string;
+  opsStatus: string;
+  opsError: string;
+  opsSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -88,7 +94,14 @@ function fieldsOf(row: CreatorRow): CreatorFields {
     orders: row.orders,
     rating: row.rating,
     worksWell: row.worksWell,
+    tiktokOrderId: row.tiktokOrderId,
+    tiktokMessage: row.tiktokMessage,
   };
+}
+
+function opsStatusOf(value: string): OpsStatus {
+  if (value === "sent" || value === "failed" || value === "not_configured") return value;
+  return "";
 }
 
 export function toDTO(row: CreatorRow): CreatorDTO {
@@ -98,6 +111,9 @@ export function toDTO(row: CreatorRow): CreatorDTO {
     id: row.id,
     trackingUrl: royalMailTrackUrl(fields.trackingNumber, fields.courier),
     postHref: safeHttpUrl(fields.postUrl),
+    opsStatus: opsStatusOf(row.opsStatus),
+    opsError: row.opsError,
+    opsSentAt: row.opsSentAt ? row.opsSentAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -187,41 +203,69 @@ export async function updateCreator(id: string, patch: CreatorPatch, now = new D
   if (!current) return { ok: false as const, status: 404, error: "That creator isn't on the board." };
   const applied = applyUpdate(fieldsOf(current), patch, now);
   if (!applied.ok) return { ok: false as const, status: 400, error: applied.error };
-
-  if (applied.detail === "Saved.") {
-    const creator = await getCreator(id);
-    if (!creator) return { ok: false as const, status: 404, error: "That creator isn't on the board." };
-    return { ok: true as const, creator };
+  const next = applied.next;
+  if (patch.sendToOrders) {
+    if (!next.tiktokOrderId) return { ok: false as const, status: 400, error: "Enter the TikTok order ID." };
+    if (!next.tiktokMessage.trim()) return { ok: false as const, status: 400, error: "Enter a message for the order." };
   }
 
-  const next = applied.next;
-  const row = await prisma.creator.update({
-    where: { id },
-    data: {
-      name: next.name,
-      handle: next.handle,
-      email: next.email,
-      shopifyOrder: next.shopifyOrder,
-      stage: prismaStage(next.stage),
-      rush: next.rush,
-      cardMessage: next.cardMessage,
-      notes: next.notes,
-      shipDate: next.shipDate ? new Date(`${next.shipDate}T00:00:00.000Z`) : null,
-      courier: next.courier,
-      trackingNumber: next.trackingNumber,
-      declineReason: next.declineReason,
-      posted: next.posted,
-      postUrl: next.postUrl,
-      views: next.views,
-      orders: next.orders,
-      rating: next.rating,
-      worksWell: next.worksWell,
-      updatedAt: now,
-      activities: { create: { detail: applied.detail } },
-    },
-    include: detailInclude,
-  });
-  return { ok: true as const, creator: { ...toDTO(row), activities: row.activities.map(toActivity) } };
+  const messageChanged = current.tiktokOrderId !== next.tiktokOrderId || current.tiktokMessage !== next.tiktokMessage;
+  if (applied.detail !== "Saved.") {
+    await prisma.creator.update({
+      where: { id },
+      data: {
+        name: next.name,
+        handle: next.handle,
+        email: next.email,
+        shopifyOrder: next.shopifyOrder,
+        stage: prismaStage(next.stage),
+        rush: next.rush,
+        cardMessage: next.cardMessage,
+        notes: next.notes,
+        shipDate: next.shipDate ? new Date(`${next.shipDate}T00:00:00.000Z`) : null,
+        courier: next.courier,
+        trackingNumber: next.trackingNumber,
+        declineReason: next.declineReason,
+        posted: next.posted,
+        postUrl: next.postUrl,
+        views: next.views,
+        orders: next.orders,
+        rating: next.rating,
+        worksWell: next.worksWell,
+        tiktokOrderId: next.tiktokOrderId,
+        tiktokMessage: next.tiktokMessage,
+        ...(messageChanged && !patch.sendToOrders ? { opsStatus: "", opsError: "", opsSentAt: null } : {}),
+        updatedAt: now,
+        activities: { create: { detail: applied.detail } },
+      },
+    });
+  }
+
+  if (patch.sendToOrders) {
+    const result = await postTiktokMessage(next.tiktokOrderId, next.tiktokMessage);
+    const detail =
+      result.status === "sent"
+        ? "Sent the TikTok order message."
+        : result.status === "not_configured"
+          ? "TikTok order message was not sent. The orders app is not configured."
+          : `The TikTok order message failed: ${result.error}`;
+    await prisma.creator.update({
+      where: { id },
+      data: {
+        tiktokOrderId: next.tiktokOrderId,
+        tiktokMessage: next.tiktokMessage,
+        opsStatus: result.status,
+        opsError: result.error,
+        opsSentAt: result.status === "sent" ? now : null,
+        updatedAt: now,
+        activities: { create: { detail } },
+      },
+    });
+  }
+
+  const creator = await getCreator(id);
+  if (!creator) return { ok: false as const, status: 404, error: "That creator isn't on the board." };
+  return { ok: true as const, creator };
 }
 
 export async function deleteCreator(id: string) {

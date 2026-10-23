@@ -52,7 +52,7 @@ export function Inquiries({ creators, apiReady }: { creators: CreatorDTO[]; apiR
     }
   }
 
-  async function save(fields: CreatorFields) {
+  async function save(fields: CreatorFields & { sendToOrders?: boolean }) {
     if (!open) return false;
     const result = await patch(open.id, fields);
     return result.ok;
@@ -86,6 +86,7 @@ export function Inquiries({ creators, apiReady }: { creators: CreatorDTO[]; apiR
             </div>
             {creator.email ? <p className="meta">{creator.email}</p> : null}
             {creator.shopifyOrder ? <p className="meta">{creator.shopifyOrder}</p> : null}
+            {creator.tiktokOrderId ? <p className="meta">TikTok order {creator.tiktokOrderId}</p> : null}
             {creator.cardMessage ? (
               <div>
                 <p className="eyebrow">Card message</p>

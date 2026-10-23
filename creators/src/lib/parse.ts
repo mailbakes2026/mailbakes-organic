@@ -1,5 +1,6 @@
 import { isStageSlug, type StageSlug } from "./stages.ts";
 import { parseDateOnly } from "./dates.ts";
+import { readTiktokOrderId } from "./ops.ts";
 import { normaliseHandle } from "./tiktok.ts";
 import { safeHttpUrl } from "./tracking.ts";
 
@@ -35,6 +36,9 @@ export type CreatorPatch = {
   orders?: number | null;
   rating?: number | null;
   worksWell?: boolean;
+  tiktokOrderId?: string;
+  tiktokMessage?: string;
+  sendToOrders?: boolean;
   via?: "accept" | "decline";
 };
 
@@ -116,6 +120,13 @@ function readTracking(source: Record<string, unknown>): ParseResult<string | und
     return { ok: false, error: "Enter the tracking number, not a link." };
   }
   return { ok: true, value };
+}
+
+function readOrderId(source: Record<string, unknown>): ParseResult<string | undefined> {
+  if (!("tiktokOrderId" in source)) return { ok: true, value: undefined };
+  const parsed = readTiktokOrderId(source.tiktokOrderId);
+  if (!parsed.ok) return parsed;
+  return { ok: true, value: parsed.value };
 }
 
 function readHandle(source: Record<string, unknown>): ParseResult<string | undefined> {
@@ -270,6 +281,18 @@ export function parsePatch(body: unknown): ParseResult<CreatorPatch> {
   const worksWell = readBool(source, "worksWell", "Works well");
   if (!worksWell.ok) return worksWell;
   if (worksWell.value !== undefined) patch.worksWell = worksWell.value;
+
+  const orderId = readOrderId(source);
+  if (!orderId.ok) return orderId;
+  if (orderId.value !== undefined) patch.tiktokOrderId = orderId.value;
+
+  const tiktokMessage = readLines(source, "tiktokMessage", 2000, "Order message");
+  if (!tiktokMessage.ok) return tiktokMessage;
+  if (tiktokMessage.value !== undefined) patch.tiktokMessage = tiktokMessage.value;
+
+  const send = readBool(source, "sendToOrders", "Send to orders");
+  if (!send.ok) return send;
+  if (send.value !== undefined) patch.sendToOrders = send.value;
 
   if ("via" in source) {
     if (source.via !== "accept" && source.via !== "decline") {

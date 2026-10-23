@@ -31,6 +31,10 @@ services:
         value: https://mailbakes-creators.onrender.com
       - key: CREATORS_API_TOKEN
         sync: false
+      - key: OPS_APP_URL
+        sync: false
+      - key: OPS_API_TOKEN
+        sync: false
 
 databases:
   - name: mailbakes-creators-db

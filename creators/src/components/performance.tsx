@@ -26,7 +26,7 @@ export function Performance({ creators }: { creators: CreatorDTO[] }) {
   const posted = rows.filter((row) => row.posted).length;
   const worksWell = rows.filter((row) => row.worksWell).length;
 
-  async function save(fields: CreatorFields) {
+  async function save(fields: CreatorFields & { sendToOrders?: boolean }) {
     if (!open) return false;
     const result = await patch(open.id, fields);
     return result.ok;
@@ -75,6 +75,7 @@ export function Performance({ creators }: { creators: CreatorDTO[] }) {
                     <button className="name-button" type="button" onClick={() => setOpenId(creator.id)}>
                       <b>{creator.name}</b>
                       {creator.handle ? <span>{creator.handle}</span> : null}
+                    {creator.tiktokOrderId ? <span>TikTok order {creator.tiktokOrderId}</span> : null}
                     </button>
                     <TikTokLink handle={creator.handle} variant="text" />
                   </div>

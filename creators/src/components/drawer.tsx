@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { TikTokLink } from "@/components/tiktok-link";
 import { formatLondon, londonToday } from "@/lib/dates";
 import { STAGES, type StageSlug } from "@/lib/stages";
+import { opsStatusLabel } from "@/lib/ops";
 import { normaliseHandle, tiktokProfileUrl } from "@/lib/tiktok";
 import { royalMailTrackUrl } from "@/lib/tracking";
 import type { ActivityDTO, CreatorDTO, CreatorFields } from "@/lib/types";
@@ -28,6 +29,8 @@ function fieldsOf(creator: CreatorDTO): CreatorFields {
     orders: creator.orders,
     rating: creator.rating,
     worksWell: creator.worksWell,
+    tiktokOrderId: creator.tiktokOrderId,
+    tiktokMessage: creator.tiktokMessage,
   };
 }
 
@@ -43,7 +46,7 @@ export function Drawer({
   pending: boolean;
   error: string | null;
   onClose: () => void;
-  onSave: (fields: CreatorFields) => Promise<boolean>;
+  onSave: (fields: CreatorFields & { sendToOrders?: boolean }) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
 }) {
   const [form, setForm] = useState(() => fieldsOf(creator));
@@ -144,9 +147,17 @@ export function Drawer({
     if (ok) setDirty(false);
   }
 
+  async function sendOrder() {
+    const ok = await onSave({ ...form, sendToOrders: true });
+    if (ok) setDirty(false);
+  }
+
   const track = royalMailTrackUrl(form.trackingNumber, form.courier);
   const handleState = normaliseHandle(form.handle);
   const profile = handleState.ok ? tiktokProfileUrl(handleState.value) : null;
+  const orderDraftChanged = form.tiktokOrderId !== creator.tiktokOrderId || form.tiktokMessage !== creator.tiktokMessage;
+  const orderStatus = orderDraftChanged ? "" : creator.opsStatus;
+  const orderError = orderDraftChanged ? "" : creator.opsError;
 
   return (
     <div className="drawer-back" onMouseDown={requestClose}>
@@ -268,6 +279,35 @@ export function Drawer({
           ) : form.trackingNumber && form.courier ? (
             <p className="muted small">Tracking link is for Royal Mail. This courier is {form.courier}.</p>
           ) : null}
+
+          <h3 className="section-label">TikTok order</h3>
+          <div className="form-grid">
+            <label className="field wide">
+              TikTok order ID
+              <input
+                value={form.tiktokOrderId}
+                onChange={(event) => update("tiktokOrderId", event.target.value)}
+                inputMode="numeric"
+                spellCheck={false}
+                autoComplete="off"
+                maxLength={32}
+                placeholder="Numbers only"
+              />
+            </label>
+            <label className="field wide">
+              Message for the order
+              <textarea
+                value={form.tiktokMessage}
+                onChange={(event) => update("tiktokMessage", event.target.value)}
+                rows={3}
+                maxLength={2000}
+              />
+            </label>
+          </div>
+          <p className={`ops-status ${orderStatus || "empty"}`}>{opsStatusLabel(orderStatus, orderError)}</p>
+          <button className="btn" type="button" disabled={pending} onClick={sendOrder}>
+            {orderStatus === "failed" || orderStatus === "not_configured" ? "Retry" : "Send to orders"}
+          </button>
 
           {form.stage === "declined" ? (
             <label className="field">

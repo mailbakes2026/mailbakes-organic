@@ -43,6 +43,8 @@ export function describeChanges(before: CreatorFields, after: CreatorFields, via
     ["courier", "courier"],
     ["trackingNumber", "tracking number"],
     ["postUrl", "post link"],
+    ["tiktokOrderId", "TikTok order ID"],
+    ["tiktokMessage", "order message"],
   ];
   for (const [key, label] of textFields) {
     if (before[key] !== after[key]) edited.push(label);
@@ -87,6 +89,8 @@ export function applyUpdate(
     orders: patch.orders !== undefined ? patch.orders : before.orders,
     rating: patch.rating !== undefined ? patch.rating : before.rating,
     worksWell: patch.worksWell ?? before.worksWell,
+    tiktokOrderId: patch.tiktokOrderId ?? before.tiktokOrderId,
+    tiktokMessage: patch.tiktokMessage ?? before.tiktokMessage,
   };
 
   if (!next.name.trim()) return { ok: false, error: "A name is required." };

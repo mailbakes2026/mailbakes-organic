@@ -19,12 +19,17 @@ export type CreatorFields = {
   orders: number | null;
   rating: number | null;
   worksWell: boolean;
+  tiktokOrderId: string;
+  tiktokMessage: string;
 };
 
 export type CreatorDTO = CreatorFields & {
   id: string;
   trackingUrl: string | null;
   postHref: string | null;
+  opsStatus: "" | "sent" | "failed" | "not_configured";
+  opsError: string;
+  opsSentAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

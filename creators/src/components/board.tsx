@@ -8,6 +8,7 @@ import { StatsTiles } from "@/components/stats-tiles";
 import { useCreators } from "@/components/use-creators";
 import { useStageDrag } from "@/components/use-drag";
 import { PIPELINE, SIDE_LANES, STAGES, type StageSlug } from "@/lib/stages";
+import { needsTiktokMatch } from "@/lib/ops";
 import { matchesQuery } from "@/lib/search";
 import type { CreatorDTO, CreatorFields } from "@/lib/types";
 
@@ -19,9 +20,10 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
   const [awaitingOnly, setAwaitingOnly] = useState(false);
   const [worksOnly, setWorksOnly] = useState(false);
   const [postedOnly, setPostedOnly] = useState(false);
+  const [unmatchedOnly, setUnmatchedOnly] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const filtering = Boolean(query.trim() || stageFilter || rushOnly || awaitingOnly || worksOnly || postedOnly);
+  const filtering = Boolean(query.trim() || stageFilter || rushOnly || awaitingOnly || worksOnly || postedOnly || unmatchedOnly);
   const visible = useMemo(
     () =>
       rows.filter((row) => {
@@ -30,9 +32,10 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
         if (awaitingOnly && row.stage !== "message_needed") return false;
         if (worksOnly && !row.worksWell) return false;
         if (postedOnly && !row.posted) return false;
+        if (unmatchedOnly && !needsTiktokMatch(row)) return false;
         return matchesQuery(row, query);
       }),
-    [rows, query, stageFilter, rushOnly, awaitingOnly, worksOnly, postedOnly],
+    [rows, query, stageFilter, rushOnly, awaitingOnly, worksOnly, postedOnly, unmatchedOnly],
   );
 
   async function move(id: string, stage: StageSlug) {
@@ -47,7 +50,7 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
   const columns = stageFilter ? PIPELINE.filter((stage) => stage.slug === stageFilter) : PIPELINE;
   const lanes = stageFilter ? SIDE_LANES.filter((stage) => stage.slug === stageFilter) : SIDE_LANES;
 
-  async function save(fields: CreatorFields) {
+  async function save(fields: CreatorFields & { sendToOrders?: boolean }) {
     if (!open) return false;
     const result = await patch(open.id, fields);
     return result.ok;
@@ -133,6 +136,10 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
         <label className="check">
           <input type="checkbox" checked={postedOnly} onChange={(event) => setPostedOnly(event.target.checked)} />
           Posted
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={unmatchedOnly} onChange={(event) => setUnmatchedOnly(event.target.checked)} />
+          No TikTok match
         </label>
         {filtering ? (
           <span className="muted small">

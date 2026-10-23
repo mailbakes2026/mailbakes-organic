@@ -20,7 +20,9 @@ function decorate(row: CreatorDTO, fields: CreatorFields): CreatorDTO {
 
 export function useCreators(initial: CreatorDTO[]) {
   const router = useRouter();
-  const signature = initial.map((row) => `${row.id}:${row.updatedAt}:${row.stage}:${row.rush}`).join("|");
+  const signature = initial
+    .map((row) => `${row.id}:${row.updatedAt}:${row.stage}:${row.rush}:${row.opsStatus}:${row.tiktokOrderId}`)
+    .join("|");
   const [sig, setSig] = useState(signature);
   const [rows, setRows] = useState(initial);
   const rowsRef = useRef(rows);

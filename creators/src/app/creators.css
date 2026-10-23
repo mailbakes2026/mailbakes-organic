@@ -242,6 +242,11 @@ a.tiktok-text svg,
 a.tiktok-btn svg { display: block; flex: none; }
 .who { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .who .name-button { min-width: 0; }
+.ops-status { margin: 0; font-size: 13px; font-weight: 650; }
+.ops-status.sent { color: var(--good); }
+.ops-status.failed { color: var(--serious); }
+.ops-status.not_configured { color: var(--warning); }
+.ops-status.empty { color: var(--text-muted); font-weight: 600; }
 .track-line { margin: 0; }
 .track-line a { color: var(--mb-pink-deep); font-weight: 700; }
 .section-label {

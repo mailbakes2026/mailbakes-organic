@@ -45,6 +45,11 @@ model Creator {
   orders         Int?
   rating         Int?
   worksWell      Boolean    @default(false)
+  tiktokOrderId  String     @default("")
+  tiktokMessage  String     @default("")
+  opsStatus      String     @default("")
+  opsError       String     @default("")
+  opsSentAt      DateTime?
   source         String     @default("manual")
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @default(now())

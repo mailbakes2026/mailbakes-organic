@@ -26,6 +26,8 @@ function fields(name: string, extra: Partial<CreatorFields> = {}): CreatorFields
     orders: null,
     rating: null,
     worksWell: false,
+    tiktokOrderId: "",
+    tiktokMessage: "",
     ...extra,
   };
 }

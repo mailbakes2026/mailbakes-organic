@@ -55,6 +55,14 @@ test("a TikTok profile URL is stored as the @handle", () => {
   assert.equal(parsePatch({ handle: "https://example.com/@lslife9" }).ok, false);
 });
 
+test("a TikTok order ID is kept as text", () => {
+  const parsed = parsePatch({ tiktokOrderId: "001234567890123456789" });
+  assert.equal(parsed.ok, true);
+  if (parsed.ok) assert.equal(parsed.value.tiktokOrderId, "001234567890123456789");
+  assert.equal(parsePatch({ tiktokOrderId: 576461234567890 }).ok, false);
+  assert.equal(parsePatch({ tiktokOrderId: "12-3" }).ok, false);
+});
+
 test("a patch refuses a made-up stage and a tracking link", () => {
   assert.equal(parsePatch({ stage: "celebration" }).ok, false);
   const tracking = parsePatch({ trackingNumber: "https://example.com" });

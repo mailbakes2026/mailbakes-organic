@@ -53,6 +53,8 @@ Nothing in this repo creates the Render service for you.
 | `APP_URL` | Blueprint | `https://mailbakes-creators.onrender.com` |
 | `APP_NAME` | Blueprint | Shown as the signed-in name. Default `Millie`. |
 | `NODE_VERSION` | Blueprint | `22`. |
+| `OPS_APP_URL` | Already set on the Creators service | Orders app origin, such as `https://orders.example.com`. |
+| `OPS_API_TOKEN` | Already set on the Creators service | Bearer token for `POST /api/tiktok/message`. It is not written in the repo. |
 
 ## Inquiry API
 
@@ -70,3 +72,7 @@ curl -s https://mailbakes-creators.onrender.com/api/v1/inquiries \
 A created inquiry returns `{ "id", "name", "stage": "inquiry" }`. If `CREATORS_API_TOKEN` is missing, the API responds with setup needed and does not accept a guess.
 
 Tracking numbers for Royal Mail (or a blank courier) link to `https://www.royalmail.com/track-your-item#/tracking-results/<number>`.
+
+## TikTok orders
+
+Each creator has a TikTok order ID and a message for that sample. Send to orders stores both in this app, then `POST {OPS_APP_URL}/api/tiktok/message` with `Authorization: Bearer` and `{"tiktok_order_id","message"}`. The order ID stays text. The drawer shows Sent, Failed with the reason, or Not configured when those env vars are missing. Retry sends the saved message again. The pipeline filter **No TikTok match** lists creators with no order ID or no message yet.
