@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Drawer } from "@/components/drawer";
+import { TikTokLink } from "@/components/tiktok-link";
 import { useCreators } from "@/components/use-creators";
 import { stageLabel } from "@/lib/stages";
 import { leaderboard } from "@/lib/stats";
@@ -70,10 +71,13 @@ export function Performance({ creators }: { creators: CreatorDTO[] }) {
             {ranked.map((creator) => (
               <tr key={creator.id} data-creator={creator.name}>
                 <td data-label="Creator">
-                  <button className="name-button" type="button" onClick={() => setOpenId(creator.id)}>
-                    <b>{creator.name}</b>
-                    {creator.handle ? <span>{creator.handle}</span> : null}
-                  </button>
+                  <div className="who">
+                    <button className="name-button" type="button" onClick={() => setOpenId(creator.id)}>
+                      <b>{creator.name}</b>
+                      {creator.handle ? <span>{creator.handle}</span> : null}
+                    </button>
+                    <TikTokLink handle={creator.handle} variant="text" />
+                  </div>
                 </td>
                 <td data-label="Stage">{stageLabel(creator.stage)}</td>
                 <td data-label="Posted">

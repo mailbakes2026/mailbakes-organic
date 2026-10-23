@@ -42,6 +42,19 @@ test("rush must be a boolean and defaults to false", () => {
   assert.equal(parseInquiry({ name: "Louis", rush: "yes" }).ok, false);
 });
 
+test("a TikTok profile URL is stored as the @handle", () => {
+  const parsed = parseInquiry({ name: "Katharine Cruse", handle: "https://www.tiktok.com/@crusetwins/" });
+  assert.equal(parsed.ok, true);
+  if (parsed.ok) assert.equal(parsed.value.handle, "@crusetwins");
+  const kept = parsePatch({ handle: "Samantha Starr" });
+  assert.equal(kept.ok, true);
+  if (kept.ok) assert.equal(kept.value.handle, "Samantha Starr");
+  const spaced = parsePatch({ handle: "  @lslife9  " });
+  assert.equal(spaced.ok, true);
+  if (spaced.ok) assert.equal(spaced.value.handle, "@lslife9");
+  assert.equal(parsePatch({ handle: "https://example.com/@lslife9" }).ok, false);
+});
+
 test("a patch refuses a made-up stage and a tracking link", () => {
   assert.equal(parsePatch({ stage: "celebration" }).ok, false);
   const tracking = parsePatch({ trackingNumber: "https://example.com" });

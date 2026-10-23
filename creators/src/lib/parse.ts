@@ -1,5 +1,6 @@
 import { isStageSlug, type StageSlug } from "./stages.ts";
 import { parseDateOnly } from "./dates.ts";
+import { normaliseHandle } from "./tiktok.ts";
 import { safeHttpUrl } from "./tracking.ts";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -117,6 +118,15 @@ function readTracking(source: Record<string, unknown>): ParseResult<string | und
   return { ok: true, value };
 }
 
+function readHandle(source: Record<string, unknown>): ParseResult<string | undefined> {
+  if (!("handle" in source)) return { ok: true, value: undefined };
+  const raw = source.handle;
+  if (typeof raw !== "string") return { ok: false, error: "TikTok handle should be text." };
+  const value = oneLine(raw, 300);
+  if (value === null) return { ok: false, error: "TikTok handle is too long." };
+  return normaliseHandle(value);
+}
+
 function readPostUrl(source: Record<string, unknown>): ParseResult<string | undefined> {
   if (!("postUrl" in source)) return { ok: true, value: undefined };
   const raw = source.postUrl;
@@ -147,7 +157,7 @@ export function parseInquiry(body: unknown): ParseResult<InquiryInput> {
   const name = nameResult.value?.trim() ?? "";
   if (!name) return { ok: false, error: "A name is required." };
 
-  const handle = readLine(source, "handle", 80, "TikTok handle");
+  const handle = readHandle(source);
   if (!handle.ok) return handle;
   const email = readEmail(source, true);
   if (!email.ok) return email;
@@ -186,7 +196,7 @@ export function parsePatch(body: unknown): ParseResult<CreatorPatch> {
     patch.name = name.value;
   }
 
-  const handle = readLine(source, "handle", 80, "TikTok handle");
+  const handle = readHandle(source);
   if (!handle.ok) return handle;
   if (handle.value !== undefined) patch.handle = handle.value;
 

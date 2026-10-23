@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Drawer } from "@/components/drawer";
+import { TikTokLink } from "@/components/tiktok-link";
 import { useCreators } from "@/components/use-creators";
 import { formatLondon } from "@/lib/dates";
 import type { InquiryInput } from "@/lib/parse";
@@ -76,6 +77,7 @@ export function Inquiries({ creators, apiReady }: { creators: CreatorDTO[]; apiR
               <div>
                 <p className="creator-name">{creator.name}</p>
                 {creator.handle ? <p className={creator.handle.startsWith("@") ? "handle" : "meta"}>{creator.handle}</p> : null}
+                <TikTokLink handle={creator.handle} variant="text" />
               </div>
               <div className="flags">
                 {creator.rush ? <span className="pill warn">Rush</span> : null}
@@ -153,7 +155,13 @@ export function Inquiries({ creators, apiReady }: { creators: CreatorDTO[]; apiR
           </label>
           <label className="field">
             TikTok handle
-            <input value={form.handle} onChange={(event) => setForm({ ...form, handle: event.target.value })} maxLength={80} />
+            <input
+              value={form.handle}
+              onChange={(event) => setForm({ ...form, handle: event.target.value })}
+              maxLength={300}
+              spellCheck={false}
+              placeholder="@handle or profile link"
+            />
           </label>
           <label className="field">
             Email

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TikTokLink } from "@/components/tiktok-link";
 import { formatLondon, londonToday } from "@/lib/dates";
 import { STAGES, type StageSlug } from "@/lib/stages";
+import { normaliseHandle, tiktokProfileUrl } from "@/lib/tiktok";
 import { royalMailTrackUrl } from "@/lib/tracking";
 import type { ActivityDTO, CreatorDTO, CreatorFields } from "@/lib/types";
 
@@ -104,6 +106,12 @@ export function Drawer({
     else onClose();
   }
 
+  function blurHandle() {
+    const next = normaliseHandle(form.handle);
+    if (!next.ok || next.value === form.handle) return;
+    update("handle", next.value);
+  }
+
   function update<K extends keyof CreatorFields>(key: K, value: CreatorFields[K]) {
     setDirty(true);
     setForm((current) => ({ ...current, [key]: value }));
@@ -137,6 +145,8 @@ export function Drawer({
   }
 
   const track = royalMailTrackUrl(form.trackingNumber, form.courier);
+  const handleState = normaliseHandle(form.handle);
+  const profile = handleState.ok ? tiktokProfileUrl(handleState.value) : null;
 
   return (
     <div className="drawer-back" onMouseDown={requestClose}>
@@ -176,10 +186,26 @@ export function Drawer({
               Name
               <input value={form.name} onChange={(event) => update("name", event.target.value)} required maxLength={120} />
             </label>
-            <label className="field">
+            <label className="field wide">
               TikTok handle
-              <input value={form.handle} onChange={(event) => update("handle", event.target.value)} maxLength={80} />
+              <input
+                value={form.handle}
+                onChange={(event) => update("handle", event.target.value)}
+                onBlur={blurHandle}
+                maxLength={300}
+                spellCheck={false}
+                placeholder="@handle"
+              />
             </label>
+            <div className="wide tiktok-slot">
+              {profile ? (
+                <TikTokLink handle={handleState.ok ? handleState.value : form.handle} variant="button" />
+              ) : handleState.ok ? (
+                <p className="add-handle">Add TikTok handle</p>
+              ) : (
+                <p className="error">{handleState.error}</p>
+              )}
+            </div>
             <label className="field">
               Email
               <input value={form.email} onChange={(event) => update("email", event.target.value)} type="email" maxLength={160} />

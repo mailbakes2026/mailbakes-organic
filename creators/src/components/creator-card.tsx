@@ -1,6 +1,8 @@
 "use client";
 
+import { TikTokLink } from "@/components/tiktok-link";
 import { STAGES, stageLabel, type StageSlug } from "@/lib/stages";
+import { tiktokProfileUrl } from "@/lib/tiktok";
 import type { CreatorDTO } from "@/lib/types";
 
 export function CreatorCard({
@@ -39,7 +41,12 @@ export function CreatorCard({
     >
       <div className="creator-line">
         <p className="creator-name">{creator.name}</p>
-        {creator.rush ? <span className="rush-badge">Rush</span> : null}
+        {creator.rush || tiktokProfileUrl(creator.handle) ? (
+          <span className="creator-marks">
+            {creator.rush ? <span className="rush-badge">Rush</span> : null}
+            <TikTokLink handle={creator.handle} variant="icon" />
+          </span>
+        ) : null}
       </div>
       <label className="move" onClick={(event) => event.stopPropagation()}>
         <span>Move</span>
