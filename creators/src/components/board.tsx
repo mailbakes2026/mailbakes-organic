@@ -5,15 +5,16 @@ import { useMemo, useState } from "react";
 import { CreatorCard } from "@/components/creator-card";
 import { Drawer } from "@/components/drawer";
 import { StatsTiles } from "@/components/stats-tiles";
-import { useCreators } from "@/components/use-creators";
+import { useCreators, type MatchReportView, type ReviewView } from "@/components/use-creators";
 import { useStageDrag } from "@/components/use-drag";
 import { PIPELINE, SIDE_LANES, STAGES, type StageSlug } from "@/lib/stages";
 import { needsTiktokMatch } from "@/lib/ops";
+import type { CreatorDTO } from "@/lib/types";
 import { matchesQuery } from "@/lib/search";
-import type { CreatorDTO, CreatorFields } from "@/lib/types";
+import type { CreatorFields } from "@/lib/types";
 
 export function Board({ creators }: { creators: CreatorDTO[] }) {
-  const { rows, error, setError, pending, patch, remove, syncOrders } = useCreators(creators);
+  const { rows, error, setError, pending, matching, matchReport, patch, remove, syncOrders, matchOrders, confirmOrder } = useCreators(creators);
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<StageSlug | "">("");
   const [rushOnly, setRushOnly] = useState(false);
@@ -151,6 +152,14 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
         <button className="btn ghost sm" type="button" disabled={pending} onClick={syncAll}>
           Sync all
         </button>
+        <button className="btn ghost sm" type="button" disabled={matching} onClick={() => void matchOrders()}>
+          {matching ? "Matching…" : "Match orders"}
+        </button>
+        {matchReport ? (
+          <span className={`ops-status ${summaryClass(matchReport)}`} aria-live="polite">
+            {matchReport.summary}
+          </span>
+        ) : null}
         {syncNote ? <span className="muted small">{syncNote}</span> : null}
         {filtering ? (
           <span className="muted small">
@@ -158,6 +167,21 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
           </span>
         ) : null}
       </div>
+
+      {matchReport && matchReport.review.length ? (
+        <MatchPanel
+          key={matchReport.review.map((item) => `${item.tiktokOrderId}|${item.reference}|${item.recipient}|${item.reason}`).join("\n")}
+          review={matchReport.review}
+          creators={rows}
+          pending={pending || matching}
+          onConfirm={async (creatorId, tiktokOrderId) => {
+            const confirmed = await confirmOrder(creatorId, tiktokOrderId);
+            if (!confirmed.ok) return false;
+            await matchOrders();
+            return true;
+          }}
+        />
+      ) : null}
 
       {columns.length ? (
         <div className="board-scroll">
@@ -185,8 +209,84 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
           onClose={() => setOpenId(null)}
           onSave={save}
           onDelete={deleteOpen}
+          onMatch={matchOrders}
         />
       ) : null}
     </>
+  );
+}
+
+function summaryClass(report: MatchReportView) {
+  if (report.state === "failed" || report.lines.some((line) => line.state === "failed")) return "failed";
+  if (report.state === "not_ready" || report.state === "not_configured" || report.lines.some((line) => line.state === "unmatched")) {
+    return "not_configured";
+  }
+  return "sent";
+}
+
+function MatchPanel({
+  review,
+  creators,
+  pending,
+  onConfirm,
+}: {
+  review: ReviewView[];
+  creators: CreatorDTO[];
+  pending: boolean;
+  onConfirm: (creatorId: string, tiktokOrderId: string) => Promise<boolean>;
+}) {
+  const [choices, setChoices] = useState<Record<number, string>>({});
+  const [busy, setBusy] = useState<number | null>(null);
+
+  async function confirm(index: number, event: React.FormEvent) {
+    event.preventDefault();
+    const item = review[index];
+    const creatorId = choices[index] ?? "";
+    if (!item?.tiktokOrderId || !creatorId || busy !== null) return;
+    setBusy(index);
+    try {
+      await onConfirm(creatorId, item.tiktokOrderId);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="match-panel" aria-label="Orders to confirm">
+      <h2>Confirm these orders</h2>
+      <p className="muted small">These names did not match one creator. Choose who the order belongs to. Nothing is filled in until you confirm.</p>
+      <ul className="match-list">
+        {review.map((item, index) => (
+          <li key={`${item.tiktokOrderId}-${item.reference}-${item.recipient}-${index}`} className="match-review">
+            <div>
+              <b>{item.recipient}</b>
+              {item.reference ? <span className="meta"> {item.reference}</span> : null}
+              {item.tiktokOrderId ? <span className="meta"> {item.tiktokOrderId}</span> : null}
+              {item.freeSample ? <span className="pill">Free sample</span> : null}
+              <p className="ops-status not_configured">{item.reason}</p>
+            </div>
+            {item.tiktokOrderId ? (
+              <form className="match-actions" onSubmit={(event) => void confirm(index, event)}>
+                <select
+                  aria-label={`Creator for ${item.recipient}`}
+                  value={choices[index] ?? ""}
+                  onChange={(event) => setChoices((current) => ({ ...current, [index]: event.target.value }))}
+                >
+                  <option value="">Choose a creator</option>
+                  {creators.map((creator) => (
+                    <option key={creator.id} value={creator.id}>
+                      {creator.name}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn sm" type="submit" disabled={pending || busy !== null || !(choices[index] ?? "")}>
+                  {busy === index ? "Confirming…" : "Confirm"}
+                </button>
+              </form>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

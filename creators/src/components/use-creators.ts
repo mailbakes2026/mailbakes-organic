@@ -8,6 +8,25 @@ import { royalMailTrackUrl, safeHttpUrl } from "@/lib/tracking";
 import type { CreatorDTO, CreatorDetail, CreatorFields } from "@/lib/types";
 import { applyUpdate } from "@/lib/update";
 
+export type MatchLineView = { id: string; state: string; label: string };
+
+export type ReviewView = {
+  tiktokOrderId: string;
+  recipient: string;
+  reference: string;
+  freeSample: boolean;
+  reason: string;
+};
+
+export type MatchReportView = {
+  state: string;
+  summary: string;
+  lines: MatchLineView[];
+  review: ReviewView[];
+};
+
+export type MatchOutcome = { ok: true; report: MatchReportView } | { ok: false; error: string };
+
 function decorate(row: CreatorDTO, fields: CreatorFields): CreatorDTO {
   return {
     ...row,
@@ -29,6 +48,8 @@ export function useCreators(initial: CreatorDTO[]) {
   rowsRef.current = rows;
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [matching, setMatching] = useState(false);
+  const [matchReport, setMatchReport] = useState<MatchReportView | null>(null);
 
   if (signature !== sig) {
     setSig(signature);
@@ -182,5 +203,73 @@ export function useCreators(initial: CreatorDTO[]) {
     }
   }
 
-  return { rows, error, setError, pending, patch, create, remove, syncOrders };
+  function mergeCreators(creators: CreatorDetail[] | undefined) {
+    if (!creators?.length) return;
+    const byId = new Map(creators.map((creator) => [creator.id, creator]));
+    const merged = sortCreators(rowsRef.current.map((row) => (byId.has(row.id) ? { ...row, ...byId.get(row.id)! } : row)));
+    rowsRef.current = merged;
+    setRows(merged);
+  }
+
+  async function matchOrders(): Promise<MatchOutcome> {
+    setMatching(true);
+    try {
+      const response = await fetch("/api/tiktok/match", { method: "POST" });
+      const data = (await response.json().catch(() => ({}))) as Partial<MatchReportView> & {
+        error?: string;
+        creators?: CreatorDetail[];
+      };
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return { ok: false, error: "Sign in required." };
+      }
+      if (!response.ok || !data.summary || !data.lines || !data.review) {
+        return { ok: false, error: data.error || "Match didn't finish." };
+      }
+      const report: MatchReportView = {
+        state: data.state || "failed",
+        summary: data.summary,
+        lines: data.lines,
+        review: data.review,
+      };
+      mergeCreators(data.creators);
+      setMatchReport(report);
+      router.refresh();
+      return { ok: true, report };
+    } catch {
+      return { ok: false, error: "Match didn't finish." };
+    } finally {
+      setMatching(false);
+    }
+  }
+
+  async function confirmOrder(creatorId: string, tiktokOrderId: string) {
+    setError(null);
+    try {
+      const response = await fetch("/api/tiktok/match/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creatorId, tiktokOrderId }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string; creator?: CreatorDetail };
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return { ok: false as const, error: "Sign in required." };
+      }
+      if (!response.ok || !data.creator) {
+        const message = data.error || "That order wasn't confirmed.";
+        setError(message);
+        return { ok: false as const, error: message };
+      }
+      mergeCreators([data.creator]);
+      router.refresh();
+      return { ok: true as const, creator: data.creator };
+    } catch {
+      const message = "That order wasn't confirmed.";
+      setError(message);
+      return { ok: false as const, error: message };
+    }
+  }
+
+  return { rows, error, setError, pending, matching, matchReport, patch, create, remove, syncOrders, matchOrders, confirmOrder };
 }

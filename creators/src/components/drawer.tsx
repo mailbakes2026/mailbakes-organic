@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TikTokLink } from "@/components/tiktok-link";
+import type { MatchOutcome } from "@/components/use-creators";
 import { formatLondon, londonToday } from "@/lib/dates";
+import { matchStatusClass } from "@/lib/match-status";
 import { STAGES, type StageSlug } from "@/lib/stages";
 import { opsStatusLabel, remoteStatusClass, type RemoteCheck } from "@/lib/ops";
 import { normaliseHandle, tiktokProfileUrl } from "@/lib/tiktok";
@@ -41,6 +43,7 @@ export function Drawer({
   onClose,
   onSave,
   onDelete,
+  onMatch,
 }: {
   creator: CreatorDTO;
   pending: boolean;
@@ -48,19 +51,31 @@ export function Drawer({
   onClose: () => void;
   onSave: (fields: CreatorFields & { sendToOrders?: boolean }) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
+  onMatch: () => Promise<MatchOutcome>;
 }) {
   const [form, setForm] = useState(() => fieldsOf(creator));
   const [dirty, setDirty] = useState(false);
+  const [orderIdEdited, setOrderIdEdited] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [activities, setActivities] = useState<ActivityDTO[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [remote, setRemote] = useState<RemoteCheck | null>(null);
   const [checking, setChecking] = useState(false);
+  const [matchState, setMatchState] = useState("busy");
+  const [matchLabel, setMatchLabel] = useState("Matching orders…");
+  const onMatchRef = useRef(onMatch);
+  onMatchRef.current = onMatch;
 
   useEffect(() => {
-    if (!dirty) setForm(fieldsOf(creator));
-  }, [creator, dirty]);
+    if (!dirty) {
+      setForm(fieldsOf(creator));
+      setOrderIdEdited(false);
+      return;
+    }
+    if (orderIdEdited) return;
+    setForm((current) => (current.tiktokOrderId === creator.tiktokOrderId ? current : { ...current, tiktokOrderId: creator.tiktokOrderId }));
+  }, [creator, dirty, orderIdEdited]);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -119,6 +134,7 @@ export function Drawer({
 
   function update<K extends keyof CreatorFields>(key: K, value: CreatorFields[K]) {
     setDirty(true);
+    if (key === "tiktokOrderId") setOrderIdEdited(true);
     setForm((current) => ({ ...current, [key]: value }));
   }
 
@@ -182,6 +198,31 @@ export function Drawer({
       });
     return () => controller.abort();
   }, [creator.id, creator.tiktokOrderId, creator.tiktokMessage, creator.opsStatus, creator.opsSentAt, orderDraftChanged]);
+
+  useEffect(() => {
+    let cancel = false;
+    setMatchState("busy");
+    setMatchLabel("Matching orders…");
+    onMatchRef.current().then((result) => {
+      if (cancel) return;
+      if (!result.ok) {
+        setMatchState("failed");
+        setMatchLabel(result.error);
+        return;
+      }
+      const line = result.report.lines.find((item) => item.id === creator.id);
+      if (line) {
+        setMatchState(line.state);
+        setMatchLabel(line.label);
+        return;
+      }
+      setMatchState(result.report.state);
+      setMatchLabel(result.report.summary);
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [creator.id]);
 
   return (
     <div className="drawer-back" onMouseDown={requestClose}>
@@ -305,6 +346,9 @@ export function Drawer({
           ) : null}
 
           <h3 className="section-label">TikTok order</h3>
+          <p className={`ops-status ${matchStatusClass(matchState)}`} aria-live="polite">
+            {matchLabel}
+          </p>
           <div className="form-grid">
             <label className="field wide">
               TikTok order ID

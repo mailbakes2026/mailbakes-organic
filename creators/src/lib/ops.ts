@@ -111,6 +111,36 @@ function opsTarget() {
   return { url, token };
 }
 
+function originUrl(base: string) {
+  const suffix = "/api/tiktok/message";
+  if (base.endsWith(suffix)) return base.slice(0, -suffix.length);
+  return base;
+}
+
+export async function opsGet(path: string, fetchImpl: typeof fetch = fetch): Promise<{ ok: false; reason: "not_configured" } | { ok: false; reason: "network" } | { ok: true; status: number; body: string }> {
+  const target = opsTarget();
+  if (!target) return { ok: false, reason: "not_configured" };
+  const url = new URL(path, `${originUrl(target.url)}/`);
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: "GET",
+      redirect: "manual",
+      signal: AbortSignal.timeout(12_000),
+      headers: { Authorization: `Bearer ${target.token}`, Accept: "application/json" },
+    });
+  } catch {
+    return { ok: false, reason: "network" };
+  }
+  let body = "";
+  try {
+    body = await response.text();
+  } catch {
+    body = "";
+  }
+  return { ok: true, status: response.status, body };
+}
+
 function messageUrl(base: string) {
   if (base.endsWith("/api/tiktok/message")) return base;
   return `${base}/api/tiktok/message`;
