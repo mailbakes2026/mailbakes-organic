@@ -1,0 +1,57 @@
+# Blueprint for MailBakes Paid Ads and Retention.
+# One web service serves both. The Host header chooses the app:
+#   paidads.mailbakes.com  → Paid Ads
+#   retention.mailbakes.com → Retention
+# On the onrender hostname, use /paidads and /retention.
+#
+# Create a new Render blueprint and set its path to growth/render.yaml.
+# Do not sync the repo root render.yaml: that file is the live organic service.
+# Do not sync creators/render.yaml or personal/render.yaml either.
+# Do not add a Postgres database. This service uses SQLite on the disk below.
+#
+# Service name mailbakes-growth → https://mailbakes-growth.onrender.com
+# If that hostname is taken, change name only. Custom domains stay as they are.
+services:
+  - type: web
+    name: mailbakes-growth
+    runtime: node
+    plan: starter
+    region: frankfurt
+    rootDir: growth
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: node scripts/prepare-db.mjs && npx prisma migrate deploy && npm run start
+    healthCheckPath: /api/health
+    disk:
+      name: mailbakes-growth-data
+      mountPath: /var/data
+      sizeGB: 1
+    domains:
+      - paidads.mailbakes.com
+      - retention.mailbakes.com
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        value: file:/var/data/growth.db
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: APP_PASSWORD
+        sync: false
+      - key: APP_NAME
+        value: Millie
+      - key: PAIDADS_API_TOKEN
+        sync: false
+      - key: RETENTION_API_TOKEN
+        sync: false
+      - key: META_ACCESS_TOKEN
+        sync: false
+      - key: META_AD_ACCOUNT_ID
+        sync: false
+      - key: KLAVIYO_PRIVATE_API_KEY
+        sync: false
+      - key: SHOPIFY_SHOP
+        sync: false
+      - key: SHOPIFY_CLIENT_ID
+        sync: false
+      - key: SHOPIFY_CLIENT_SECRET
+        sync: false
