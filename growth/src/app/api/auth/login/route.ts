@@ -1,9 +1,10 @@
 import { setSessionCookie, signSession } from "@/lib/auth";
-import { appName, appPassword, sessionSecret } from "@/lib/env";
+import { appPassword, sessionSecret } from "@/lib/env";
 import { clientIp, json, readJson } from "@/lib/http";
 import { prepareDatabase, prisma } from "@/lib/prisma";
 import { logSafe } from "@/lib/scrub";
 import { safeEqual } from "@/lib/secret";
+import { SIGN_IN_ERROR, signInDisplayName } from "@/lib/sign-in";
 
 export const dynamic = "force-dynamic";
 
@@ -32,17 +33,18 @@ export async function POST(request: Request) {
 
   const body = await readJson(request);
   if (!body.ok) return json({ error: body.error }, body.status);
-  const record = body.value && typeof body.value === "object" ? (body.value as { password?: unknown }) : null;
+  const record = body.value && typeof body.value === "object" ? (body.value as { name?: unknown; password?: unknown }) : null;
   const given = typeof record?.password === "string" ? record.password : "";
-  if (!safeEqual(given, password)) {
+  const name = signInDisplayName(record?.name);
+  if (!safeEqual(given, password) || !name) {
     const next = attempts.get(ip);
     if (!next || next.reset <= now) attempts.set(ip, { count: 1, reset: now + 10 * 60 * 1000 });
     else next.count += 1;
-    return json({ error: "That password doesn't match. Try again." }, 401);
+    return json({ error: SIGN_IN_ERROR }, 401);
   }
 
   attempts.delete(ip);
-  const token = await signSession({ id: "millie", name: appName() });
+  const token = await signSession({ id: "millie", name });
   await setSessionCookie(token);
-  return json({ ok: true, name: appName() });
+  return json({ ok: true, name });
 }

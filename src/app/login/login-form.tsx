@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { SIGN_IN_ERROR } from "@/lib/sign-in";
 
-export function LoginForm({ setup }: { setup: string | null }) {
+// Same sign-in form in the Organic, Personal, Creators, and Growth apps.
+export function LoginForm({ setup, nextPath }: { setup: string | null; nextPath: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -15,40 +17,55 @@ export function LoginForm({ setup }: { setup: string | null }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: form.get("email"),
+        name: form.get("name"),
         password: form.get("password"),
       }),
     });
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     setPending(false);
     if (!response.ok) {
-      setError(data.error || "Those details don't match. Try again.");
+      setError(data.error || SIGN_IN_ERROR);
       return;
     }
-    window.location.href = "/";
+    window.location.href = nextPath;
   }
 
   return (
     <main className="signin">
       <form className="card signin-card" onSubmit={onSubmit}>
-        <img src="/mailbakes-logo.svg" alt="MailBakes" className="brand-logo" />
-        <div>
-          <h1>Organic social</h1>
-          <p className="muted intro">
-            Plan posts for the MailBakes channels. Approving something here never publishes it.
-          </p>
-        </div>
-        <label className="field" htmlFor="email">
-          Email
-          <input id="email" name="email" type="email" autoComplete="username" required />
+        <h1 className="wordmark">MailBakes</h1>
+        <label className="field" htmlFor="name">
+          Name
+          <input
+            id="name"
+            name="name"
+            type="text"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            disabled={Boolean(setup)}
+          />
         </label>
         <label className="field" htmlFor="password">
           Password
-          <input id="password" name="password" type="password" autoComplete="current-password" required />
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            disabled={Boolean(setup)}
+          />
         </label>
         {setup ? <p className="alert warn">{setup}</p> : null}
-        {error ? <p className="error">{error}</p> : null}
-        <button className="btn" type="submit" disabled={pending}>
+        {error ? (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <button className="btn" type="submit" disabled={pending || Boolean(setup)}>
           {pending ? "Signing in…" : "Sign in"}
         </button>
       </form>

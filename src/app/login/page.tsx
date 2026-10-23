@@ -12,7 +12,7 @@ export default async function LoginPage() {
   } catch (error) {
     console.error(error);
     return (
-      <LoginForm setup="We couldn't reach the database. Check DATABASE_URL and try again." />
+      <LoginForm nextPath="/" setup="We couldn't reach the database. Check DATABASE_URL and try again." />
     );
   }
 
@@ -22,6 +22,7 @@ export default async function LoginPage() {
   const count = await prisma.user.count();
   return (
     <LoginForm
+      nextPath="/"
       setup={
         count === 0
           ? "No accounts yet. Set MANAGEMENT_EMAIL, MANAGEMENT_PASSWORD, TEAM_EMAIL and TEAM_PASSWORD, then restart."

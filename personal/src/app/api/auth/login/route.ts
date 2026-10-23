@@ -1,7 +1,8 @@
 import { setSessionCookie, signSession } from "@/lib/auth";
-import { appName, appPassword, sessionSecret } from "@/lib/env";
+import { appPassword, sessionSecret } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { safeEqual } from "@/lib/secret";
+import { SIGN_IN_ERROR, signInDisplayName } from "@/lib/sign-in";
 
 export const dynamic = "force-dynamic";
 
@@ -30,17 +31,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "We couldn't reach the database. Try again shortly." }, { status: 503 });
   }
 
-  const body = (await request.json().catch(() => null)) as { password?: string } | null;
-  const given = body?.password ?? "";
-  if (!safeEqual(given, password)) {
+  const body = (await request.json().catch(() => null)) as { name?: unknown; password?: unknown } | null;
+  const given = typeof body?.password === "string" ? body.password : "";
+  const name = signInDisplayName(body?.name);
+  if (!safeEqual(given, password) || !name) {
     const next = attempts.get(ip);
     if (!next || next.reset <= now) attempts.set(ip, { count: 1, reset: now + 10 * 60 * 1000 });
     else next.count += 1;
-    return Response.json({ error: "That password doesn't match. Try again." }, { status: 401 });
+    return Response.json({ error: SIGN_IN_ERROR }, { status: 401 });
   }
 
   attempts.delete(ip);
-  const token = await signSession({ id: "millie", name: appName() });
+  const token = await signSession({ id: "millie", name });
   await setSessionCookie(token);
-  return Response.json({ ok: true, name: appName() });
+  return Response.json({ ok: true, name });
 }

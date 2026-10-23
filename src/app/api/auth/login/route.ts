@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { setSessionCookie, signSession } from "@/lib/auth";
 import { bootstrap } from "@/lib/bootstrap";
 import { prisma } from "@/lib/prisma";
+import { accountForPassword, SIGN_IN_ERROR, signInCandidates, signInIdentifier } from "@/lib/sign-in";
 
 export const dynamic = "force-dynamic";
 
@@ -28,24 +29,31 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
-  const email = body?.email?.trim().toLowerCase() ?? "";
+  const body = (await request.json().catch(() => null)) as { name?: string; email?: string; password?: string } | null;
+  const identifier = signInIdentifier(body?.name, body?.email);
   const password = body?.password ?? "";
-  const user = email
-    ? await prisma.user.findUnique({
-        where: { email },
+  const accounts = identifier
+    ? await prisma.user.findMany({
+        where: {
+          OR: [
+            { email: identifier.toLowerCase() },
+            { name: { equals: identifier, mode: "insensitive" } },
+          ],
+        },
         select: { id: true, email: true, name: true, role: true, passwordHash: true },
       })
-    : null;
-  const matches = user ? await bcrypt.compare(password, user.passwordHash) : false;
-  if (!user || !matches) {
+    : [];
+  const user = await accountForPassword(password, signInCandidates(identifier, accounts), (plain, hash) =>
+    bcrypt.compare(plain, hash),
+  );
+  if (!user) {
     const next = attempts.get(ip);
     if (!next || next.reset <= now) {
       attempts.set(ip, { count: 1, reset: now + 10 * 60 * 1000 });
     } else {
       next.count += 1;
     }
-    return Response.json({ error: "Those details don't match. Try again." }, { status: 401 });
+    return Response.json({ error: SIGN_IN_ERROR }, { status: 401 });
   }
 
   attempts.delete(ip);

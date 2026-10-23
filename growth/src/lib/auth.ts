@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { appName, sessionSecret } from "@/lib/env";
+import { sessionDisplayName } from "@/lib/sign-in";
 
 const COOKIE = "mb_growth";
 
@@ -43,7 +44,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     const { payload } = await jwtVerify(token, secret);
     const id = String(payload.sub ?? "");
     if (!id) return null;
-    const name = typeof payload.name === "string" && payload.name.trim() ? payload.name : appName();
+    const name = sessionDisplayName(payload.name, appName());
     return { id, name };
   } catch {
     return null;

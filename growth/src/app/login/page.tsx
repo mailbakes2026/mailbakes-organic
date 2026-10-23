@@ -22,15 +22,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     await prisma.$queryRaw`SELECT 1`;
   } catch (error) {
     logSafe("login database", error);
-    return <LoginForm setup="We couldn't reach the database. Check DATABASE_URL and the disk, then try again." nextPath={nextPath} title="Growth" intro="Paid Ads and Retention." />;
+    return <LoginForm setup="We couldn't reach the database. Check DATABASE_URL and the disk, then try again." nextPath={nextPath} />;
   }
 
   const user = await getSessionUser();
   if (user) redirect(nextPath);
 
   const ready = Boolean(appPassword() && sessionSecret());
-  const title = app === "paidads" ? "Paid Ads" : app === "retention" ? "Retention" : "Growth";
-  const intro = app === "paidads" ? "Meta and Google Ads." : app === "retention" ? "Klaviyo and Shopify." : "Paid Ads and Retention.";
   return (
     <LoginForm
       setup={
@@ -39,8 +37,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           : "Setup needed. Set APP_PASSWORD (at least 10 characters) and SESSION_SECRET (at least 32 characters), then restart."
       }
       nextPath={nextPath}
-      title={title}
-      intro={intro}
     />
   );
 }

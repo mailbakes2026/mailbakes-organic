@@ -70,7 +70,7 @@ export function Shell({ user, children }: { user: UserDTO; children: React.React
             </button>
           ))}
           <div className="sidebar-footer">
-            <div className="muted small">
+            <div className="signed-in">
               Signed in as {user.name}
               {access}
             </div>

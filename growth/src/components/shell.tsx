@@ -69,7 +69,7 @@ export function Shell({
           <a className="subtle small" href={otherHref}>
             {otherLabel}
           </a>
-          <div className="muted small">Signed in as {user.name}</div>
+          <div className="signed-in">Signed in as {user.name}</div>
           <button className="subtle" type="button" onClick={signOut}>
             Sign out
           </button>

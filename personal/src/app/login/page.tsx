@@ -11,7 +11,7 @@ export default async function LoginPage() {
     await prisma.$queryRaw`SELECT 1`;
   } catch (error) {
     console.error(error);
-    return <LoginForm setup="We couldn't reach the database. Check DATABASE_URL and try again." />;
+    return <LoginForm nextPath="/inbox" setup="We couldn't reach the database. Check DATABASE_URL and try again." />;
   }
 
   const user = await getSessionUser();
@@ -20,6 +20,7 @@ export default async function LoginPage() {
   const ready = Boolean(appPassword() && sessionSecret());
   return (
     <LoginForm
+      nextPath="/inbox"
       setup={
         ready
           ? null

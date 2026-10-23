@@ -10,7 +10,7 @@
     "build": "prisma generate && next build",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --import ./alias-register.mjs --test src/lib/secret.test.ts src/lib/dates.test.ts src/lib/host.test.ts src/lib/scrub.test.ts src/lib/money.test.ts src/lib/marks.test.ts src/lib/paidads/metrics.test.ts src/lib/paidads/meta-parse.test.ts src/lib/paidads/ingest.test.ts src/lib/paidads/changes.test.ts src/lib/paidads/google.test.ts src/lib/paidads/view.test.ts src/lib/retention/metrics.test.ts src/lib/retention/klaviyo-parse.test.ts src/lib/retention/ingest.test.ts src/lib/retention/view.test.ts",
+    "test": "node --experimental-strip-types --import ./alias-register.mjs --test src/lib/secret.test.ts src/lib/dates.test.ts src/lib/host.test.ts src/lib/scrub.test.ts src/lib/money.test.ts src/lib/marks.test.ts src/lib/paidads/metrics.test.ts src/lib/paidads/meta-parse.test.ts src/lib/paidads/ingest.test.ts src/lib/paidads/changes.test.ts src/lib/paidads/google.test.ts src/lib/paidads/view.test.ts src/lib/retention/metrics.test.ts src/lib/retention/klaviyo-parse.test.ts src/lib/retention/ingest.test.ts src/lib/retention/view.test.ts src/lib/sign-in.test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

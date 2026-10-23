@@ -48,6 +48,7 @@ h1 { font-size: 22px; }
 h2 { font-size: 17px; }
 .muted { color: var(--text-muted); }
 .small { font-size: 12px; }
+.signed-in { color: var(--text-muted); font-size: 12px; max-width: 100%; }
 .error { color: var(--serious); font-weight: 600; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -226,8 +227,40 @@ input, select, textarea {
 
 /* ------------------------------------------------------------- sign in */
 
-.signin { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-.signin-card { width: min(380px, 100%); display: flex; flex-direction: column; gap: 14px; }
+.signin {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: #FAF8F9;
+}
+.signin-card {
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 24px 20px;
+  background: #fff;
+  border: 1px solid #ECE4E8;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(30, 26, 28, 0.04), 0 6px 20px rgba(30, 26, 28, 0.05);
+}
+.signin-card .wordmark {
+  margin: 0;
+  color: #ED217A;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+.signin-card .field { gap: 8px; }
+.signin-card input { font-size: 16px; min-height: 44px; border-radius: 9px; }
+.signin-card .btn { align-self: stretch; min-height: 44px; background: #ED217A; color: #fff; }
+.signin-card .btn:hover { background: #C31A63; }
+.signin-card .error { margin: 0; }
+.signin-card .alert { margin: 0; }
 .sick-card { width: min(460px, 100%); }
 .sick-nudge { display: flex; flex-direction: column; gap: 10px; }
 .field textarea { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-primary); }
@@ -268,6 +301,15 @@ input, select, textarea {
   .brand { flex-direction: row; align-items: center; gap: 6px; padding: 0 8px 0 0; flex: 0 0 auto; }
   .brand i { display: none; }
   .brand-logo { height: 20px; }
+  .sidebar-footer .signed-in {
+    max-width: 8.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .signin { padding: 16px; }
+  .signin-card { padding: 20px 16px; }
+  .signin-card .wordmark { font-size: 28px; }
 
   .nav-group { display: none; }
   .nav-link {
