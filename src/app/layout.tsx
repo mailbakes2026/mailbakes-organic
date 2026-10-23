@@ -12,6 +12,10 @@ export const metadata: Metadata = {
   description:
     "Plan and approve MailBakes organic social posts. Approving does not publish anything.",
   robots: { index: false, follow: false },
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
