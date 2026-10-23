@@ -53,6 +53,14 @@ test("a saved message is posted as text and a bad token is reported", async () =
     assert.equal(typeof payload.tiktok_order_id, "string");
     assert.equal(payload.tiktok_order_id, LONG_ID);
     assert.equal(payload.message, "Sample card on the way");
+    assert.equal("reference" in payload, false);
+
+    const withReference = await postTiktokMessage("", "A note for the box", (async (_url, init) => {
+      seen = { ...seen!, body: String(init?.body ?? "") };
+      return new Response('{"ok":true}', { status: 200 });
+    }) as typeof fetch, "#214410");
+    assert.equal(withReference.status, "sent");
+    assert.deepEqual(JSON.parse(seen?.body ?? "{}"), { message: "A note for the box", reference: "#214410" });
 
     const denied = await postTiktokMessage(LONG_ID, "Hello", (async () => new Response("Bad token", { status: 401 })) as typeof fetch);
     assert.deepEqual(denied, { status: "failed", error: "Bad token" });

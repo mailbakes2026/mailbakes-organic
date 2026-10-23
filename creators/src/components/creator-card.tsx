@@ -1,6 +1,7 @@
 "use client";
 
 import { TikTokLink } from "@/components/tiktok-link";
+import { matchStatusClass } from "@/lib/match-status";
 import { STAGES, stageLabel, type StageSlug } from "@/lib/stages";
 import { tiktokProfileUrl } from "@/lib/tiktok";
 import type { CreatorDTO } from "@/lib/types";
@@ -8,6 +9,8 @@ import type { CreatorDTO } from "@/lib/types";
 export function CreatorCard({
   creator,
   dragging,
+  matchLabel,
+  matchState,
   onOpen,
   onMove,
   onPointerDown,
@@ -15,6 +18,8 @@ export function CreatorCard({
 }: {
   creator: CreatorDTO;
   dragging: boolean;
+  matchLabel?: string;
+  matchState?: string;
   onOpen: (id: string) => void;
   onMove: (id: string, stage: StageSlug) => void;
   onPointerDown: (event: React.PointerEvent, id: string, name: string) => void;
@@ -24,7 +29,7 @@ export function CreatorCard({
     <article
       className={`creator${dragging ? " is-dragging" : ""}`}
       data-creator={creator.name}
-      aria-label={`${creator.name}, ${stageLabel(creator.stage)}`}
+      aria-label={`${creator.name}, ${stageLabel(creator.stage)}${matchLabel ? `, ${matchLabel}` : ""}`}
       tabIndex={0}
       onPointerDown={(event) => onPointerDown(event, creator.id, creator.name)}
       onClick={() => {
@@ -48,6 +53,7 @@ export function CreatorCard({
           </span>
         ) : null}
       </div>
+      {matchLabel ? <p className={`ops-status ${matchStatusClass(matchState ?? "")}`}>{matchLabel}</p> : null}
       <label className="move" onClick={(event) => event.stopPropagation()}>
         <span>Move</span>
         <select

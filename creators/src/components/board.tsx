@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { CreatorCard } from "@/components/creator-card";
 import { Drawer } from "@/components/drawer";
 import { StatsTiles } from "@/components/stats-tiles";
-import { useCreators, type MatchReportView, type ReviewView } from "@/components/use-creators";
+import { useCreators, type MatchReportView, type ReviewView, type UnclaimedView } from "@/components/use-creators";
 import { useStageDrag } from "@/components/use-drag";
 import { PIPELINE, SIDE_LANES, STAGES, type StageSlug } from "@/lib/stages";
 import { needsTiktokMatch } from "@/lib/ops";
@@ -87,17 +87,22 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
           <span className="pill">{items.length}</span>
         </header>
         {items.length === 0 ? <p className="empty">{filtering ? "Nothing matches" : "None yet"}</p> : null}
-        {items.map((creator) => (
-          <CreatorCard
-            key={creator.id}
-            creator={creator}
-            dragging={drag.activeId === creator.id}
-            onOpen={setOpenId}
-            onMove={move}
-            onPointerDown={drag.pointerDown}
-            consumeClick={drag.consumeClick}
-          />
-        ))}
+        {items.map((creator) => {
+          const line = matchReport?.lines.find((item) => item.id === creator.id);
+          return (
+            <CreatorCard
+              key={creator.id}
+              creator={creator}
+              dragging={drag.activeId === creator.id}
+              matchLabel={line?.label}
+              matchState={line?.state}
+              onOpen={setOpenId}
+              onMove={move}
+              onPointerDown={drag.pointerDown}
+              consumeClick={drag.consumeClick}
+            />
+          );
+        })}
       </section>
     );
   }
@@ -168,10 +173,11 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
         ) : null}
       </div>
 
-      {matchReport && matchReport.review.length ? (
+      {matchReport && (matchReport.review.length || matchReport.unclaimed.length) ? (
         <MatchPanel
-          key={matchReport.review.map((item) => `${item.tiktokOrderId}|${item.reference}|${item.recipient}|${item.reason}`).join("\n")}
+          key={`${matchReport.review.map((item) => `${item.tiktokOrderId}|${item.reference}|${item.recipient}|${item.reason}`).join("\n")}\n${matchReport.unclaimed.map((item) => item.tiktokOrderId).join(",")}`}
           review={matchReport.review}
+          unclaimed={matchReport.unclaimed}
           creators={rows}
           pending={pending || matching}
           onConfirm={async (creatorId, tiktokOrderId) => {
@@ -218,7 +224,7 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
 
 function summaryClass(report: MatchReportView) {
   if (report.state === "failed" || report.lines.some((line) => line.state === "failed")) return "failed";
-  if (report.state === "not_ready" || report.state === "not_configured" || report.lines.some((line) => line.state === "unmatched")) {
+  if (report.state === "not_ready" || report.state === "not_configured" || report.lines.some((line) => line.state === "needs_review" || line.state === "no_order")) {
     return "not_configured";
   }
   return "sent";
@@ -226,11 +232,13 @@ function summaryClass(report: MatchReportView) {
 
 function MatchPanel({
   review,
+  unclaimed,
   creators,
   pending,
   onConfirm,
 }: {
   review: ReviewView[];
+  unclaimed: UnclaimedView[];
   creators: CreatorDTO[];
   pending: boolean;
   onConfirm: (creatorId: string, tiktokOrderId: string) => Promise<boolean>;
@@ -251,42 +259,68 @@ function MatchPanel({
     }
   }
 
+  const choicesFor = (item: ReviewView) => (item.candidates && item.candidates.length ? item.candidates : creators.map((creator) => ({ id: creator.id, name: creator.name })));
+
   return (
     <section className="match-panel" aria-label="Orders to confirm">
-      <h2>Confirm these orders</h2>
-      <p className="muted small">These names did not match one creator. Choose who the order belongs to. Nothing is filled in until you confirm.</p>
-      <ul className="match-list">
-        {review.map((item, index) => (
-          <li key={`${item.tiktokOrderId}-${item.reference}-${item.recipient}-${index}`} className="match-review">
-            <div>
-              <b>{item.recipient}</b>
-              {item.reference ? <span className="meta"> {item.reference}</span> : null}
-              {item.tiktokOrderId ? <span className="meta"> {item.tiktokOrderId}</span> : null}
-              {item.freeSample ? <span className="pill">Free sample</span> : null}
-              <p className="ops-status not_configured">{item.reason}</p>
-            </div>
-            {item.tiktokOrderId ? (
-              <form className="match-actions" onSubmit={(event) => void confirm(index, event)}>
-                <select
-                  aria-label={`Creator for ${item.recipient}`}
-                  value={choices[index] ?? ""}
-                  onChange={(event) => setChoices((current) => ({ ...current, [index]: event.target.value }))}
-                >
-                  <option value="">Choose a creator</option>
-                  {creators.map((creator) => (
-                    <option key={creator.id} value={creator.id}>
-                      {creator.name}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn sm" type="submit" disabled={pending || busy !== null || !(choices[index] ?? "")}>
-                  {busy === index ? "Confirming…" : "Confirm"}
-                </button>
-              </form>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      {review.length ? (
+        <>
+          <h2>Needs review</h2>
+          <p className="muted small">These orders match more than one creator, or the saved order ID disagrees with the name. Nothing is sent until you confirm.</p>
+          <ul className="match-list">
+            {review.map((item, index) => (
+              <li key={`${item.tiktokOrderId}-${item.reference}-${item.recipient}-${index}`} className="match-review">
+                <div>
+                  <b>{item.recipient}</b>
+                  {item.reference ? <span className="meta"> {item.reference}</span> : null}
+                  {item.tiktokOrderId ? <span className="meta"> {item.tiktokOrderId}</span> : null}
+                  {item.freeSample ? <span className="pill">Free sample</span> : null}
+                  <p className="ops-status not_configured">{item.reason}</p>
+                  {item.candidates?.length ? <p className="muted small">Candidates: {item.candidates.map((candidate) => candidate.name).join(", ")}</p> : null}
+                </div>
+                {item.tiktokOrderId ? (
+                  <form className="match-actions" onSubmit={(event) => void confirm(index, event)}>
+                    <select
+                      aria-label={`Creator for ${item.recipient}`}
+                      value={choices[index] ?? ""}
+                      onChange={(event) => setChoices((current) => ({ ...current, [index]: event.target.value }))}
+                    >
+                      <option value="">Choose a creator</option>
+                      {choicesFor(item).map((creator) => (
+                        <option key={creator.id} value={creator.id}>
+                          {creator.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="btn sm" type="submit" disabled={pending || busy !== null || !(choices[index] ?? "")}>
+                      {busy === index ? "Confirming…" : "Confirm"}
+                    </button>
+                  </form>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {unclaimed.length ? (
+        <>
+          <h2>Orders with no creator</h2>
+          <p className="muted small">No saved creator matches these. Add the creator and the note before they can be sent.</p>
+          <ul className="match-list">
+            {unclaimed.map((item) => (
+              <li key={`${item.tiktokOrderId}-${item.reference}-${item.recipient}`} className="match-review">
+                <div>
+                  <b>{item.recipient}</b>
+                  {item.reference ? <span className="meta"> {item.reference}</span> : null}
+                  {item.tiktokOrderId ? <span className="meta"> {item.tiktokOrderId}</span> : null}
+                  {item.freeSample ? <span className="pill">Free sample</span> : null}
+                  <p className="ops-status not_configured">No creator for this order.</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
     </section>
   );
 }

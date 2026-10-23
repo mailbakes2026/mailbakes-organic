@@ -8,10 +8,11 @@ import {
   interpretTiktokOrders,
   linesAfterSend,
   matchSummary,
-  planNameMatches,
-  shouldPostMatchedMessage,
+  planOrderMatches,
+  shouldPushSavedMessage,
   type MatchLine,
   type ReviewItem,
+  type UnclaimedOrder,
 } from "@/lib/match-orders";
 import { opsGet, postTiktokMessage, readTiktokMessage, readTiktokOrderId, shouldSendTiktokMessage, type OpsResult, type OpsStatus } from "@/lib/ops";
 import { royalMailTrackUrl, safeHttpUrl } from "@/lib/tracking";
@@ -339,6 +340,7 @@ export type MatchReport = {
   summary: string;
   lines: MatchLine[];
   review: ReviewItem[];
+  unclaimed: UnclaimedOrder[];
   creators: CreatorDetail[];
 };
 
@@ -348,8 +350,15 @@ function blanket(ids: string[], state: MatchLine["state"], label: string): Match
   return ids.map((id) => ({ id, state, label }));
 }
 
-function reportFrom(state: MatchReport["state"], summary: string, lines: MatchLine[] = [], review: ReviewItem[] = [], creators: CreatorDetail[] = []): MatchReport {
-  return { state, summary, lines, review, creators };
+function reportFrom(
+  state: MatchReport["state"],
+  summary: string,
+  lines: MatchLine[] = [],
+  review: ReviewItem[] = [],
+  creators: CreatorDetail[] = [],
+  unclaimed: UnclaimedOrder[] = [],
+): MatchReport {
+  return { state, summary, lines, review, unclaimed, creators };
 }
 
 async function applyTiktokMatch(now: Date): Promise<MatchReport> {
@@ -357,24 +366,24 @@ async function applyTiktokMatch(now: Date): Promise<MatchReport> {
   const ids = rows.map((row) => row.id);
   const fetched = await opsGet("/api/machine/tiktok-orders");
   if (!fetched.ok && fetched.reason === "not_configured") {
-    const summary = matchSummary({ state: "not_configured", matched: 0, sent: 0, unmatched: rows.length });
+    const summary = matchSummary({ state: "not_configured", matched: 0, needsReview: 0, noOrder: rows.length, unclaimed: 0 });
     return reportFrom("not_configured", summary, blanket(ids, "not_configured", summary));
   }
   if (!fetched.ok) {
-    const summary = matchSummary({ state: "failed", error: "The orders app didn't respond.", matched: 0, sent: 0, unmatched: rows.length });
+    const summary = matchSummary({ state: "failed", error: "The orders app didn't respond.", matched: 0, needsReview: 0, noOrder: rows.length, unclaimed: 0 });
     return reportFrom("failed", summary, blanket(ids, "failed", summary));
   }
   const interpreted = interpretTiktokOrders(fetched.status, fetched.body);
   if (interpreted.state === "not_ready") {
-    const summary = matchSummary({ state: "not_ready", matched: 0, sent: 0, unmatched: rows.length });
+    const summary = matchSummary({ state: "not_ready", matched: 0, needsReview: 0, noOrder: rows.length, unclaimed: 0 });
     return reportFrom("not_ready", summary, blanket(ids, "not_ready", summary));
   }
   if (interpreted.state === "failed") {
-    const summary = matchSummary({ state: "failed", error: interpreted.error, matched: 0, sent: 0, unmatched: rows.length });
+    const summary = matchSummary({ state: "failed", error: interpreted.error, matched: 0, needsReview: 0, noOrder: rows.length, unclaimed: 0 });
     return reportFrom("failed", summary, blanket(ids, "failed", summary));
   }
 
-  const plan = planNameMatches(
+  const plan = planOrderMatches(
     rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -391,12 +400,7 @@ async function applyTiktokMatch(now: Date): Promise<MatchReport> {
     const current = rows.find((row) => row.id === match.creatorId);
     if (!current) continue;
     const alreadyAligned = current.tiktokOrderId === match.parcel.tiktokOrderId;
-    const posting = shouldPostMatchedMessage({
-      tiktokMessage: current.tiktokMessage,
-      tiktokOrderId: current.tiktokOrderId,
-      parcelId: match.parcel.tiktokOrderId,
-      opsStatus: current.opsStatus,
-    });
+    const posting = shouldPushSavedMessage(current.tiktokMessage, match.parcel.message);
     if (!alreadyAligned) {
       await prisma.creator.update({
         where: { id: current.id },
@@ -404,14 +408,14 @@ async function applyTiktokMatch(now: Date): Promise<MatchReport> {
           tiktokOrderId: match.parcel.tiktokOrderId,
           ...(!posting ? { opsStatus: "", opsError: "", opsSentAt: null } : {}),
           updatedAt: now,
-          activities: { create: { detail: "Matched the TikTok order by name." } },
+          activities: { create: { detail: match.by === "id" ? "Matched the TikTok order by ID." : "Matched the TikTok order by name." } },
         },
       });
       current.tiktokOrderId = match.parcel.tiktokOrderId;
       touched.add(current.id);
     }
     if (!posting) continue;
-    const result = await postTiktokMessage(current.tiktokOrderId, current.tiktokMessage);
+    const result = await postTiktokMessage(current.tiktokOrderId, current.tiktokMessage, fetch, match.parcel.reference);
     await storeTiktokSend(current.id, current.tiktokOrderId, current.tiktokMessage, result, now);
     touched.add(current.id);
     if (result.status === "sent") sentIds.add(current.id);
@@ -421,7 +425,8 @@ async function applyTiktokMatch(now: Date): Promise<MatchReport> {
   const lines = linesAfterSend(plan.lines, sentIds, failed);
   const matched = plan.matches.length;
   const sent = lines.filter((line) => line.state === "sent").length;
-  const unmatched = lines.filter((line) => line.state === "unmatched").length;
+  const needsReview = lines.filter((line) => line.state === "needs_review").length;
+  const noOrder = lines.filter((line) => line.state === "no_order").length;
   const failedCount = lines.filter((line) => line.state === "failed").length;
   const creators: CreatorDetail[] = [];
   for (const id of touched) {
@@ -430,10 +435,19 @@ async function applyTiktokMatch(now: Date): Promise<MatchReport> {
   }
   return reportFrom(
     "ready",
-    matchSummary({ state: "matched", matched, sent, unmatched, failed: failedCount }),
+    matchSummary({
+      state: "matched",
+      matched,
+      sent,
+      needsReview,
+      noOrder,
+      unclaimed: plan.unclaimed.length,
+      failed: failedCount,
+    }),
     lines,
     [...interpreted.review, ...plan.review],
     creators,
+    plan.unclaimed,
   );
 }
 
@@ -451,12 +465,7 @@ export async function confirmTiktokOrder(creatorId: string, tiktokOrderId: strin
   if (!parsed.value) return { ok: false as const, status: 400, error: "Enter the TikTok order ID." };
   const current = await prisma.creator.findUnique({ where: { id: creatorId } });
   if (!current) return { ok: false as const, status: 404, error: "That creator isn't on the board." };
-  const posting = shouldPostMatchedMessage({
-    tiktokMessage: current.tiktokMessage,
-    tiktokOrderId: current.tiktokOrderId,
-    parcelId: parsed.value,
-    opsStatus: current.opsStatus,
-  });
+  const posting = current.tiktokMessage.trim() !== "" && !(current.opsStatus === "sent" && current.tiktokOrderId === parsed.value);
   if (current.tiktokOrderId !== parsed.value) {
     await prisma.creator.update({
       where: { id: creatorId },

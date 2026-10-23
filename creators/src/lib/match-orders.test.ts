@@ -5,8 +5,8 @@ import {
   linesAfterSend,
   matchSummary,
   normalisePersonName,
-  planNameMatches,
-  shouldPostMatchedMessage,
+  planOrderMatches,
+  shouldPushSavedMessage,
   type NameCreator,
   type TikTokParcel,
 } from "./match-orders.ts";
@@ -34,62 +34,45 @@ function parcel(partial: Partial<TikTokParcel> & { tiktokOrderId: string; recipi
   };
 }
 
-test("names match with case, whitespace, and accents, and keep parentheses", () => {
-  assert.equal(normalisePersonName("  José\u00a0Álvarez  "), normalisePersonName("jose alvarez"));
+test("names match with case, trim, and punctuation, and keep extra words", () => {
+  assert.equal(normalisePersonName("  Ciara-Stone "), normalisePersonName("ciara stone"));
+  assert.equal(normalisePersonName("Patricia\u00a0Fale"), normalisePersonName("patricia fale"));
   assert.notEqual(normalisePersonName("Amber"), normalisePersonName("Amber (Places We Found UK)"));
   assert.notEqual(normalisePersonName("Emily Blatchford"), normalisePersonName("Em (Emily Blatchford)"));
 });
 
-test("a unique name fills a match and a saved message is posted unless that same ID was already sent", () => {
+test("an order ID wins, then one unambiguous name, and the same message is not pushed again", () => {
   const rows = [
     creator({ id: "creator-katharine", name: "Katharine Cruse", tiktokMessage: "On the way" }),
     creator({ id: "creator-patricia", name: "Patricia Fale" }),
     creator({
       id: "creator-eva",
-      name: "Eva Wright",
+      name: "Someone Else",
       tiktokOrderId: "576971003700747100",
       tiktokMessage: "Already there",
-      opsStatus: "sent",
     }),
   ];
   const parcels = [
-    parcel({ tiktokOrderId: "576971003700747076", recipient: "katharine  cruse", freeSample: false }),
-    parcel({ tiktokOrderId: "576971003700747088", recipient: "Patricia Fale", freeSample: true }),
-    parcel({ tiktokOrderId: "576971003700747100", recipient: "Eva Wright" }),
+    parcel({ tiktokOrderId: "576971003700747076", recipient: "katharine  cruse", freeSample: false, message: "" }),
+    parcel({ tiktokOrderId: "576971003700747088", recipient: "Patricia Fale", freeSample: true, message: "" }),
+    parcel({ tiktokOrderId: "576971003700747100", recipient: "Not Eva", message: "Already there" }),
+    parcel({ tiktokOrderId: "576971003700747201", recipient: "Ciara Stone", reference: "#214410" }),
   ];
-  const plan = planNameMatches(rows, parcels);
+  const plan = planOrderMatches(rows, parcels);
   assert.deepEqual(
-    plan.matches.map((item) => item.creatorId),
-    ["creator-katharine", "creator-patricia", "creator-eva"],
+    plan.matches.map((item) => `${item.creatorId}:${item.by}`),
+    ["creator-eva:id", "creator-katharine:name", "creator-patricia:name"],
   );
   assert.equal(plan.review.length, 0);
   assert.equal(plan.lines.find((line) => line.id === "creator-katharine")?.label, "Matched.");
-  assert.equal(plan.lines.find((line) => line.id === "creator-patricia")?.label, "Matched.");
-  assert.equal(plan.lines.find((line) => line.id === "creator-eva")?.label, "Sent.");
-  assert.equal(
-    shouldPostMatchedMessage({ tiktokMessage: "On the way", tiktokOrderId: "", parcelId: "576971003700747076", opsStatus: "" }),
-    true,
-  );
-  assert.equal(
-    shouldPostMatchedMessage({ tiktokMessage: "", tiktokOrderId: "", parcelId: "576971003700747088", opsStatus: "" }),
-    false,
-  );
-  assert.equal(
-    shouldPostMatchedMessage({
-      tiktokMessage: "Already there",
-      tiktokOrderId: "576971003700747100",
-      parcelId: "576971003700747100",
-      opsStatus: "sent",
-    }),
-    false,
-  );
-  assert.equal(
-    shouldPostMatchedMessage({ tiktokMessage: "On the way", tiktokOrderId: "", parcelId: "576971003700747076", opsStatus: "sent" }),
-    true,
-  );
+  assert.equal(plan.unclaimed.map((item) => item.reference).join(","), "#214410");
+  assert.equal(shouldPushSavedMessage("On the way", ""), true);
+  assert.equal(shouldPushSavedMessage("  ", ""), false);
+  assert.equal(shouldPushSavedMessage("Already there", " Already there "), false);
+  assert.equal(shouldPushSavedMessage("On the way", "A different note"), true);
 });
 
-test("ambiguous names, a different saved ID, and a short name are left for confirmation", () => {
+test("ambiguous names, a saved ID that disagrees, and a short name are left for review", () => {
   const rows = [
     creator({ id: "creator-a", name: "Sam" }),
     creator({ id: "creator-b", name: "sam" }),
@@ -103,21 +86,64 @@ test("ambiguous names, a different saved ID, and a short name are left for confi
     parcel({ tiktokOrderId: "555", recipient: "Amber (Places We Found UK)", reference: "#4" }),
     parcel({ tiktokOrderId: "666", recipient: "  ", reference: "#5" }),
   ];
-  const plan = planNameMatches(rows, parcels);
+  const plan = planOrderMatches(rows, parcels);
   assert.deepEqual(plan.matches, []);
-  assert.equal(plan.lines.every((line) => line.state === "unmatched"), true);
-  assert.match(plan.lines.find((line) => line.id === "creator-a")?.label ?? "", /More than one/);
-  assert.match(plan.lines.find((line) => line.id === "creator-amber")?.label ?? "", /different TikTok order ID/);
-  const reasons = plan.review.map((item) => `${item.tiktokOrderId}:${item.reason}`);
-  assert.equal(reasons.some((reason) => reason.startsWith("222:") && /More than one/.test(reason)), true);
-  assert.equal(reasons.some((reason) => reason.startsWith("333:") && reason.endsWith("Unmatched.")), true);
-  assert.equal(reasons.some((reason) => reason.startsWith("444:") && reason.endsWith("Unmatched.")), true);
-  assert.match(reasons.find((reason) => reason.startsWith("555:")) ?? "", /different TikTok order ID/);
-  assert.match(reasons.find((reason) => reason.startsWith("666:")) ?? "", /recipient name/);
+  assert.equal(plan.lines.find((line) => line.id === "creator-a")?.label, "Needs review.");
+  assert.equal(plan.lines.find((line) => line.id === "creator-amber")?.label, "Needs review.");
+  assert.equal(plan.lines.find((line) => line.id === "creator-em")?.label, "No order found.");
+  const sam = plan.review.find((item) => item.tiktokOrderId === "222");
+  assert.deepEqual(sam?.candidates.map((item) => item.id).sort(), ["creator-a", "creator-b"]);
+  assert.match(sam?.reason ?? "", /More than one/);
+  assert.equal(plan.review.find((item) => item.tiktokOrderId === "333"), undefined);
+  assert.match(plan.review.find((item) => item.tiktokOrderId === "555")?.reason ?? "", /does not match this order/);
+  assert.deepEqual(
+    plan.unclaimed.map((item) => item.tiktokOrderId).sort(),
+    ["333", "444", "666"],
+  );
+});
+
+test("a repeated or blank order ID does not hide the other order", () => {
+  const repeated = planOrderMatches(
+    [creator({ id: "creator-ciara", name: "Ciara Stone", tiktokMessage: "A note" })],
+    [
+      parcel({ tiktokOrderId: "100", recipient: "Ciara Stone", reference: "#214410" }),
+      parcel({ tiktokOrderId: "100", recipient: "Someone Else", reference: "#9" }),
+    ],
+  );
+  assert.deepEqual(repeated.matches, []);
+  assert.equal(repeated.review.length, 2);
+  assert.equal(repeated.lines[0].label, "No order found.");
+  assert.equal(repeated.unclaimed.length, 0);
+
+  const blank = planOrderMatches(
+    [creator({ id: "creator-ciara", name: "Ciara Stone" })],
+    [
+      parcel({ tiktokOrderId: "", recipient: "Ciara Stone", reference: "#214410" }),
+      parcel({ tiktokOrderId: "", recipient: "Millie", reference: "#2" }),
+    ],
+  );
+  assert.equal(blank.matches.length, 1);
+  assert.equal(blank.matches[0].by, "name");
+  assert.equal(blank.matches[0].parcel.reference, "#214410");
+  assert.deepEqual(
+    blank.unclaimed.map((item) => item.reference),
+    ["#2"],
+  );
+
+  const missing = interpretTiktokOrders(
+    200,
+    JSON.stringify({ orders: [{ tiktok_order_id: "", recipient_name: "Ciara Stone", reference: "#214410", has_message: false, message: "" }] }),
+  );
+  assert.equal(missing.state, "ready");
+  if (missing.state === "ready") {
+    assert.equal(missing.parcels.length, 1);
+    assert.equal(missing.parcels[0].reference, "#214410");
+    assert.equal(missing.review.length, 0);
+  }
 });
 
 test("two parcels with one name are not assigned", () => {
-  const plan = planNameMatches(
+  const plan = planOrderMatches(
     [creator({ id: "creator-eva", name: "Eva Wright", tiktokMessage: "Hello" })],
     [
       parcel({ tiktokOrderId: "100", recipient: "Eva Wright", reference: "#1" }),
@@ -126,11 +152,12 @@ test("two parcels with one name are not assigned", () => {
   );
   assert.deepEqual(plan.matches, []);
   assert.equal(plan.review.length, 2);
-  assert.match(plan.lines[0].label, /More than one/);
+  assert.deepEqual(plan.review[0].candidates.map((item) => item.name), ["Eva Wright"]);
+  assert.equal(plan.lines[0].label, "Needs review.");
 
-  const none = planNameMatches([creator({ id: "creator-eva", name: "Eva Wright" })], []);
+  const none = planOrderMatches([creator({ id: "creator-eva", name: "Eva Wright" })], []);
   assert.deepEqual(none.matches, []);
-  assert.equal(none.lines[0].label, "Unmatched.");
+  assert.equal(none.lines[0].label, "No order found.");
 });
 
 test("the orders list accepts text IDs and treats a missing route as not ready", () => {
@@ -160,6 +187,7 @@ test("the orders list accepts text IDs and treats a missing route as not ready",
   if (numeric.state === "ready") {
     assert.equal(numeric.parcels.length, 0);
     assert.match(numeric.review[0].reason, /not text/);
+    assert.deepEqual(numeric.review[0].candidates, []);
     assert.equal(numeric.review[0].tiktokOrderId, "");
   }
 
@@ -177,9 +205,9 @@ test("the orders list accepts text IDs and treats a missing route as not ready",
 
   const empty = interpretTiktokOrders(200, '{"orders":[]}');
   assert.equal(empty.state, "ready");
-  assert.equal(matchSummary({ state: "not_ready", matched: 0, sent: 0, unmatched: 3 }), "Orders app not ready.");
-  const summary = matchSummary({ state: "matched", matched: 1, sent: 1, unmatched: 7 });
-  assert.equal(summary, "Matched 1. Sent 1. Unmatched 7.");
+  assert.equal(matchSummary({ state: "not_ready", matched: 0, needsReview: 0, noOrder: 3, unclaimed: 0 }), "Orders app not ready.");
+  const summary = matchSummary({ state: "matched", matched: 2, sent: 1, needsReview: 1, noOrder: 4, unclaimed: 5 });
+  assert.equal(summary, "Matched 2. Sent 1. Needs review 1. No order found 4. Orders with no creator 5.");
   assert.match(matchSummary({ state: "failed", error: `bearer ${SECRET}`, matched: 0, sent: 0, unmatched: 0 }), /^Failed: bearer\.?$|^Failed: bearer$/);
   assert.equal(matchSummary({ state: "failed", error: `bearer ${SECRET}`, matched: 0, sent: 0, unmatched: 0 }).includes(SECRET), false);
 });

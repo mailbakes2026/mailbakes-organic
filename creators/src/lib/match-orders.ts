@@ -20,11 +20,11 @@ export type NameCreator = {
   opsStatus: string;
 };
 
-export type NameMatch = { creatorId: string; parcel: TikTokParcel };
-
-export type MatchState = "matched" | "sent" | "unmatched" | "not_ready" | "not_configured" | "failed" | "busy";
+export type MatchState = "matched" | "sent" | "needs_review" | "no_order" | "not_ready" | "not_configured" | "failed" | "busy";
 
 export type MatchLine = { id: string; state: MatchState; label: string };
+
+export type Candidate = { id: string; name: string };
 
 export type ReviewItem = {
   tiktokOrderId: string;
@@ -32,40 +32,60 @@ export type ReviewItem = {
   reference: string;
   freeSample: boolean;
   reason: string;
+  candidates: Candidate[];
 };
+
+export type UnclaimedOrder = {
+  tiktokOrderId: string;
+  recipient: string;
+  reference: string;
+  freeSample: boolean;
+};
+
+export type NameMatch = { creatorId: string; parcel: TikTokParcel; by: "id" | "name" };
 
 export type NamePlan = {
   matches: NameMatch[];
   review: ReviewItem[];
+  unclaimed: UnclaimedOrder[];
   lines: MatchLine[];
 };
 
 const NOT_READY = "Orders app not ready.";
 
-/** Case, whitespace, and accent insensitive. Parentheses and spelling stay, so a short name is not a guess. */
+/** Case-insensitive, trimmed, punctuation ignored. Leftover words still have to match, so a shorter name is not a guess. */
 export function normalisePersonName(value: string) {
   return value
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
+    .replace(/\p{P}+/gu, " ")
     .replace(/[\s\u00a0]+/g, " ")
     .trim()
     .toLocaleLowerCase("en-GB");
 }
 
-export function matchSummary(input: { state: MatchState; error?: string; matched: number; sent: number; unmatched: number; failed?: number }) {
+export function matchSummary(input: {
+  state: MatchState;
+  error?: string;
+  matched: number;
+  needsReview: number;
+  noOrder: number;
+  unclaimed: number;
+  sent?: number;
+  failed?: number;
+}) {
   if (input.state === "not_ready") return NOT_READY;
   if (input.state === "not_configured") return "Not configured. Set OPS_APP_URL and OPS_API_TOKEN on the server.";
   if (input.state === "busy") return "Matching orders…";
   if (input.state === "failed") return input.error ? `Failed: ${publicError(input.error)}` : "Failed.";
-  const base = `Matched ${input.matched}. Sent ${input.sent}. Unmatched ${input.unmatched}.`;
-  if (input.failed) return `${base} Failed ${input.failed}.`;
-  return base;
+  const sent = input.sent ? ` Sent ${input.sent}.` : "";
+  const failed = input.failed ? ` Failed ${input.failed}.` : "";
+  return `Matched ${input.matched}.${sent} Needs review ${input.needsReview}. No order found ${input.noOrder}. Orders with no creator ${input.unclaimed}.${failed}`;
 }
 
-/** Post the saved Creators message. An order that is already marked sent for this same ID is left alone. */
-export function shouldPostMatchedMessage(input: { tiktokMessage: string; tiktokOrderId: string; parcelId: string; opsStatus: string }) {
-  if (!input.tiktokMessage.trim()) return false;
-  return !(input.tiktokOrderId === input.parcelId && input.opsStatus === "sent");
+/** Push a saved message only. An order that already carries that same text is left alone. */
+export function shouldPushSavedMessage(saved: string, orderMessage: string) {
+  const message = saved.trim();
+  if (!message) return false;
+  return message !== orderMessage.trim();
 }
 
 function publicError(error: string) {
@@ -89,14 +109,15 @@ function readParcel(raw: unknown): { parcel?: TikTokParcel; review?: ReviewItem 
   const parsed = readTiktokOrderId(idRaw);
   const freeSample = flag(record.free_sample) || flag(record.freeSample);
   const message = text(record.message);
-  if (!parsed.ok || !parsed.value) {
+  if (!parsed.ok) {
     return {
       review: {
         tiktokOrderId: "",
         recipient: recipient || "No recipient name",
         reference,
         freeSample,
-        reason: "Unmatched. The TikTok order ID was not text, so it was not used.",
+        reason: "Needs review. The TikTok order ID was not text, so it was not used.",
+        candidates: [],
       },
     };
   }
@@ -149,86 +170,129 @@ function lineFor(id: string, state: MatchState, label: string): MatchLine {
   return { id, state, label };
 }
 
-/** Exact normalised names only. Two creators or two parcels with the same name are left for Millie. */
-export function planNameMatches(creators: NameCreator[], parcels: TikTokParcel[]): NamePlan {
-  const creatorsByName = new Map<string, NameCreator[]>();
+function candidatesOf(creators: NameCreator[]): Candidate[] {
+  return creators.map((creator) => ({ id: creator.id, name: creator.name }));
+}
+
+function reviewItem(parcel: TikTokParcel, reason: string, candidates: Candidate[]): ReviewItem {
+  return {
+    tiktokOrderId: parcel.tiktokOrderId,
+    recipient: parcel.recipient || "No recipient name",
+    reference: parcel.reference,
+    freeSample: parcel.freeSample,
+    reason,
+    candidates,
+  };
+}
+
+/** TikTok order ID first. A name match is kept only when one creator and one order share it. */
+export function planOrderMatches(creators: NameCreator[], parcels: TikTokParcel[]): NamePlan {
+  const matches: NameMatch[] = [];
+  const claimedCreators = new Set<string>();
+  const claimedParcelIndexes = new Set<number>();
+  const review: ReviewItem[] = [];
+  const reviewCreatorIds = new Set<string>();
+
+  const creatorsById = new Map<string, NameCreator[]>();
   for (const creator of creators) {
+    const id = creator.tiktokOrderId.trim();
+    if (!id) continue;
+    const group = creatorsById.get(id) ?? [];
+    group.push(creator);
+    creatorsById.set(id, group);
+  }
+  const parcelIndexesById = new Map<string, number[]>();
+  parcels.forEach((parcel, index) => {
+    const id = parcel.tiktokOrderId.trim();
+    if (!id) return;
+    const group = parcelIndexesById.get(id) ?? [];
+    group.push(index);
+    parcelIndexesById.set(id, group);
+  });
+
+  for (const [id, group] of creatorsById) {
+    const indexes = parcelIndexesById.get(id) ?? [];
+    if (group.length === 1 && indexes.length === 1) {
+      matches.push({ creatorId: group[0].id, parcel: parcels[indexes[0]], by: "id" });
+      claimedCreators.add(group[0].id);
+      claimedParcelIndexes.add(indexes[0]);
+      continue;
+    }
+    if (indexes.length === 0) continue;
+    const names = candidatesOf(group);
+    for (const creator of group) reviewCreatorIds.add(creator.id);
+    for (const index of indexes) {
+      review.push(reviewItem(parcels[index], "Needs review. More than one creator or order uses this TikTok order ID.", names));
+      claimedParcelIndexes.add(index);
+    }
+  }
+
+  for (const [id, indexes] of parcelIndexesById) {
+    if (indexes.length < 2 || indexes.every((index) => claimedParcelIndexes.has(index))) continue;
+    const names = candidatesOf(creatorsById.get(id) ?? []);
+    for (const index of indexes) {
+      if (claimedParcelIndexes.has(index)) continue;
+      review.push(reviewItem(parcels[index], "Needs review. More than one creator or order uses this TikTok order ID.", names));
+      claimedParcelIndexes.add(index);
+    }
+  }
+
+  const openCreators = creators.filter((creator) => !claimedCreators.has(creator.id) && !reviewCreatorIds.has(creator.id));
+  const openParcels = parcels.flatMap((parcel, index) => (claimedParcelIndexes.has(index) ? [] : [{ parcel, index }]));
+  const creatorsByName = new Map<string, NameCreator[]>();
+  for (const creator of openCreators) {
     const key = normalisePersonName(creator.name);
     if (!key) continue;
     const group = creatorsByName.get(key) ?? [];
     group.push(creator);
     creatorsByName.set(key, group);
   }
-  const parcelsByName = new Map<string, TikTokParcel[]>();
-  const review: ReviewItem[] = [];
-  for (const parcel of parcels) {
-    const key = normalisePersonName(parcel.recipient);
-    if (!key) {
-      review.push({
-        tiktokOrderId: parcel.tiktokOrderId,
-        recipient: "No recipient name",
-        reference: parcel.reference,
-        freeSample: parcel.freeSample,
-        reason: "Unmatched. The orders app did not send a recipient name.",
-      });
-      continue;
-    }
+  const parcelsByName = new Map<string, { parcel: TikTokParcel; index: number }[]>();
+  for (const item of openParcels) {
+    const key = normalisePersonName(item.parcel.recipient);
+    if (!key) continue;
     const group = parcelsByName.get(key) ?? [];
-    group.push(parcel);
+    group.push(item);
     parcelsByName.set(key, group);
   }
 
-  const matches: NameMatch[] = [];
-  const ambiguousIds = new Set<string>();
-  const conflictIds = new Set<string>();
-  for (const [key, namedParcels] of parcelsByName) {
-    const namedCreators = creatorsByName.get(key) ?? [];
-    if (namedCreators.length === 1 && namedParcels.length === 1) {
-      const creator = namedCreators[0];
-      const parcel = namedParcels[0];
-      if (creator.tiktokOrderId.trim() && creator.tiktokOrderId !== parcel.tiktokOrderId) {
-        conflictIds.add(creator.id);
-        review.push({
-          tiktokOrderId: parcel.tiktokOrderId,
-          recipient: parcel.recipient,
-          reference: parcel.reference,
-          freeSample: parcel.freeSample,
-          reason: `Unmatched. ${creator.name} already has a different TikTok order ID.`,
-        });
-        continue;
-      }
-      matches.push({ creatorId: creator.id, parcel });
+  for (const [key, namedCreators] of creatorsByName) {
+    const namedParcels = parcelsByName.get(key) ?? [];
+    if (namedParcels.length === 0) continue;
+    const names = candidatesOf(namedCreators);
+    if (namedCreators.length === 1 && namedParcels.length === 1 && !namedCreators[0].tiktokOrderId.trim()) {
+      matches.push({ creatorId: namedCreators[0].id, parcel: namedParcels[0].parcel, by: "name" });
+      claimedCreators.add(namedCreators[0].id);
+      claimedParcelIndexes.add(namedParcels[0].index);
       continue;
     }
     const reason =
-      namedCreators.length === 0
-        ? "Unmatched."
-        : "Unmatched. More than one creator or order uses this name.";
-    for (const creator of namedCreators) ambiguousIds.add(creator.id);
-    for (const parcel of namedParcels) {
-      review.push({
-        tiktokOrderId: parcel.tiktokOrderId,
-        recipient: parcel.recipient,
-        reference: parcel.reference,
-        freeSample: parcel.freeSample,
-        reason,
-      });
+      namedCreators.length === 1 && namedParcels.length === 1
+        ? "Needs review. The saved TikTok order ID does not match this order."
+        : "Needs review. More than one creator or order uses this name.";
+    for (const creator of namedCreators) reviewCreatorIds.add(creator.id);
+    for (const item of namedParcels) {
+      review.push(reviewItem(item.parcel, reason, names));
+      claimedParcelIndexes.add(item.index);
     }
   }
 
+  const unclaimed: UnclaimedOrder[] = parcels
+    .filter((_, index) => !claimedParcelIndexes.has(index))
+    .map((parcel) => ({
+      tiktokOrderId: parcel.tiktokOrderId,
+      recipient: parcel.recipient || "No recipient name",
+      reference: parcel.reference,
+      freeSample: parcel.freeSample,
+    }));
+
   const lines: MatchLine[] = creators.map((creator) => {
-    const match = matches.find((item) => item.creatorId === creator.id);
-    if (match) {
-      const aligned = creator.tiktokOrderId === match.parcel.tiktokOrderId;
-      if (aligned && creator.tiktokMessage.trim() && creator.opsStatus === "sent") return lineFor(creator.id, "sent", "Sent.");
-      return lineFor(creator.id, "matched", "Matched.");
-    }
-    if (conflictIds.has(creator.id)) return lineFor(creator.id, "unmatched", "Unmatched. This sample already has a different TikTok order ID.");
-    if (ambiguousIds.has(creator.id)) return lineFor(creator.id, "unmatched", "Unmatched. More than one creator or order uses this name.");
-    return lineFor(creator.id, "unmatched", "Unmatched.");
+    if (matches.some((item) => item.creatorId === creator.id)) return lineFor(creator.id, "matched", "Matched.");
+    if (reviewCreatorIds.has(creator.id)) return lineFor(creator.id, "needs_review", "Needs review.");
+    return lineFor(creator.id, "no_order", "No order found.");
   });
 
-  return { matches, review, lines };
+  return { matches, review, unclaimed, lines };
 }
 
 export function linesAfterSend(lines: MatchLine[], sentIds: Set<string>, failed: { id: string; error: string }[]) {

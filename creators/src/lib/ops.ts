@@ -182,9 +182,13 @@ export async function postTiktokMessage(
   tiktokOrderId: string,
   message: string,
   fetchImpl: typeof fetch = fetch,
+  reference = "",
 ): Promise<OpsResult> {
   const target = opsTarget();
   if (!target) return { status: "not_configured", error: "Set OPS_APP_URL and OPS_API_TOKEN on the server." };
+  const payload: { message: string; tiktok_order_id?: string; reference?: string } = { message };
+  if (tiktokOrderId) payload.tiktok_order_id = tiktokOrderId;
+  if (reference) payload.reference = reference;
   let response: Response;
   try {
     response = await fetchImpl(messageUrl(target.url), {
@@ -195,7 +199,7 @@ export async function postTiktokMessage(
         Authorization: `Bearer ${target.token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ tiktok_order_id: tiktokOrderId, message }),
+      body: JSON.stringify(payload),
     });
   } catch {
     return { status: "failed", error: "The orders app didn't respond." };

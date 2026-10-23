@@ -122,6 +122,7 @@
   width: 100%;
   min-width: 0;
 }
+.creator .ops-status { margin-top: 4px; font-size: 12px; }
 .creator-name {
   font-weight: 750;
   font-size: 14px;

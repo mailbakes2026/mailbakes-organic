@@ -16,6 +16,14 @@ export type ReviewView = {
   reference: string;
   freeSample: boolean;
   reason: string;
+  candidates?: { id: string; name: string }[];
+};
+
+export type UnclaimedView = {
+  tiktokOrderId: string;
+  recipient: string;
+  reference: string;
+  freeSample: boolean;
 };
 
 export type MatchReportView = {
@@ -23,6 +31,7 @@ export type MatchReportView = {
   summary: string;
   lines: MatchLineView[];
   review: ReviewView[];
+  unclaimed: UnclaimedView[];
 };
 
 export type MatchOutcome = { ok: true; report: MatchReportView } | { ok: false; error: string };
@@ -231,6 +240,7 @@ export function useCreators(initial: CreatorDTO[]) {
         summary: data.summary,
         lines: data.lines,
         review: data.review,
+        unclaimed: data.unclaimed ?? [],
       };
       mergeCreators(data.creators);
       setMatchReport(report);
