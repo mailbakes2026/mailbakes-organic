@@ -75,4 +75,6 @@ Tracking numbers for Royal Mail (or a blank courier) link to `https://www.royalm
 
 ## TikTok orders
 
-Each creator has a TikTok order ID and a message for that sample. Send to orders stores both in this app, then `POST {OPS_APP_URL}/api/tiktok/message` with `Authorization: Bearer` and `{"tiktok_order_id","message"}`. The order ID stays text. The drawer shows Sent, Failed with the reason, or Not configured when those env vars are missing. Retry sends the saved message again. The pipeline filter **No TikTok match** lists creators with no order ID or no message yet.
+Each creator has a TikTok order ID and a message for that sample. The order ID stays text. Saving a sample that has both an order ID and a message stores them here and posts `{"tiktok_order_id","message"}` to `{OPS_APP_URL}/api/tiktok/message` with `Authorization: Bearer`. Send to orders and Retry do the same post again. The drawer shows Sent, Failed with the reason, or Not configured when those env vars are missing. **Sync all** on the pipeline posts every sample that has an ID and a message and is not already marked Sent.
+
+The orders app does not currently return a message to this app. A GET of `/api/tiktok/message` answers `401 {"error":"Not signed in"}` and only allows POST. The drawer says there is no read endpoint until that GET, with the same bearer token, returns JSON `{"tiktok_order_id":"<id>","found":true,"message":"<text>"}` (or `"found":false` when no parcel matches). The pipeline filter **No TikTok match** lists creators with no order ID or no message yet.

@@ -13,7 +13,7 @@ import { matchesQuery } from "@/lib/search";
 import type { CreatorDTO, CreatorFields } from "@/lib/types";
 
 export function Board({ creators }: { creators: CreatorDTO[] }) {
-  const { rows, error, setError, pending, patch, remove } = useCreators(creators);
+  const { rows, error, setError, pending, patch, remove, syncOrders } = useCreators(creators);
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<StageSlug | "">("");
   const [rushOnly, setRushOnly] = useState(false);
@@ -22,6 +22,7 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
   const [postedOnly, setPostedOnly] = useState(false);
   const [unmatchedOnly, setUnmatchedOnly] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [syncNote, setSyncNote] = useState<string | null>(null);
 
   const filtering = Boolean(query.trim() || stageFilter || rushOnly || awaitingOnly || worksOnly || postedOnly || unmatchedOnly);
   const visible = useMemo(
@@ -49,6 +50,12 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
   const open = rows.find((row) => row.id === openId) ?? null;
   const columns = stageFilter ? PIPELINE.filter((stage) => stage.slug === stageFilter) : PIPELINE;
   const lanes = stageFilter ? SIDE_LANES.filter((stage) => stage.slug === stageFilter) : SIDE_LANES;
+
+  async function syncAll() {
+    setSyncNote(null);
+    const result = await syncOrders();
+    if (result.ok) setSyncNote(result.summary);
+  }
 
   async function save(fields: CreatorFields & { sendToOrders?: boolean }) {
     if (!open) return false;
@@ -141,6 +148,10 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
           <input type="checkbox" checked={unmatchedOnly} onChange={(event) => setUnmatchedOnly(event.target.checked)} />
           No TikTok match
         </label>
+        <button className="btn ghost sm" type="button" disabled={pending} onClick={syncAll}>
+          Sync all
+        </button>
+        {syncNote ? <span className="muted small">{syncNote}</span> : null}
         {filtering ? (
           <span className="muted small">
             {visible.length} of {rows.length}

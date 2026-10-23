@@ -146,5 +146,41 @@ export function useCreators(initial: CreatorDTO[]) {
     }
   }
 
-  return { rows, error, setError, pending, patch, create, remove };
+  async function syncOrders() {
+    setError(null);
+    setPending(true);
+    try {
+      const response = await fetch("/api/tiktok/sync", { method: "POST" });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        summary?: string;
+        creators?: CreatorDetail[];
+      };
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return { ok: false as const, error: "Sign in required." };
+      }
+      if (!response.ok || !data.summary) {
+        const message = data.error || "Sync didn't finish.";
+        setError(message);
+        return { ok: false as const, error: message };
+      }
+      if (data.creators?.length) {
+        const byId = new Map(data.creators.map((creator) => [creator.id, creator]));
+        const merged = sortCreators(rowsRef.current.map((row) => (byId.has(row.id) ? { ...row, ...byId.get(row.id)! } : row)));
+        rowsRef.current = merged;
+        setRows(merged);
+      }
+      router.refresh();
+      return { ok: true as const, summary: data.summary };
+    } catch {
+      const message = "Sync didn't finish.";
+      setError(message);
+      return { ok: false as const, error: message };
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return { rows, error, setError, pending, patch, create, remove, syncOrders };
 }

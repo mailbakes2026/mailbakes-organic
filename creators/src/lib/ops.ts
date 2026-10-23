@@ -25,6 +25,79 @@ export function opsStatusLabel(status: string, error: string) {
   return "Not sent yet.";
 }
 
+/** Save posts when an order ID and message are present and this sample is not already marked sent. */
+export function shouldSendTiktokMessage(input: {
+  tiktokOrderId: string;
+  tiktokMessage: string;
+  previousId: string;
+  previousMessage: string;
+  opsStatus: string;
+  explicit: boolean;
+}) {
+  if (input.explicit) return true;
+  if (!input.tiktokOrderId.trim() || !input.tiktokMessage.trim()) return false;
+  if (input.tiktokOrderId !== input.previousId || input.tiktokMessage !== input.previousMessage) return true;
+  return input.opsStatus !== "sent";
+}
+
+export type RemoteState = "has_message" | "different" | "missing" | "no_parcel" | "unavailable" | "not_configured" | "failed";
+
+export type RemoteCheck = { state: RemoteState; label: string };
+
+const NO_READ = "The orders app has no read endpoint for TikTok messages.";
+
+export function remoteStatusClass(state: string) {
+  if (state === "has_message") return "sent";
+  if (state === "failed" || state === "different") return "failed";
+  if (state === "missing" || state === "no_parcel" || state === "not_configured") return "not_configured";
+  return "empty";
+}
+
+/** Interpret a GET of the orders app. A session-only 401 means there is nothing to read with the bearer token. */
+export function interpretTiktokRead(status: number, body: string, localMessage: string): RemoteCheck {
+  const clean = safeReason(body);
+  if (status === 401) {
+    if (/not signed in/i.test(clean)) return { state: "unavailable", label: NO_READ };
+    return { state: "failed", label: "Could not check the orders app: Bad token" };
+  }
+  if (status === 404 || status === 405) return { state: "unavailable", label: NO_READ };
+  if (status >= 300 && status < 400) {
+    return { state: "failed", label: "Could not check the orders app: The orders app redirected the check." };
+  }
+  if (status < 200 || status >= 300) {
+    return { state: "failed", label: `Could not check the orders app: The orders app returned ${status}.` };
+  }
+  if (!clean.startsWith("{") || clean.includes("<")) return { state: "unavailable", label: NO_READ };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return { state: "unavailable", label: NO_READ };
+  }
+  if (!parsed || typeof parsed !== "object") return { state: "unavailable", label: NO_READ };
+  const record = parsed as { found?: unknown; message?: unknown };
+  if (!("message" in record) && !("found" in record)) return { state: "unavailable", label: NO_READ };
+  if (record.found === false) return { state: "no_parcel", label: "The orders app has no parcel with this TikTok order ID." };
+  const message = typeof record.message === "string" ? record.message.trim() : "";
+  if (!message) return { state: "missing", label: "The orders app is still waiting for this message." };
+  if (localMessage.trim() && message !== localMessage.trim()) {
+    return { state: "different", label: "The orders app has a different message." };
+  }
+  return { state: "has_message", label: "The orders app has this message." };
+}
+
+export function syncSummary(results: { name: string; status: string; error: string }[]) {
+  if (results.length === 0) return "Nothing waiting to send.";
+  const parts: string[] = [];
+  const sent = results.filter((row) => row.status === "sent");
+  const failed = results.filter((row) => row.status === "failed");
+  const bare = results.filter((row) => row.status === "not_configured");
+  if (sent.length) parts.push(`Sent ${sent.map((row) => row.name).join(", ")}.`);
+  if (failed.length) parts.push(`Failed ${failed.map((row) => `${row.name}: ${row.error || "failed"}`).join("; ")}.`);
+  if (bare.length) parts.push(`Not configured for ${bare.map((row) => row.name).join(", ")}.`);
+  return parts.join(" ");
+}
+
 function opsTarget() {
   const url = (process.env.OPS_APP_URL ?? "").trim().replace(/\/$/, "");
   const token = (process.env.OPS_API_TOKEN ?? "").trim();
@@ -41,6 +114,12 @@ function opsTarget() {
 function messageUrl(base: string) {
   if (base.endsWith("/api/tiktok/message")) return base;
   return `${base}/api/tiktok/message`;
+}
+
+function readUrl(base: string, tiktokOrderId: string) {
+  const url = new URL(messageUrl(base));
+  url.searchParams.set("tiktok_order_id", tiktokOrderId);
+  return url.toString();
 }
 
 function safeReason(text: string) {
@@ -96,4 +175,31 @@ export async function postTiktokMessage(
   }
   if (response.ok) return { status: "sent", error: "" };
   return { status: "failed", error: await failureReason(response) };
+}
+
+export async function readTiktokMessage(
+  tiktokOrderId: string,
+  localMessage: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<RemoteCheck> {
+  const target = opsTarget();
+  if (!target) return { state: "not_configured", label: opsStatusLabel("not_configured", "") };
+  let response: Response;
+  try {
+    response = await fetchImpl(readUrl(target.url, tiktokOrderId), {
+      method: "GET",
+      redirect: "manual",
+      signal: AbortSignal.timeout(12_000),
+      headers: { Authorization: `Bearer ${target.token}`, Accept: "application/json" },
+    });
+  } catch {
+    return { state: "failed", label: "Could not check the orders app: The orders app didn't respond." };
+  }
+  let body = "";
+  try {
+    body = await response.text();
+  } catch {
+    body = "";
+  }
+  return interpretTiktokRead(response.status, body, localMessage);
 }

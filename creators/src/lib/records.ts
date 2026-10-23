@@ -4,7 +4,7 @@ import { sortCreators } from "@/lib/order";
 import type { CreatorPatch, InquiryInput } from "@/lib/parse";
 import { SEEDED_AT, SHEET_ACTIVITY, buildSeed } from "@/lib/seed-build";
 import { STAGES, type StageSlug } from "@/lib/stages";
-import { postTiktokMessage, type OpsStatus } from "@/lib/ops";
+import { postTiktokMessage, readTiktokMessage, shouldSendTiktokMessage, type OpsResult, type OpsStatus } from "@/lib/ops";
 import { royalMailTrackUrl, safeHttpUrl } from "@/lib/tracking";
 import type { ActivityDTO, CreatorDetail, CreatorDTO, CreatorFields } from "@/lib/types";
 import { applyUpdate } from "@/lib/update";
@@ -204,7 +204,16 @@ export async function updateCreator(id: string, patch: CreatorPatch, now = new D
   const applied = applyUpdate(fieldsOf(current), patch, now);
   if (!applied.ok) return { ok: false as const, status: 400, error: applied.error };
   const next = applied.next;
-  if (patch.sendToOrders) {
+  const explicit = patch.sendToOrders === true;
+  const sending = shouldSendTiktokMessage({
+    tiktokOrderId: next.tiktokOrderId,
+    tiktokMessage: next.tiktokMessage,
+    previousId: current.tiktokOrderId,
+    previousMessage: current.tiktokMessage,
+    opsStatus: current.opsStatus,
+    explicit,
+  });
+  if (explicit) {
     if (!next.tiktokOrderId) return { ok: false as const, status: 400, error: "Enter the TikTok order ID." };
     if (!next.tiktokMessage.trim()) return { ok: false as const, status: 400, error: "Enter a message for the order." };
   }
@@ -234,38 +243,72 @@ export async function updateCreator(id: string, patch: CreatorPatch, now = new D
         worksWell: next.worksWell,
         tiktokOrderId: next.tiktokOrderId,
         tiktokMessage: next.tiktokMessage,
-        ...(messageChanged && !patch.sendToOrders ? { opsStatus: "", opsError: "", opsSentAt: null } : {}),
+        ...(messageChanged && !sending ? { opsStatus: "", opsError: "", opsSentAt: null } : {}),
         updatedAt: now,
         activities: { create: { detail: applied.detail } },
       },
     });
   }
 
-  if (patch.sendToOrders) {
+  if (sending) {
     const result = await postTiktokMessage(next.tiktokOrderId, next.tiktokMessage);
-    const detail =
-      result.status === "sent"
-        ? "Sent the TikTok order message."
-        : result.status === "not_configured"
-          ? "TikTok order message was not sent. The orders app is not configured."
-          : `The TikTok order message failed: ${result.error}`;
-    await prisma.creator.update({
-      where: { id },
-      data: {
-        tiktokOrderId: next.tiktokOrderId,
-        tiktokMessage: next.tiktokMessage,
-        opsStatus: result.status,
-        opsError: result.error,
-        opsSentAt: result.status === "sent" ? now : null,
-        updatedAt: now,
-        activities: { create: { detail } },
-      },
-    });
+    await storeTiktokSend(id, next.tiktokOrderId, next.tiktokMessage, result, now);
   }
 
   const creator = await getCreator(id);
   if (!creator) return { ok: false as const, status: 404, error: "That creator isn't on the board." };
   return { ok: true as const, creator };
+}
+
+function sendDetail(result: OpsResult) {
+  if (result.status === "sent") return "Sent the TikTok order message.";
+  if (result.status === "not_configured") return "TikTok order message was not sent. The orders app is not configured.";
+  return `The TikTok order message failed: ${result.error}`;
+}
+
+async function storeTiktokSend(id: string, tiktokOrderId: string, tiktokMessage: string, result: OpsResult, now: Date) {
+  await prisma.creator.update({
+    where: { id },
+    data: {
+      tiktokOrderId,
+      tiktokMessage,
+      opsStatus: result.status,
+      opsError: result.error,
+      opsSentAt: result.status === "sent" ? now : null,
+      updatedAt: now,
+      activities: { create: { detail: sendDetail(result) } },
+    },
+  });
+}
+
+export async function syncUnsentTiktokMessages(now = new Date()) {
+  const rows = await prisma.creator.findMany({
+    where: { NOT: { opsStatus: "sent" } },
+    orderBy: { name: "asc" },
+  });
+  const waiting = rows.filter((row) => row.tiktokOrderId.trim() !== "" && row.tiktokMessage.trim() !== "");
+  const results: { id: string; name: string; tiktokOrderId: string; status: OpsStatus; error: string }[] = [];
+  for (const row of waiting) {
+    const result = await postTiktokMessage(row.tiktokOrderId, row.tiktokMessage);
+    await storeTiktokSend(row.id, row.tiktokOrderId, row.tiktokMessage, result, now);
+    results.push({
+      id: row.id,
+      name: row.name,
+      tiktokOrderId: row.tiktokOrderId,
+      status: result.status,
+      error: result.error,
+    });
+  }
+  return results;
+}
+
+export async function checkTiktokMessage(id: string) {
+  const current = await prisma.creator.findUnique({ where: { id } });
+  if (!current) return null;
+  if (!current.tiktokOrderId.trim()) {
+    return { state: "missing" as const, label: "Add a TikTok order ID to check the orders app." };
+  }
+  return readTiktokMessage(current.tiktokOrderId, current.tiktokMessage);
 }
 
 export async function deleteCreator(id: string) {

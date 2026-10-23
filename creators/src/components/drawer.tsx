@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { TikTokLink } from "@/components/tiktok-link";
 import { formatLondon, londonToday } from "@/lib/dates";
 import { STAGES, type StageSlug } from "@/lib/stages";
-import { opsStatusLabel } from "@/lib/ops";
+import { opsStatusLabel, remoteStatusClass, type RemoteCheck } from "@/lib/ops";
 import { normaliseHandle, tiktokProfileUrl } from "@/lib/tiktok";
 import { royalMailTrackUrl } from "@/lib/tracking";
 import type { ActivityDTO, CreatorDTO, CreatorFields } from "@/lib/types";
@@ -55,6 +55,8 @@ export function Drawer({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [activities, setActivities] = useState<ActivityDTO[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [remote, setRemote] = useState<RemoteCheck | null>(null);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     if (!dirty) setForm(fieldsOf(creator));
@@ -158,6 +160,28 @@ export function Drawer({
   const orderDraftChanged = form.tiktokOrderId !== creator.tiktokOrderId || form.tiktokMessage !== creator.tiktokMessage;
   const orderStatus = orderDraftChanged ? "" : creator.opsStatus;
   const orderError = orderDraftChanged ? "" : creator.opsError;
+
+  useEffect(() => {
+    if (orderDraftChanged || !creator.tiktokOrderId.trim()) {
+      setRemote(null);
+      setChecking(false);
+      return;
+    }
+    const controller = new AbortController();
+    setChecking(true);
+    fetch(`/api/tiktok/check?id=${encodeURIComponent(creator.id)}`, { signal: controller.signal })
+      .then(async (response) => {
+        const data = (await response.json().catch(() => ({}))) as { check?: RemoteCheck };
+        if (!controller.signal.aborted && data.check) setRemote(data.check);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setRemote(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setChecking(false);
+      });
+    return () => controller.abort();
+  }, [creator.id, creator.tiktokOrderId, creator.tiktokMessage, creator.opsStatus, creator.opsSentAt, orderDraftChanged]);
 
   return (
     <div className="drawer-back" onMouseDown={requestClose}>
@@ -305,8 +329,17 @@ export function Drawer({
             </label>
           </div>
           <p className={`ops-status ${orderStatus || "empty"}`}>{opsStatusLabel(orderStatus, orderError)}</p>
+          {orderDraftChanged ? null : checking && !remote ? <p className="ops-status empty">Checking the orders app…</p> : null}
+          {remote && !orderDraftChanged ? (
+            <p className={`ops-status ${remoteStatusClass(remote.state)}`}>{remote.label}</p>
+          ) : null}
           <button className="btn" type="button" disabled={pending} onClick={sendOrder}>
-            {orderStatus === "failed" || orderStatus === "not_configured" ? "Retry" : "Send to orders"}
+            {orderStatus === "failed" ||
+            orderStatus === "not_configured" ||
+            remote?.state === "different" ||
+            (remote?.state === "missing" && orderStatus === "sent")
+              ? "Retry"
+              : "Send to orders"}
           </button>
 
           {form.stage === "declined" ? (
