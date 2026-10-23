@@ -15,7 +15,7 @@ function blank(value: number | null) {
 }
 
 export function Performance({ creators }: { creators: CreatorDTO[] }) {
-  const { rows, error, setError, pending, patch, remove } = useCreators(creators);
+  const { rows, error, setError, pending, patch, remove, matchOrders } = useCreators(creators);
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const ranked = useMemo(
@@ -120,6 +120,7 @@ export function Performance({ creators }: { creators: CreatorDTO[] }) {
             if (result.ok) setOpenId(null);
             return result.ok;
           }}
+          onMatch={matchOrders}
         />
       ) : null}
     </>

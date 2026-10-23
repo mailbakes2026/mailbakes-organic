@@ -20,7 +20,7 @@ const EMPTY: InquiryInput = {
 };
 
 export function Inquiries({ creators, apiReady }: { creators: CreatorDTO[]; apiReady: boolean }) {
-  const { rows, error, setError, pending, patch, create, remove } = useCreators(creators);
+  const { rows, error, setError, pending, patch, create, remove, matchOrders } = useCreators(creators);
   const [form, setForm] = useState<InquiryInput>(EMPTY);
   const [declining, setDeclining] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -220,6 +220,7 @@ export function Inquiries({ creators, apiReady }: { creators: CreatorDTO[]; apiR
             if (result.ok) setOpenId(null);
             return result.ok;
           }}
+          onMatch={matchOrders}
         />
       ) : null}
     </>

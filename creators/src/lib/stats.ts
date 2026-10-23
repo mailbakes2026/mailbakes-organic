@@ -30,6 +30,31 @@ export function awaitingMessage(rows: StatRow[]) {
   return rows.filter((row) => row.stage === "message_needed").length;
 }
 
+export type SummaryCreator = StatRow & {
+  posted: boolean;
+  tiktokOrderId: string;
+};
+
+/** Counts for the CEO service. Names, messages, and order IDs stay out of the result. */
+export function ceoSummary(rows: SummaryCreator[], now = new Date()) {
+  let active = 0;
+  let posted = 0;
+  let unmatched = 0;
+  for (const row of rows) {
+    const isPosted = row.posted || row.stage === "posted";
+    if (isPosted) posted += 1;
+    if (row.stage !== "declined" && !isPosted) active += 1;
+    if (row.tiktokOrderId.trim() === "") unmatched += 1;
+  }
+  return {
+    active,
+    shipped_this_week: shippedThisWeek(rows, now),
+    awaiting_message: awaitingMessage(rows),
+    posted,
+    unmatched_orders: unmatched,
+  };
+}
+
 export function rushItems(rows: StatRow[]) {
   return rows.filter((row) => row.rush && row.stage !== "declined").length;
 }

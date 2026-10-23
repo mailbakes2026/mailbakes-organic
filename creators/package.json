@@ -10,7 +10,7 @@
     "build": "prisma generate && next build",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/secret.test.ts src/lib/dates.test.ts src/lib/stages.test.ts src/lib/tracking.test.ts src/lib/tiktok.test.ts src/lib/ops.test.ts src/lib/parse.test.ts src/lib/update.test.ts src/lib/stats.test.ts src/lib/search.test.ts src/lib/seed-build.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/secret.test.ts src/lib/dates.test.ts src/lib/stages.test.ts src/lib/tracking.test.ts src/lib/tiktok.test.ts src/lib/ops.test.ts src/lib/match-orders.test.ts src/lib/parse.test.ts src/lib/update.test.ts src/lib/stats.test.ts src/lib/search.test.ts src/lib/seed-build.test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

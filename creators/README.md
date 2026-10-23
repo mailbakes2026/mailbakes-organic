@@ -48,7 +48,7 @@ Nothing in this repo creates the Render service for you.
 | --- | --- | --- |
 | `APP_PASSWORD` | Millie | Sign-in password. At least 10 characters. |
 | `SESSION_SECRET` | Render generates | Signs the sign-in cookie. At least 32 characters. |
-| `CREATORS_API_TOKEN` | Millie | Bearer token for posting inquiries. At least 16 characters. |
+| `CREATORS_API_TOKEN` | Millie | Bearer token for posting inquiries and reading the CEO summary. At least 16 characters. |
 | `DATABASE_URL` | Blueprint, from the database | Postgres connection. |
 | `APP_URL` | Blueprint | `https://mailbakes-creators.onrender.com` |
 | `APP_NAME` | Blueprint | Shown as the signed-in name. Default `Millie`. |
@@ -71,8 +71,22 @@ curl -s https://mailbakes-creators.onrender.com/api/v1/inquiries \
 
 A created inquiry returns `{ "id", "name", "stage": "inquiry" }`. If `CREATORS_API_TOKEN` is missing, the API responds with setup needed and does not accept a guess.
 
+## CEO summary
+
+`GET /api/v1/summary` uses the same bearer token. A missing or wrong token gets `401` and no counts. The body is only:
+
+```json
+{ "active": 0, "shipped_this_week": 0, "awaiting_message": 0, "posted": 0, "unmatched_orders": 0 }
+```
+
+`active` is everyone who is not declined and not posted. `shipped_this_week` is samples with a ship date in the current London week that are shipped, delivered, or posted. `awaiting_message` is the Message needed column. `posted` is creators marked posted. `unmatched_orders` is creators with no TikTok order ID. Names, messages, and order IDs are not included.
+
 Tracking numbers for Royal Mail (or a blank courier) link to `https://www.royalmail.com/track-your-item#/tracking-results/<number>`.
 
 ## TikTok orders
 
-Each creator has a TikTok order ID and a message for that sample. Send to orders stores both in this app, then `POST {OPS_APP_URL}/api/tiktok/message` with `Authorization: Bearer` and `{"tiktok_order_id","message"}`. The order ID stays text. The drawer shows Sent, Failed with the reason, or Not configured when those env vars are missing. Retry sends the saved message again. The pipeline filter **No TikTok match** lists creators with no order ID or no message yet.
+Each creator has a TikTok order ID and a message for that sample. The order ID stays text. Saving a sample that has both an order ID and a message stores them here and posts `{"tiktok_order_id","message"}` to `{OPS_APP_URL}/api/tiktok/message` with `Authorization: Bearer`. Send to orders and Retry do the same post again. The drawer shows Sent, Failed with the reason, or Not configured when those env vars are missing. **Sync all** on the pipeline posts every sample that has an ID and a message and is not already marked Sent.
+
+**Match orders** asks the orders app for `GET {OPS_APP_URL}/api/machine/tiktok-orders` with the same bearer token. Each parcel is matched to one creator when the recipient name and the creator name are the same after ignoring case, extra spaces, and accents. Parentheses stay, so a shorter name is not treated as the same person. If two creators or two parcels share a name, or the sample already has a different TikTok order ID, nothing is filled in. Those parcels are listed for a manual confirm. A match stores the order ID as text and, when that creator already has a message, posts it. Free samples are included. A match that is already marked Sent for that same ID is not posted again. The pipeline button, the creator drawer, and a ten-minute timer on the server all run the same match. The status line reads `Matched N. Sent N. Unmatched N.` If that route is missing, or the orders app answers as if it is not signed in, the line reads `Orders app not ready.` instead of a failure.
+
+The orders app does not currently return a message to this app. A GET of `/api/tiktok/message` answers `401 {"error":"Not signed in"}` and only allows POST. The drawer says there is no read endpoint until that GET, with the same bearer token, returns JSON `{"tiktok_order_id":"<id>","found":true,"message":"<text>"}` (or `"found":false` when no parcel matches). The pipeline filter **No TikTok match** lists creators with no order ID or no message yet.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildSeed } from "./seed-build.ts";
-import { awaitingMessage, leaderboard, rushItems, shippedThisWeek, stageCounts } from "./stats.ts";
+import { awaitingMessage, ceoSummary, leaderboard, rushItems, shippedThisWeek, stageCounts } from "./stats.ts";
 
 const now = new Date("2026-10-23T12:00:00.000Z");
 
@@ -35,6 +35,29 @@ test("shipped this week uses the London Monday and ignores a date with no dispat
 
 test("a declined rush is not still a rush item", () => {
   assert.equal(rushItems([{ stage: "declined", rush: true, shipDate: null }]), 0);
+});
+
+test("the CEO snapshot is five counts from the pipeline", () => {
+  const summary = ceoSummary(
+    [
+      { stage: "inquiry", rush: false, shipDate: null, posted: false, tiktokOrderId: "" },
+      { stage: "message_needed", rush: false, shipDate: null, posted: false, tiktokOrderId: "576971003700747076" },
+      { stage: "shipped", rush: false, shipDate: "2026-10-23", posted: false, tiktokOrderId: "  " },
+      { stage: "posted", rush: false, shipDate: "2026-10-20", posted: true, tiktokOrderId: "576971003700747100" },
+      { stage: "approved", rush: false, shipDate: null, posted: true, tiktokOrderId: "576971003700747101" },
+      { stage: "declined", rush: true, shipDate: null, posted: false, tiktokOrderId: "" },
+      { stage: "on_hold", rush: false, shipDate: null, posted: false, tiktokOrderId: "576971003700747102" },
+    ],
+    now,
+  );
+  assert.deepEqual(summary, {
+    active: 4,
+    shipped_this_week: 2,
+    awaiting_message: 1,
+    posted: 2,
+    unmatched_orders: 3,
+  });
+  assert.deepEqual(Object.keys(summary), ["active", "shipped_this_week", "awaiting_message", "posted", "unmatched_orders"]);
 });
 
 test("works well ranks above an unflagged rating, and blanks stay last", () => {
