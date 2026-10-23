@@ -10,6 +10,7 @@ export type TikTokParcel = {
   freeSample: boolean;
   hasMessage: boolean;
   message: string;
+  status: string;
 };
 
 export type NameCreator = {
@@ -40,6 +41,7 @@ export type UnclaimedOrder = {
   recipient: string;
   reference: string;
   freeSample: boolean;
+  status: string;
 };
 
 export type NameMatch = { creatorId: string; parcel: TikTokParcel; by: "id" | "name" };
@@ -48,6 +50,7 @@ export type NamePlan = {
   matches: NameMatch[];
   review: ReviewItem[];
   unclaimed: UnclaimedOrder[];
+  older: UnclaimedOrder[];
   lines: MatchLine[];
 };
 
@@ -81,6 +84,38 @@ export function matchSummary(input: {
   return `Matched ${input.matched}.${sent} Needs review ${input.needsReview}. No order found ${input.noOrder}. Orders with no creator ${input.unclaimed}.${failed}`;
 }
 
+/** On hold still needs a note. A processed order needs one only while it has no message. Finished orders wait under Older orders. */
+export function orderNeedsAction(order: { status: string; hasMessage: boolean; message: string }) {
+  const status = order.status.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!status) return true;
+  if (status === "on_hold" || status === "hold") return true;
+  if (status === "processed") return !order.hasMessage && order.message.trim() === "";
+  return false;
+}
+
+export function orderStatusLabel(status: string) {
+  const key = status.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (key === "on_hold" || key === "hold") return "On hold";
+  if (key === "processed") return "Processed";
+  if (key === "complete") return "Complete";
+  if (key === "cancelled" || key === "canceled") return "Cancelled";
+  if (!key) return "";
+  return key.replace(/_/g, " ");
+}
+
+/** A pasted note is stored as she typed it. No message stores nothing. */
+export function readOrderAction(input: { name: unknown; message: unknown; noMessage: unknown }) {
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (!name) return { ok: false as const, error: "A name is required." };
+  if (name.length > 120) return { ok: false as const, error: "That name is too long." };
+  if (input.noMessage === true) return { ok: true as const, name, message: "", noMessage: true as const };
+  if (typeof input.message !== "string") return { ok: false as const, error: "Paste the note first." };
+  const message = input.message.trim();
+  if (!message) return { ok: false as const, error: "Paste the note first." };
+  if (message.length > 300) return { ok: false as const, error: "That note is too long." };
+  return { ok: true as const, name, message, noMessage: false as const };
+}
+
 /** Push a saved message only. An order that already carries that same text is left alone. */
 export function shouldPushSavedMessage(saved: string, orderMessage: string) {
   const message = saved.trim();
@@ -109,6 +144,7 @@ function readParcel(raw: unknown): { parcel?: TikTokParcel; review?: ReviewItem 
   const parsed = readTiktokOrderId(idRaw);
   const freeSample = flag(record.free_sample) || flag(record.freeSample);
   const message = text(record.message);
+  const status = text(record.status);
   if (!parsed.ok) {
     return {
       review: {
@@ -129,6 +165,7 @@ function readParcel(raw: unknown): { parcel?: TikTokParcel; review?: ReviewItem 
       freeSample,
       hasMessage: flag(record.has_message) || flag(record.hasMessage) || message !== "",
       message,
+      status,
     },
   };
 }
@@ -277,14 +314,20 @@ export function planOrderMatches(creators: NameCreator[], parcels: TikTokParcel[
     }
   }
 
-  const unclaimed: UnclaimedOrder[] = parcels
-    .filter((_, index) => !claimedParcelIndexes.has(index))
-    .map((parcel) => ({
+  const unclaimed: UnclaimedOrder[] = [];
+  const older: UnclaimedOrder[] = [];
+  for (const [index, parcel] of parcels.entries()) {
+    if (claimedParcelIndexes.has(index)) continue;
+    const row: UnclaimedOrder = {
       tiktokOrderId: parcel.tiktokOrderId,
       recipient: parcel.recipient || "No recipient name",
       reference: parcel.reference,
       freeSample: parcel.freeSample,
-    }));
+      status: parcel.status,
+    };
+    if (orderNeedsAction(parcel)) unclaimed.push(row);
+    else older.push(row);
+  }
 
   const lines: MatchLine[] = creators.map((creator) => {
     if (matches.some((item) => item.creatorId === creator.id)) return lineFor(creator.id, "matched", "Matched.");
@@ -292,7 +335,7 @@ export function planOrderMatches(creators: NameCreator[], parcels: TikTokParcel[
     return lineFor(creator.id, "no_order", "No order found.");
   });
 
-  return { matches, review, unclaimed, lines };
+  return { matches, review, unclaimed, older, lines };
 }
 
 export function linesAfterSend(lines: MatchLine[], sentIds: Set<string>, failed: { id: string; error: string }[]) {

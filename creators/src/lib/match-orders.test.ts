@@ -5,7 +5,9 @@ import {
   linesAfterSend,
   matchSummary,
   normalisePersonName,
+  orderNeedsAction,
   planOrderMatches,
+  readOrderAction,
   shouldPushSavedMessage,
   type NameCreator,
   type TikTokParcel,
@@ -30,6 +32,7 @@ function parcel(partial: Partial<TikTokParcel> & { tiktokOrderId: string; recipi
     freeSample: false,
     hasMessage: false,
     message: "",
+    status: "",
     ...partial,
   };
 }
@@ -140,6 +143,44 @@ test("a repeated or blank order ID does not hide the other order", () => {
     assert.equal(missing.parcels[0].reference, "#214410");
     assert.equal(missing.review.length, 0);
   }
+});
+
+test("only a hold or a processed order with no message stays open", () => {
+  const plan = planOrderMatches(
+    [],
+    [
+      parcel({ tiktokOrderId: "1", recipient: "Ciara Stone", reference: "#214410", status: "on_hold" }),
+      parcel({ tiktokOrderId: "2", recipient: "Ava Processed", reference: "#2", status: "processed" }),
+      parcel({ tiktokOrderId: "3", recipient: "Bea Done", reference: "#3", status: "processed", hasMessage: true, message: "Already written" }),
+      parcel({ tiktokOrderId: "4", recipient: "Cara Complete", reference: "#4", status: "complete" }),
+      parcel({ tiktokOrderId: "5", recipient: "Dina Cancelled", reference: "#5", status: "cancelled" }),
+      parcel({ tiktokOrderId: "6", recipient: "Eve Hold", reference: "#6", status: "On hold", message: "Waiting" }),
+    ],
+  );
+  assert.deepEqual(
+    plan.unclaimed.map((item) => item.reference),
+    ["#214410", "#2", "#6"],
+  );
+  assert.deepEqual(
+    plan.older.map((item) => item.reference),
+    ["#3", "#4", "#5"],
+  );
+  assert.equal(orderNeedsAction({ status: "processed", hasMessage: false, message: "  " }), true);
+  assert.equal(orderNeedsAction({ status: "", hasMessage: false, message: "" }), true);
+  assert.deepEqual(readOrderAction({ name: "  ", message: "Hello", noMessage: false }), { ok: false, error: "A name is required." });
+  assert.deepEqual(readOrderAction({ name: "Ciara Stone", message: "  ", noMessage: false }), { ok: false, error: "Paste the note first." });
+  assert.deepEqual(readOrderAction({ name: "Ciara Stone", message: "  Hello  ", noMessage: false }), {
+    ok: true,
+    name: "Ciara Stone",
+    message: "Hello",
+    noMessage: false,
+  });
+  assert.deepEqual(readOrderAction({ name: "Ciara Stone", message: "Do not store this", noMessage: true }), {
+    ok: true,
+    name: "Ciara Stone",
+    message: "",
+    noMessage: true,
+  });
 });
 
 test("two parcels with one name are not assigned", () => {

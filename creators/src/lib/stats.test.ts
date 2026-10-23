@@ -11,6 +11,7 @@ test("the eight sample orders count up by stage", () => {
   assert.equal(counts.inquiry, 3);
   assert.equal(counts.approved, 3);
   assert.equal(counts.message_needed, 1);
+  assert.equal(counts.message_received, 0);
   assert.equal(counts.on_hold, 1);
   assert.equal(counts.ready_to_ship, 0);
   assert.equal(counts.shipped, 0);

@@ -2,6 +2,7 @@ export const STAGES = [
   { slug: "inquiry", prisma: "INQUIRY", label: "Inquiry", lane: "pipeline", hint: "Inbound request" },
   { slug: "approved", prisma: "APPROVED", label: "Approved", lane: "pipeline", hint: "" },
   { slug: "message_needed", prisma: "MESSAGE_NEEDED", label: "Message needed", lane: "pipeline", hint: "Waiting for their card message" },
+  { slug: "message_received", prisma: "MESSAGE_RECEIVED", label: "Message received", lane: "pipeline", hint: "Note saved and sent to the order" },
   { slug: "ready_to_ship", prisma: "READY_TO_SHIP", label: "Ready to ship", lane: "pipeline", hint: "" },
   { slug: "shipped", prisma: "SHIPPED", label: "Shipped", lane: "pipeline", hint: "With tracking number" },
   { slug: "delivered", prisma: "DELIVERED", label: "Delivered", lane: "pipeline", hint: "" },

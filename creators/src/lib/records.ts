@@ -9,12 +9,13 @@ import {
   linesAfterSend,
   matchSummary,
   planOrderMatches,
+  readOrderAction,
   shouldPushSavedMessage,
   type MatchLine,
   type ReviewItem,
   type UnclaimedOrder,
 } from "@/lib/match-orders";
-import { opsGet, postTiktokMessage, readTiktokMessage, readTiktokOrderId, shouldSendTiktokMessage, type OpsResult, type OpsStatus } from "@/lib/ops";
+import { opsGet, postTiktokMessage, postTiktokNoMessage, readTiktokMessage, readTiktokOrderId, shouldSendTiktokMessage, type OpsResult, type OpsStatus } from "@/lib/ops";
 import { royalMailTrackUrl, safeHttpUrl } from "@/lib/tracking";
 import type { ActivityDTO, CreatorDetail, CreatorDTO, CreatorFields } from "@/lib/types";
 import { applyUpdate } from "@/lib/update";
@@ -29,6 +30,8 @@ function prismaStage(slug: StageSlug): Stage {
       return Stage.APPROVED;
     case "message_needed":
       return Stage.MESSAGE_NEEDED;
+    case "message_received":
+      return Stage.MESSAGE_RECEIVED;
     case "ready_to_ship":
       return Stage.READY_TO_SHIP;
     case "shipped":
@@ -341,6 +344,7 @@ export type MatchReport = {
   lines: MatchLine[];
   review: ReviewItem[];
   unclaimed: UnclaimedOrder[];
+  older: UnclaimedOrder[];
   creators: CreatorDetail[];
 };
 
@@ -357,8 +361,9 @@ function reportFrom(
   review: ReviewItem[] = [],
   creators: CreatorDetail[] = [],
   unclaimed: UnclaimedOrder[] = [],
+  older: UnclaimedOrder[] = [],
 ): MatchReport {
-  return { state, summary, lines, review, unclaimed, creators };
+  return { state, summary, lines, review, unclaimed, older, creators };
 }
 
 async function applyTiktokMatch(now: Date): Promise<MatchReport> {
@@ -448,6 +453,7 @@ async function applyTiktokMatch(now: Date): Promise<MatchReport> {
     [...interpreted.review, ...plan.review],
     creators,
     plan.unclaimed,
+    plan.older,
   );
 }
 
@@ -482,6 +488,77 @@ export async function confirmTiktokOrder(creatorId: string, tiktokOrderId: strin
     await storeTiktokSend(creatorId, parsed.value, current.tiktokMessage, result, now);
   }
   const creator = await getCreator(creatorId);
+  if (!creator) return { ok: false as const, status: 404, error: "That creator isn't on the board." };
+  return { ok: true as const, creator };
+}
+
+export async function saveTiktokOrder(input: {
+  name: unknown;
+  message: unknown;
+  noMessage: unknown;
+  tiktokOrderId: unknown;
+  reference: unknown;
+}, now = new Date()) {
+  const action = readOrderAction({ name: input.name, message: input.message, noMessage: input.noMessage });
+  if (!action.ok) return { ok: false as const, status: 400, error: action.error };
+  const parsedId = readTiktokOrderId(input.tiktokOrderId ?? "");
+  if (!parsedId.ok) return { ok: false as const, status: 400, error: parsedId.error };
+  const reference = typeof input.reference === "string" ? input.reference.trim() : "";
+  if (reference.length > 40) return { ok: false as const, status: 400, error: "That order reference is too long." };
+  if (!parsedId.value && !reference) return { ok: false as const, status: 400, error: "That order has no reference." };
+
+  const result = action.noMessage
+    ? await postTiktokNoMessage(parsedId.value, reference)
+    : await postTiktokMessage(parsedId.value, action.message, fetch, reference);
+  if (result.status !== "sent") {
+    return { ok: false as const, status: result.status === "not_configured" ? 503 : 502, error: result.error };
+  }
+
+  const existing = parsedId.value
+    ? await prisma.creator.findFirst({ where: { tiktokOrderId: parsedId.value } })
+    : null;
+  let id = existing?.id ?? "";
+  if (!existing) {
+    const created = await prisma.creator.create({
+      data: {
+        name: action.name,
+        shopifyOrder: reference,
+        tiktokOrderId: parsedId.value,
+        tiktokMessage: action.message,
+        cardMessage: action.message,
+        stage: action.noMessage ? Stage.READY_TO_SHIP : Stage.MESSAGE_RECEIVED,
+        source: "tiktok",
+        opsStatus: "sent",
+        opsError: "",
+        opsSentAt: now,
+        activities: {
+          create: [
+            { detail: action.noMessage ? "Recorded that this TikTok order has no message." : "Added from a TikTok order." },
+            { detail: action.noMessage ? "Recorded no message on the TikTok order." : "Sent the TikTok order message." },
+          ],
+        },
+      },
+    });
+    id = created.id;
+  } else {
+    await prisma.creator.update({
+      where: { id },
+      data: {
+        ...(action.noMessage ? {} : { tiktokMessage: action.message, cardMessage: action.message }),
+        opsStatus: "sent",
+        opsError: "",
+        opsSentAt: now,
+        updatedAt: now,
+        activities: {
+          create: {
+            detail: action.noMessage ? "Recorded no message on the TikTok order." : "Sent the TikTok order message.",
+          },
+        },
+      },
+    });
+  }
+
+  const creator = await getCreator(id);
   if (!creator) return { ok: false as const, status: 404, error: "That creator isn't on the board." };
   return { ok: true as const, creator };
 }

@@ -24,6 +24,7 @@ export type UnclaimedView = {
   recipient: string;
   reference: string;
   freeSample: boolean;
+  status: string;
 };
 
 export type MatchReportView = {
@@ -32,6 +33,7 @@ export type MatchReportView = {
   lines: MatchLineView[];
   review: ReviewView[];
   unclaimed: UnclaimedView[];
+  older: UnclaimedView[];
 };
 
 export type MatchOutcome = { ok: true; report: MatchReportView } | { ok: false; error: string };
@@ -241,6 +243,7 @@ export function useCreators(initial: CreatorDTO[]) {
         lines: data.lines,
         review: data.review,
         unclaimed: data.unclaimed ?? [],
+        older: data.older ?? [],
       };
       mergeCreators(data.creators);
       setMatchReport(report);
@@ -250,6 +253,34 @@ export function useCreators(initial: CreatorDTO[]) {
       return { ok: false, error: "Match didn't finish." };
     } finally {
       setMatching(false);
+    }
+  }
+
+  async function sendOrder(order: { name: string; message: string; noMessage: boolean; tiktokOrderId: string; reference: string }) {
+    setError(null);
+    try {
+      const response = await fetch("/api/tiktok/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(order),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string; creator?: CreatorDetail };
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return { ok: false as const, error: "Sign in required." };
+      }
+      if (!response.ok || !data.creator) {
+        const message = data.error || "That note wasn't sent.";
+        setError(message);
+        return { ok: false as const, error: message };
+      }
+      mergeCreators([data.creator]);
+      router.refresh();
+      return { ok: true as const, creator: data.creator };
+    } catch {
+      const message = "That note wasn't sent.";
+      setError(message);
+      return { ok: false as const, error: message };
     }
   }
 
@@ -281,5 +312,5 @@ export function useCreators(initial: CreatorDTO[]) {
     }
   }
 
-  return { rows, error, setError, pending, matching, matchReport, patch, create, remove, syncOrders, matchOrders, confirmOrder };
+  return { rows, error, setError, pending, matching, matchReport, patch, create, remove, syncOrders, matchOrders, confirmOrder, sendOrder };
 }

@@ -5,6 +5,7 @@ import {
   needsTiktokMatch,
   opsStatusLabel,
   postTiktokMessage,
+  postTiktokNoMessage,
   readTiktokMessage,
   readTiktokOrderId,
   shouldSendTiktokMessage,
@@ -61,6 +62,22 @@ test("a saved message is posted as text and a bad token is reported", async () =
     }) as typeof fetch, "#214410");
     assert.equal(withReference.status, "sent");
     assert.deepEqual(JSON.parse(seen?.body ?? "{}"), { message: "A note for the box", reference: "#214410" });
+
+    const waived = await postTiktokNoMessage(LONG_ID, "#214410", (async (url, init) => {
+      const headers = new Headers(init?.headers);
+      seen = {
+        url: String(url),
+        auth: headers.get("authorization") ?? "",
+        body: String(init?.body ?? ""),
+        redirect: String(init?.redirect ?? ""),
+      };
+      return new Response('{"ok":true}', { status: 200 });
+    }) as typeof fetch);
+    assert.equal(waived.status, "sent");
+    assert.equal(seen?.url, "http://orders.test/api/machine/tiktok/no-message");
+    assert.equal(seen?.redirect, "manual");
+    assert.deepEqual(JSON.parse(seen?.body ?? "{}"), { tiktok_order_id: LONG_ID, reference: "#214410" });
+    assert.equal(seen?.body.includes("message"), false);
 
     const denied = await postTiktokMessage(LONG_ID, "Hello", (async () => new Response("Bad token", { status: 401 })) as typeof fetch);
     assert.deepEqual(denied, { status: "failed", error: "Bad token" });

@@ -146,6 +146,10 @@ function messageUrl(base: string) {
   return `${base}/api/tiktok/message`;
 }
 
+function noMessageUrl(base: string) {
+  return `${originUrl(base)}/api/machine/tiktok/no-message`;
+}
+
 function readUrl(base: string, tiktokOrderId: string) {
   const url = new URL(messageUrl(base));
   url.searchParams.set("tiktok_order_id", tiktokOrderId);
@@ -192,6 +196,42 @@ export async function postTiktokMessage(
   let response: Response;
   try {
     response = await fetchImpl(messageUrl(target.url), {
+      method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(12_000),
+      headers: {
+        Authorization: `Bearer ${target.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { status: "failed", error: "The orders app didn't respond." };
+  }
+  if (response.status >= 300 && response.status < 400) {
+    return { status: "failed", error: "The orders app redirected the message." };
+  }
+  if (response.ok) return { status: "sent", error: "" };
+  return { status: "failed", error: await failureReason(response) };
+}
+
+/** Records that the order has no card note. Does not send any message text. */
+export async function postTiktokNoMessage(
+  tiktokOrderId: string,
+  reference = "",
+  fetchImpl: typeof fetch = fetch,
+): Promise<OpsResult> {
+  const target = opsTarget();
+  if (!target) return { status: "not_configured", error: "Set OPS_APP_URL and OPS_API_TOKEN on the server." };
+  const payload: { tiktok_order_id?: string; reference?: string } = {};
+  if (tiktokOrderId) payload.tiktok_order_id = tiktokOrderId;
+  if (reference) payload.reference = reference;
+  if (!payload.tiktok_order_id && !payload.reference) {
+    return { status: "failed", error: "Enter the TikTok order ID." };
+  }
+  let response: Response;
+  try {
+    response = await fetchImpl(noMessageUrl(target.url), {
       method: "POST",
       redirect: "manual",
       signal: AbortSignal.timeout(12_000),

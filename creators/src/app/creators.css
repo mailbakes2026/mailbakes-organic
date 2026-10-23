@@ -123,6 +123,17 @@
   min-width: 0;
 }
 .creator .ops-status { margin-top: 4px; font-size: 12px; }
+.attach {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.attach select { width: 100%; min-height: 44px; }
 .creator-name {
   font-weight: 750;
   font-size: 14px;
@@ -270,6 +281,13 @@ a.tiktok-btn svg { display: block; flex: none; }
 .match-review .pill { margin-left: 8px; }
 .match-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .match-actions select { width: auto; min-width: 180px; }
+.match-note { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.match-note .field { margin: 0; }
+.match-note textarea { width: 100%; min-height: 72px; }
+.match-note .match-actions { width: 100%; }
+.match-note .btn { min-height: 44px; }
+.older-orders { margin-top: 14px; }
+.older-orders summary { cursor: pointer; font-weight: 750; min-height: 44px; display: flex; align-items: center; }
 .track-line { margin: 0; }
 .track-line a { color: var(--mb-pink-deep); font-weight: 700; }
 .section-label {
@@ -380,6 +398,8 @@ a.tiktok-btn svg { display: block; flex: none; }
   }
   .move select { width: auto; flex: 1; }
   .toolbar input[type="search"], .toolbar select { width: 100%; }
+  .match-actions, .match-note .match-actions { flex-direction: column; align-items: stretch; }
+  .match-actions select, .match-actions .btn, .match-note .btn { width: 100%; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .wide { grid-column: auto; }
   .drawer { width: 100%; padding-bottom: 48px; }

@@ -14,7 +14,7 @@ import { matchesQuery } from "@/lib/search";
 import type { CreatorFields } from "@/lib/types";
 
 export function Board({ creators }: { creators: CreatorDTO[] }) {
-  const { rows, error, setError, pending, matching, matchReport, patch, remove, syncOrders, matchOrders, confirmOrder } = useCreators(creators);
+  const { rows, error, setError, pending, matching, matchReport, patch, remove, syncOrders, matchOrders, confirmOrder, sendOrder } = useCreators(creators);
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<StageSlug | "">("");
   const [rushOnly, setRushOnly] = useState(false);
@@ -89,6 +89,10 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
         {items.length === 0 ? <p className="empty">{filtering ? "Nothing matches" : "None yet"}</p> : null}
         {items.map((creator) => {
           const line = matchReport?.lines.find((item) => item.id === creator.id);
+          const attachable =
+            line?.state === "no_order"
+              ? [...(matchReport?.unclaimed ?? []), ...(matchReport?.older ?? [])].filter((order) => order.tiktokOrderId)
+              : [];
           return (
             <CreatorCard
               key={creator.id}
@@ -96,6 +100,12 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
               dragging={drag.activeId === creator.id}
               matchLabel={line?.label}
               matchState={line?.state}
+              orders={attachable}
+              onAttach={async (tiktokOrderId) => {
+                const confirmed = await confirmOrder(creator.id, tiktokOrderId);
+                if (!confirmed.ok) return;
+                await matchOrders();
+              }}
               onOpen={setOpenId}
               onMove={move}
               onPointerDown={drag.pointerDown}
@@ -173,16 +183,23 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
         ) : null}
       </div>
 
-      {matchReport && (matchReport.review.length || matchReport.unclaimed.length) ? (
+      {matchReport && (matchReport.review.length || matchReport.unclaimed.length || matchReport.older.length) ? (
         <MatchPanel
-          key={`${matchReport.review.map((item) => `${item.tiktokOrderId}|${item.reference}|${item.recipient}|${item.reason}`).join("\n")}\n${matchReport.unclaimed.map((item) => item.tiktokOrderId).join(",")}`}
+          key={`${matchReport.review.map((item) => `${item.tiktokOrderId}|${item.reference}|${item.recipient}|${item.reason}`).join("\n")}\n${matchReport.unclaimed.map((item) => item.tiktokOrderId).join(",")}\n${matchReport.older.map((item) => item.tiktokOrderId).join(",")}`}
           review={matchReport.review}
           unclaimed={matchReport.unclaimed}
+          older={matchReport.older}
           creators={rows}
           pending={pending || matching}
           onConfirm={async (creatorId, tiktokOrderId) => {
             const confirmed = await confirmOrder(creatorId, tiktokOrderId);
             if (!confirmed.ok) return false;
+            await matchOrders();
+            return true;
+          }}
+          onSend={async (order) => {
+            const sent = await sendOrder(order);
+            if (!sent.ok) return false;
             await matchOrders();
             return true;
           }}
@@ -230,18 +247,32 @@ function summaryClass(report: MatchReportView) {
   return "sent";
 }
 
+function orderStatusLabel(status: string) {
+  const key = status.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (key === "on_hold" || key === "hold") return "On hold";
+  if (key === "processed") return "Processed";
+  if (key === "complete") return "Complete";
+  if (key === "cancelled" || key === "canceled") return "Cancelled";
+  if (!key) return "";
+  return key.replace(/_/g, " ");
+}
+
 function MatchPanel({
   review,
   unclaimed,
+  older,
   creators,
   pending,
   onConfirm,
+  onSend,
 }: {
   review: ReviewView[];
   unclaimed: UnclaimedView[];
+  older: UnclaimedView[];
   creators: CreatorDTO[];
   pending: boolean;
   onConfirm: (creatorId: string, tiktokOrderId: string) => Promise<boolean>;
+  onSend: (order: { name: string; message: string; noMessage: boolean; tiktokOrderId: string; reference: string }) => Promise<boolean>;
 }) {
   const [choices, setChoices] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<number | null>(null);
@@ -305,22 +336,104 @@ function MatchPanel({
       {unclaimed.length ? (
         <>
           <h2>Orders with no creator</h2>
-          <p className="muted small">No saved creator matches these. Add the creator and the note before they can be sent.</p>
+          <p className="muted small">These are on hold, or processed with no note. Paste the note from the order. Nothing is sent until you save it.</p>
           <ul className="match-list">
             {unclaimed.map((item) => (
+              <OrderNoteRow key={`${item.tiktokOrderId}-${item.reference}-${item.recipient}`} item={item} pending={pending || busy !== null} onSend={onSend} />
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {older.length ? (
+        <details className="older-orders">
+          <summary>Older orders ({older.length})</summary>
+          <ul className="match-list">
+            {older.map((item) => (
               <li key={`${item.tiktokOrderId}-${item.reference}-${item.recipient}`} className="match-review">
                 <div>
                   <b>{item.recipient}</b>
                   {item.reference ? <span className="meta"> {item.reference}</span> : null}
                   {item.tiktokOrderId ? <span className="meta"> {item.tiktokOrderId}</span> : null}
+                  {orderStatusLabel(item.status) ? <span className="meta"> {orderStatusLabel(item.status)}</span> : null}
                   {item.freeSample ? <span className="pill">Free sample</span> : null}
-                  <p className="ops-status not_configured">No creator for this order.</p>
                 </div>
               </li>
             ))}
           </ul>
-        </>
+        </details>
       ) : null}
     </section>
+  );
+}
+
+function OrderNoteRow({
+  item,
+  pending,
+  onSend,
+}: {
+  item: UnclaimedView;
+  pending: boolean;
+  onSend: (order: { name: string; message: string; noMessage: boolean; tiktokOrderId: string; reference: string }) => Promise<boolean>;
+}) {
+  const fallbackName = item.recipient === "No recipient name" ? "" : item.recipient;
+  const [name, setName] = useState(fallbackName);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState<"send" | "none" | null>(null);
+  const [rowError, setRowError] = useState("");
+
+  async function submit(noMessage: boolean) {
+    if (busy || pending) return;
+    setRowError("");
+    setBusy(noMessage ? "none" : "send");
+    try {
+      const ok = await onSend({
+        name,
+        message: noMessage ? "" : note,
+        noMessage,
+        tiktokOrderId: item.tiktokOrderId,
+        reference: item.reference,
+      });
+      if (!ok) setRowError(noMessage ? "No message was not recorded." : "That note wasn't sent.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <li className="match-review match-note-row">
+      <div className="match-note">
+        <div>
+          <b>{item.recipient}</b>
+          {item.reference ? <span className="meta"> {item.reference}</span> : null}
+          {item.tiktokOrderId ? <span className="meta"> {item.tiktokOrderId}</span> : null}
+          {orderStatusLabel(item.status) ? <span className="meta"> {orderStatusLabel(item.status)}</span> : null}
+          {item.freeSample ? <span className="pill">Free sample</span> : null}
+        </div>
+        <label className="field">
+          Name
+          <input aria-label={`Name for ${item.reference || item.recipient}`} value={name} onChange={(event) => setName(event.target.value)} maxLength={120} />
+        </label>
+        <label className="field">
+          Note
+          <textarea
+            aria-label={`Note for ${item.reference || item.recipient}`}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            rows={3}
+            maxLength={300}
+            placeholder="The message that goes on the card"
+          />
+        </label>
+        <div className="match-actions">
+          <button className="btn sm" type="button" disabled={pending || busy !== null || !note.trim() || !name.trim()} onClick={() => void submit(false)}>
+            {busy === "send" ? "Sending…" : "Save and send"}
+          </button>
+          <button className="btn ghost sm" type="button" disabled={pending || busy !== null || !name.trim()} onClick={() => void submit(true)}>
+            {busy === "none" ? "Saving…" : "No message"}
+          </button>
+        </div>
+        {rowError ? <p className="error">{rowError}</p> : null}
+      </div>
+    </li>
   );
 }
