@@ -73,7 +73,13 @@ export function useStageDrag(onDrop: (id: string, stage: StageSlug) => void) {
     function onUp(upEvent: PointerEvent) {
       if (upEvent.pointerId !== pointerId) return;
       const dropped = dragging ? overStage : null;
-      if (dragging || moved) suppressClick.current = true;
+      if (dragging || moved) {
+        suppressClick.current = true;
+        // The click after a drop often lands on the column, not this card.
+        window.setTimeout(() => {
+          suppressClick.current = false;
+        }, 0);
+      }
       halt();
       if (dropped) onDropRef.current(id, dropped);
     }
