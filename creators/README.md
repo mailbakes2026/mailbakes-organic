@@ -48,7 +48,7 @@ Nothing in this repo creates the Render service for you.
 | --- | --- | --- |
 | `APP_PASSWORD` | Millie | Sign-in password. At least 10 characters. |
 | `SESSION_SECRET` | Render generates | Signs the sign-in cookie. At least 32 characters. |
-| `CREATORS_API_TOKEN` | Millie | Bearer token for posting inquiries. At least 16 characters. |
+| `CREATORS_API_TOKEN` | Millie | Bearer token for posting inquiries and reading the CEO summary. At least 16 characters. |
 | `DATABASE_URL` | Blueprint, from the database | Postgres connection. |
 | `APP_URL` | Blueprint | `https://mailbakes-creators.onrender.com` |
 | `APP_NAME` | Blueprint | Shown as the signed-in name. Default `Millie`. |
@@ -70,6 +70,16 @@ curl -s https://mailbakes-creators.onrender.com/api/v1/inquiries \
 ```
 
 A created inquiry returns `{ "id", "name", "stage": "inquiry" }`. If `CREATORS_API_TOKEN` is missing, the API responds with setup needed and does not accept a guess.
+
+## CEO summary
+
+`GET /api/v1/summary` uses the same bearer token. A missing or wrong token gets `401` and no counts. The body is only:
+
+```json
+{ "active": 0, "shipped_this_week": 0, "awaiting_message": 0, "posted": 0, "unmatched_orders": 0 }
+```
+
+`active` is everyone who is not declined and not posted. `shipped_this_week` is samples with a ship date in the current London week that are shipped, delivered, or posted. `awaiting_message` is the Message needed column. `posted` is creators marked posted. `unmatched_orders` is creators with no TikTok order ID. Names, messages, and order IDs are not included.
 
 Tracking numbers for Royal Mail (or a blank courier) link to `https://www.royalmail.com/track-your-item#/tracking-results/<number>`.
 
