@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Stage {
+  INQUIRY
+  APPROVED
+  MESSAGE_NEEDED
+  READY_TO_SHIP
+  SHIPPED
+  DELIVERED
+  POSTED
+  DECLINED
+  ON_HOLD
+}
+
+// Set once, when the eight TikTok sample orders are first imported.
+model AppMeta {
+  id        String   @id
+  createdAt DateTime @default(now())
+}
+
+model Creator {
+  id             String     @id @default(cuid())
+  name           String
+  handle         String     @default("")
+  email          String     @default("")
+  shopifyOrder   String     @default("")
+  stage          Stage      @default(INQUIRY)
+  rush           Boolean    @default(false)
+  cardMessage    String     @default("")
+  notes          String     @default("")
+  shipDate       DateTime?  @db.Date
+  courier        String     @default("")
+  trackingNumber String     @default("")
+  declineReason  String     @default("")
+  posted         Boolean    @default(false)
+  postUrl        String     @default("")
+  views          Int?
+  orders         Int?
+  rating         Int?
+  worksWell      Boolean    @default(false)
+  source         String     @default("manual")
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @default(now())
+  activities     Activity[]
+
+  @@index([stage])
+  @@index([shipDate])
+  @@index([rush])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  creatorId String
+  creator   Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  detail    String
+  createdAt DateTime @default(now())
+
+  @@index([creatorId, createdAt])
+}
