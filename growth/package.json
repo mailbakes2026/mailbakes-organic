@@ -1,0 +1,33 @@
+{
+  "name": "mailbakes-growth",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --import ./alias-register.mjs --test src/lib/secret.test.ts src/lib/dates.test.ts src/lib/host.test.ts src/lib/scrub.test.ts src/lib/money.test.ts src/lib/marks.test.ts src/lib/paidads/metrics.test.ts src/lib/paidads/meta-parse.test.ts src/lib/paidads/ingest.test.ts src/lib/paidads/changes.test.ts src/lib/paidads/google.test.ts src/lib/paidads/view.test.ts src/lib/retention/metrics.test.ts src/lib/retention/klaviyo-parse.test.ts src/lib/retention/ingest.test.ts src/lib/retention/view.test.ts",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "jose": "^6.2.12",
+    "next": "^15.5.28",
+    "prisma": "^6.19.3",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^15.5.28",
+    "typescript": "^5"
+  }
+}

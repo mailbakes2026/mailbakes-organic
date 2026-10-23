@@ -57,3 +57,7 @@ This tool does not connect to Meta, TikTok or any other platform. Someone still 
 ## Personal command centre
 
 Millie's own command centre (inbox, calendar, reminders, run-through, briefings and payslips) lives in [`personal/`](personal/README.md). Deploy it from a separate blueprint whose path is `personal/render.yaml`. The root `render.yaml` stays the organic service only. See `personal/README.md` for the env vars, the Google redirect URL, and the assistant API.
+
+## Growth
+
+Paid Ads and Retention live in [`growth/`](growth/README.md). One service serves both. Deploy it from a separate blueprint whose path is `growth/render.yaml`. It uses SQLite on a Render disk, not Postgres. The root `render.yaml` stays the organic service only.

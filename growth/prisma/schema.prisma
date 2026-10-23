@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Daily paid-ads facts. Money is integer pence. A missing metric is never stored as a guess.
+model AdRow {
+  id           String   @id @default(cuid())
+  platform     String
+  level        String
+  date         String
+  campaignId   String   @default("")
+  campaignName String   @default("")
+  adsetId      String   @default("")
+  adsetName    String   @default("")
+  spendPence   Int
+  revenuePence Int
+  orders       Int
+  impressions  Int?
+  clicks       Int?
+  currency     String
+  source       String
+  updatedAt    DateTime @updatedAt
+
+  @@unique([platform, level, date, campaignId, adsetId])
+  @@index([platform, date])
+}
+
+model BudgetChange {
+  id            String   @id @default(cuid())
+  platform      String
+  level         String
+  objectId      String   @default("")
+  objectName    String
+  previousPence Int?
+  nextPence     Int
+  currency      String
+  note          String   @default("")
+  author        String
+  day           String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([platform, day])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  app       String
+  kind      String
+  author    String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([app, kind, createdAt])
+}
+
+model SyncState {
+  id       String    @id
+  status   String
+  detail   String    @default("")
+  syncedAt DateTime?
+  updatedAt DateTime @updatedAt
+}
+
+model FlowStat {
+  id           String   @id @default(cuid())
+  flowId       String
+  flowName     String
+  window       String
+  revenuePence Int?
+  opens        Int?
+  clicks       Int?
+  delivered    Int?
+  unsubscribes Int?
+  openRate     Float?
+  clickRate    Float?
+  currency     String   @default("")
+  source       String
+  updatedAt    DateTime @updatedAt
+
+  @@unique([flowId, window, source])
+  @@index([window])
+}
+
+model CampaignStat {
+  id           String   @id @default(cuid())
+  campaignId   String
+  campaignName String
+  window       String
+  revenuePence Int?
+  opens        Int?
+  clicks       Int?
+  delivered    Int?
+  unsubscribes Int?
+  openRate     Float?
+  clickRate    Float?
+  currency     String   @default("")
+  source       String
+  updatedAt    DateTime @updatedAt
+
+  @@unique([campaignId, window, source])
+  @@index([window])
+}
+
+model ListSnapshot {
+  id         String   @id @default(cuid())
+  listId     String
+  listName   String
+  profiles   Int?
+  capturedOn String
+  source     String
+  createdAt  DateTime @default(now())
+
+  @@unique([listId, capturedOn, source])
+  @@index([capturedOn])
+}
+
+model ShopifyOrder {
+  id         String   @id
+  customerId String   @default("")
+  orderedOn  String
+  totalPence Int
+  currency   String
+  source     String
+  updatedAt  DateTime @updatedAt
+
+  @@index([orderedOn])
+  @@index([customerId])
+}
+
+model PlanItem {
+  id         String   @id @default(cuid())
+  quarter    String   @default("2026-Q4")
+  title      String
+  detail     String   @default("")
+  decision   String   @default("")
+  status     String   @default("open")
+  ownerName  String   @default("Kyle")
+  ownerEmail String   @default("kyle@flowsha.com")
+  updatedBy  String   @default("")
+  sort       Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([quarter, sort])
+}
