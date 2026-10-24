@@ -7,6 +7,7 @@ export const PLATFORMS: { id: PlatformId; label: string; colour: string }[] = [
   { id: "LINKEDIN", label: "LinkedIn", colour: "#0A66C2" },
   { id: "YOUTUBE_SHORTS", label: "YouTube Shorts", colour: "#E11D2E" },
   { id: "SNAPCHAT", label: "Snapchat", colour: "#C6A000" },
+  { id: "PINTEREST", label: "Pinterest", colour: "#E60023" },
 ];
 
 export const STORY_PLATFORMS: PlatformId[] = ["INSTAGRAM", "FACEBOOK", "SNAPCHAT"];
@@ -39,7 +40,7 @@ export const ALLOWED_MIME = new Set([
   "video/quicktime",
 ]);
 
-export type ChannelId = "META" | "TIKTOK" | "SNAPCHAT" | "LINKEDIN" | "YOUTUBE_SHORTS";
+export type ChannelId = "META" | "TIKTOK" | "SNAPCHAT" | "LINKEDIN" | "YOUTUBE_SHORTS" | "PINTEREST";
 
 /** Calendar grouping. Instagram and Facebook share one Meta badge. */
 export const CHANNELS: {
@@ -69,6 +70,7 @@ export const CHANNELS: {
     ink: "#fff",
     platforms: ["YOUTUBE_SHORTS"],
   },
+  { id: "PINTEREST", label: "Pinterest", short: "Pin", colour: "#E60023", ink: "#fff", platforms: ["PINTEREST"] },
 ];
 
 export function channelsFor(platforms: PlatformId[]) {

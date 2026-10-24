@@ -3,20 +3,43 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { UserDTO } from "@/lib/types";
 
-export type AppTab = "meta-posts" | "meta-stories" | "tiktok" | "calendar";
+export type AppTab =
+  | "meta-posts"
+  | "meta-stories"
+  | "tiktok"
+  | "snapchat"
+  | "linkedin"
+  | "youtube"
+  | "pinterest"
+  | "calendar"
+  | "notes";
 
-const TAB_IDS: AppTab[] = ["meta-posts", "meta-stories", "tiktok", "calendar"];
+const TAB_IDS: AppTab[] = [
+  "meta-posts",
+  "meta-stories",
+  "tiktok",
+  "snapchat",
+  "linkedin",
+  "youtube",
+  "pinterest",
+  "calendar",
+  "notes",
+];
 
 const LEGACY: Record<string, AppTab> = {
   approval: "meta-posts",
   grid: "meta-posts",
-  notes: "calendar",
+  notes: "notes",
   connections: "meta-posts",
   reports: "meta-posts",
   tiktok: "tiktok",
   calendar: "calendar",
   "meta-posts": "meta-posts",
   "meta-stories": "meta-stories",
+  snapchat: "snapchat",
+  linkedin: "linkedin",
+  youtube: "youtube",
+  pinterest: "pinterest",
 };
 
 const TabContext = createContext<{ tab: AppTab; setTab: (tab: AppTab) => void } | null>(null);
@@ -27,11 +50,26 @@ export function useAppTab() {
   return value;
 }
 
-const LINKS: { id: AppTab; label: string }[] = [
-  { id: "meta-posts", label: "Meta posts" },
-  { id: "meta-stories", label: "Meta stories" },
-  { id: "tiktok", label: "TikTok" },
-  { id: "calendar", label: "Content calendar" },
+const GROUPS: { label: string; links: { id: AppTab; label: string }[] }[] = [
+  {
+    label: "Channels",
+    links: [
+      { id: "meta-posts", label: "Meta Posts" },
+      { id: "meta-stories", label: "Meta Stories" },
+      { id: "tiktok", label: "TikTok" },
+      { id: "snapchat", label: "Snapchat" },
+      { id: "linkedin", label: "LinkedIn" },
+      { id: "youtube", label: "YouTube Shorts" },
+      { id: "pinterest", label: "Pinterest" },
+    ],
+  },
+  {
+    label: "Plan",
+    links: [
+      { id: "calendar", label: "Content Calendar" },
+      { id: "notes", label: "Notes & Key Dates" },
+    ],
+  },
 ];
 
 export function Shell({ user, children }: { user: UserDTO; children: React.ReactNode }) {
@@ -66,17 +104,21 @@ export function Shell({ user, children }: { user: UserDTO; children: React.React
             <img src="/mailbakes-logo.svg" alt="MailBakes" className="brand-logo" />
             <i>Organic social</i>
           </div>
-          <div className="nav-group">Plan</div>
-          {LINKS.map((link) => (
-            <button
-              key={link.id}
-              type="button"
-              className={`nav-link${tab === link.id ? " active" : ""}`}
-              aria-current={tab === link.id ? "page" : undefined}
-              onClick={() => setTab(link.id)}
-            >
-              <span>{link.label}</span>
-            </button>
+          {GROUPS.map((group) => (
+            <div key={group.label} className="nav-block">
+              <div className="nav-group">{group.label}</div>
+              {group.links.map((link) => (
+                <button
+                  key={link.id}
+                  type="button"
+                  className={`nav-link${tab === link.id ? " active" : ""}`}
+                  aria-current={tab === link.id ? "page" : undefined}
+                  onClick={() => setTab(link.id)}
+                >
+                  <span>{link.label}</span>
+                </button>
+              ))}
+            </div>
           ))}
           <div className="sidebar-footer">
             <div className="signed-in">

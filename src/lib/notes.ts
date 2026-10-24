@@ -4,7 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/service";
 import type { NoteDTO, NoteStatusId, PlatformId, UserDTO } from "@/lib/types";
 
-const PLATFORMS: PlatformId[] = ["INSTAGRAM", "FACEBOOK", "TIKTOK", "LINKEDIN", "YOUTUBE_SHORTS", "SNAPCHAT"];
+const PLATFORMS: PlatformId[] = [
+  "INSTAGRAM",
+  "FACEBOOK",
+  "TIKTOK",
+  "LINKEDIN",
+  "YOUTUBE_SHORTS",
+  "SNAPCHAT",
+  "PINTEREST",
+];
 const STATUSES: NoteStatusId[] = ["IDEA", "PLANNED", "DONE"];
 const MAX_IMAGES = 6;
 const MAX_LINKS = 8;

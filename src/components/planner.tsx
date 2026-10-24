@@ -26,8 +26,8 @@ import {
   statusLabel,
 } from "@/lib/constants";
 import { approverMayAct, type BoardId, type ReviewAction } from "@/lib/pipeline";
-import { PostStatsForm } from "@/components/post-stats";
 import { NoteForm } from "@/components/notes-board";
+import { NotesDates } from "@/components/notes-dates";
 import { MediaCarousel } from "@/components/media-carousel";
 import type {
   ContentTypeId,
@@ -90,16 +90,32 @@ function statusPill(status: StatusId) {
 
 const BOARD_COPY: Record<BoardId, { title: string; blurb: string }> = {
   "meta-posts": {
-    title: "Meta posts",
+    title: "Meta Posts",
     blurb: "Instagram and Facebook feed posts and reels. The grid beside the board is how the feed will look.",
   },
   "meta-stories": {
-    title: "Meta stories",
+    title: "Meta Stories",
     blurb: "Story frames for Instagram and Facebook. Approving does not publish anything.",
   },
   tiktok: {
     title: "TikTok",
     blurb: "TikToks move through the same approval columns. The grid beside the board is the TikTok preview.",
+  },
+  snapchat: {
+    title: "Snapchat",
+    blurb: "Snaps move through the same approval columns. The tiles beside the board are the Snapchat preview.",
+  },
+  linkedin: {
+    title: "LinkedIn",
+    blurb: "LinkedIn posts move through the same approval columns. The cards beside the board are the feed preview.",
+  },
+  youtube: {
+    title: "YouTube Shorts",
+    blurb: "Shorts move through the same approval columns. The tiles beside the board are the Shorts preview.",
+  },
+  pinterest: {
+    title: "Pinterest",
+    blurb: "Pins move through the same approval columns. The tiles beside the board are the Pinterest preview.",
   },
 };
 
@@ -210,8 +226,23 @@ export function Planner({
     refresh();
   }
 
-  const board: BoardId | null = tab === "calendar" ? null : tab;
+  const board: BoardId | null = tab === "calendar" || tab === "notes" ? null : tab;
   const copy = board ? BOARD_COPY[board] : null;
+
+  async function movePost(id: string, plannedDate: string) {
+    setBusy(true);
+    setBanner(null);
+    const response = await fetch(`/api/posts/${id}/schedule`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plannedDate }),
+    });
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    setBusy(false);
+    if (!response.ok) return data.error || "Couldn't move that post.";
+    refresh();
+    return null;
+  }
 
   return (
     <div className="planner">
@@ -234,16 +265,28 @@ export function Planner({
             </button>
           </div>
         </div>
-      ) : (
+      ) : tab === "notes" ? (
         <div className="page-head">
           <div>
-            <h1>Content calendar</h1>
-            <p className="muted intro">Posts are coloured by channel and status. Click one to open it.</p>
+            <h1>Notes & Key Dates</h1>
+            <p className="muted intro">Tick notes when they’re done. Key dates still show on the content calendar.</p>
           </div>
           <div className="row">
             <button type="button" className="btn ghost" onClick={() => setKeyOpen(true)}>
               + Launch / key date
             </button>
+            <button type="button" className="btn" onClick={() => setNoteForm("new")}>
+              + New note
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="page-head">
+          <div>
+            <h1>Content Calendar</h1>
+            <p className="muted intro">Drag a post to another day, or click a day to add one.</p>
+          </div>
+          <div className="row">
             <button
               type="button"
               className="btn"
@@ -273,10 +316,17 @@ export function Planner({
           onAmend={(id) => void amend(id)}
           onChanged={refresh}
         />
+      ) : tab === "notes" ? (
+        <NotesDates
+          notes={notes}
+          keyDates={keyDates}
+          onEditNote={setNoteForm}
+          onOpenKey={setActiveKey}
+          onChanged={refresh}
+        />
       ) : (
         <CalendarBoard
           posts={posts}
-          notes={notes}
           keyDates={keyDates}
           cursor={cursor}
           view={calView}
@@ -288,8 +338,7 @@ export function Planner({
             setPresetDate(date);
             setPostForm("new");
           }}
-          onEditNote={setNoteForm}
-          onChanged={refresh}
+          onMove={movePost}
         />
       )}
 
@@ -300,7 +349,7 @@ export function Planner({
               <DialogHeader>
                 <DialogTitle>{noteForm === "new" ? "New note" : "Edit note"}</DialogTitle>
                 <DialogDescription>
-                  Ideas and inspo. A date puts this note on the content calendar.
+                  Ideas and inspo. A date is just for your list. Notes stay off the content calendar.
                 </DialogDescription>
               </DialogHeader>
               <NoteForm
@@ -368,7 +417,6 @@ export function Planner({
               }}
               onCancelPrompt={() => setPrompt(null)}
               onPreview={() => setStory({ items: [openPost], index: 0 })}
-              onChanged={refresh}
             />
           ) : null}
         </DialogContent>
@@ -428,7 +476,6 @@ function PostDetail({
   onAmend,
   onDelete,
   onPreview,
-  onChanged,
   prompt,
   onPromptComment,
   onSubmitPrompt,
@@ -443,7 +490,6 @@ function PostDetail({
   onAmend: (id: string) => void;
   onDelete: () => void;
   onPreview: () => void;
-  onChanged: () => void;
   prompt: { action: ReviewAction; comment: string } | null;
   onPromptComment: (comment: string) => void;
   onSubmitPrompt: () => void;
@@ -493,25 +539,25 @@ function PostDetail({
           {post.creativeNotes}
         </p>
       ) : null}
-      <section>
-        <h3>Performance</h3>
-        <PostStatsForm key={post.stats.map((stat) => `${stat.platform}:${stat.views ?? ""}:${stat.likes ?? ""}`).join("|")} post={post} onSaved={onChanged} />
+      <section className="post-thread">
+        <h3>Comments</h3>
+        {post.comments.length === 0 ? <p className="muted small">No comments yet.</p> : null}
+        {post.comments.length > 0 ? (
+          <ul className="notes">
+            {post.comments.map((comment) => (
+              <li key={comment.id}>
+                <b>
+                  {comment.authorName} · {COMMENT_LABEL[comment.kind]} · {formatWhen(comment.createdAt)}
+                </b>
+                <p>{comment.body}</p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
-      {post.comments.length > 0 ? (
-        <ul className="notes">
-          {post.comments.map((comment) => (
-            <li key={comment.id}>
-              <b>
-                {comment.authorName} · {COMMENT_LABEL[comment.kind]} · {formatWhen(comment.createdAt)}
-              </b>
-              <p>{comment.body}</p>
-            </li>
-          ))}
-        </ul>
-      ) : null}
       {prompt ? (
         <form
-          className="stack review-bar"
+          className="stack post-footer"
           onSubmit={(event) => {
             event.preventDefault();
             onSubmitPrompt();
@@ -527,7 +573,7 @@ function PostDetail({
               required
             />
           </label>
-          <div className="row">
+          <div className="post-actions">
             <button type="button" className="btn ghost" onClick={onCancelPrompt}>
               Cancel
             </button>
@@ -537,9 +583,9 @@ function PostDetail({
           </div>
         </form>
       ) : (
-        <div className="review-bar">
-          <ReviewButtons post={post} user={user} busy={busy} onEdit={onEdit} onReview={onReview} onAmend={onAmend} />
-          <div className="row">
+        <div className="post-footer">
+          <div className="post-actions">
+            <ReviewButtons post={post} user={user} busy={busy} onEdit={onEdit} onReview={onReview} onAmend={onAmend} />
             {canDelete ? (
               <button type="button" className="btn danger sm" disabled={busy} onClick={onDelete}>
                 Delete
@@ -720,10 +766,18 @@ function PostForm({
 }) {
   const preset =
     board === "meta-stories"
-      ? { contentType: "STORY" as const, platforms: ["INSTAGRAM" as const] }
+      ? { contentType: "STORY" as const, platforms: ["INSTAGRAM" as const, "FACEBOOK" as const] }
       : board === "tiktok"
         ? { contentType: "REEL" as const, platforms: ["TIKTOK" as const] }
-        : { contentType: "FEED" as const, platforms: ["INSTAGRAM" as const] };
+        : board === "snapchat"
+          ? { contentType: "STORY" as const, platforms: ["SNAPCHAT" as const] }
+          : board === "linkedin"
+            ? { contentType: "FEED" as const, platforms: ["LINKEDIN" as const] }
+            : board === "youtube"
+              ? { contentType: "REEL" as const, platforms: ["YOUTUBE_SHORTS" as const] }
+              : board === "pinterest"
+                ? { contentType: "FEED" as const, platforms: ["PINTEREST" as const] }
+                : { contentType: "FEED" as const, platforms: ["INSTAGRAM" as const, "FACEBOOK" as const] };
   const [title, setTitle] = useState(initial?.title ?? "");
   const [platforms, setPlatforms] = useState<PlatformId[]>(initial?.platforms ?? [...preset.platforms]);
   const [contentType, setContentType] = useState<ContentTypeId>(initial?.contentType ?? preset.contentType);

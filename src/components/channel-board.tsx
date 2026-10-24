@@ -118,6 +118,10 @@ export function ChannelBoard({
         ) : null}
         {board === "tiktok" ? <TikTokGrid posts={feedPosts} profile={profile} onOpen={onOpen} embedded /> : null}
         {board === "meta-stories" ? <StoryFeed posts={feedPosts} onOpen={onOpen} /> : null}
+        {board === "snapchat" ? <TileFeed posts={feedPosts} onOpen={onOpen} kind="snap" label="Snapchat preview" /> : null}
+        {board === "youtube" ? <TileFeed posts={feedPosts} onOpen={onOpen} kind="shorts" label="Shorts preview" /> : null}
+        {board === "pinterest" ? <TileFeed posts={feedPosts} onOpen={onOpen} kind="pin" label="Pinterest preview" /> : null}
+        {board === "linkedin" ? <LinkedInFeed posts={feedPosts} onOpen={onOpen} /> : null}
       </aside>
     </div>
   );
@@ -254,6 +258,75 @@ function StoryFeed({ posts, onOpen }: { posts: PostDTO[]; onOpen: (post: PostDTO
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function previewOrder(posts: PostDTO[]) {
+  return [...posts].sort(
+    (a, b) =>
+      b.plannedDate.localeCompare(a.plannedDate) ||
+      (b.plannedTime ?? "").localeCompare(a.plannedTime ?? "") ||
+      b.createdAt.localeCompare(a.createdAt),
+  );
+}
+
+function TileMedia({ post }: { post: PostDTO }) {
+  const media = post.media[0];
+  if (!media) return <span className="story-empty" />;
+  if (media.mimeType.startsWith("video/")) {
+    return <video src={`/api/media/${media.id}#t=0.1`} muted playsInline preload="metadata" />;
+  }
+  return <img src={`/api/media/${media.id}`} alt="" />;
+}
+
+function TileFeed({
+  posts,
+  onOpen,
+  kind,
+  label,
+}: {
+  posts: PostDTO[];
+  onOpen: (post: PostDTO) => void;
+  kind: "snap" | "shorts" | "pin";
+  label: string;
+}) {
+  const items = previewOrder(posts);
+  return (
+    <div className={`tile-feed tile-${kind}`}>
+      <p className="muted small">{label}. Tap one to open it.</p>
+      {items.length === 0 ? <p className="empty">Nothing in this plan yet.</p> : null}
+      <div className="tile-grid">
+        {items.map((post) => (
+          <button key={post.id} type="button" className="preview-tile" onClick={() => onOpen(post)}>
+            <span className="preview-frame">
+              <TileMedia post={post} />
+            </span>
+            <span className="preview-title">{post.title}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LinkedInFeed({ posts, onOpen }: { posts: PostDTO[]; onOpen: (post: PostDTO) => void }) {
+  const items = previewOrder(posts);
+  return (
+    <div className="li-feed">
+      <p className="muted small">LinkedIn preview. Tap one to open it.</p>
+      {items.length === 0 ? <p className="empty">Nothing in this plan yet.</p> : null}
+      {items.map((post) => (
+        <button key={post.id} type="button" className="li-card" onClick={() => onOpen(post)}>
+          <span className="li-media">
+            <TileMedia post={post} />
+          </span>
+          <span className="li-copy">
+            <b>{post.title}</b>
+            {post.caption ? <span>{post.caption}</span> : null}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }

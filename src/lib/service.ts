@@ -20,6 +20,7 @@ const PLATFORMS: PlatformId[] = [
   "LINKEDIN",
   "YOUTUBE_SHORTS",
   "SNAPCHAT",
+  "PINTEREST",
 ];
 const TYPES: ContentTypeId[] = ["FEED", "REEL", "STORY"];
 const STATUSES: StatusId[] = [
@@ -520,6 +521,34 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
       },
       select: postSelect,
     });
+  });
+  return serializePost(post);
+}
+
+export async function reschedulePost(user: UserDTO, id: string, plannedDate: string) {
+  const existing = await prisma.post.findUnique({ where: { id }, select: { plannedDate: true } });
+  if (!existing) throw new HttpError(404, "That post has gone.");
+  const date = parseDay(plannedDate);
+  const from = dayString(existing.plannedDate);
+  if (from === plannedDate) {
+    const current = await prisma.post.findUnique({ where: { id }, select: postSelect });
+    if (!current) throw new HttpError(404, "That post has gone.");
+    return serializePost(current);
+  }
+  const post = await prisma.post.update({
+    where: { id },
+    data: {
+      plannedDate: date,
+      comments: {
+        create: {
+          authorId: user.id,
+          authorName: user.name,
+          kind: "NOTE",
+          body: `Moved from ${from} to ${plannedDate}.`,
+        },
+      },
+    },
+    select: postSelect,
   });
   return serializePost(post);
 }
