@@ -12,9 +12,28 @@ type Env = Record<string, string | undefined>;
 // Millie approves. The Manager (content team) creates posts and makes amendments.
 // Millie's password is read from MILLIE_PASSWORD. MANAGEMENT_PASSWORD is only a
 // fallback so an existing deploy keeps working until MILLIE_PASSWORD is set.
+// Bracket access, read when this is called, so a production build cannot bake in
+// an empty MILLIE_PASSWORD from the build machine. Render sets it on the running service.
+export function milliePasswordFromEnv(env: Env): string | null {
+  const millie = env["MILLIE_PASSWORD"];
+  const fallback = env["MANAGEMENT_PASSWORD"];
+  if (typeof millie === "string" && millie.length > 0) return millie;
+  if (typeof fallback === "string" && fallback.length > 0) return fallback;
+  return null;
+}
+
+// Constant-time compare with no node:crypto import. accounts.ts is pulled into
+// the server bundle via bootstrap, and webpack cannot load the node: scheme.
+export function samePassword(typed: string, expected: string) {
+  if (typed.length === 0 || typed.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < typed.length; i++) diff |= typed.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
 export function accountsFromEnv(env: Env): AccountSpec[] {
   const accounts: AccountSpec[] = [];
-  const milliePassword = env.MILLIE_PASSWORD || env.MANAGEMENT_PASSWORD;
+  const milliePassword = milliePasswordFromEnv(env);
   if (milliePassword) {
     accounts.push({
       email: (env.MANAGEMENT_EMAIL || "millie@mailbakes.com").trim().toLowerCase(),

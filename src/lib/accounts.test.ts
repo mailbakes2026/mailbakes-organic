@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { accountsFromEnv } from "./accounts.ts";
+import { accountsFromEnv, milliePasswordFromEnv } from "./accounts.ts";
 
 test("Millie uses MILLIE_PASSWORD and the Manager keeps the team password", () => {
   const accounts = accountsFromEnv({
@@ -34,7 +34,20 @@ test("MILLIE_PASSWORD is preferred, and the team password still signs the Manage
 
 test("Millie's password is not hardcoded", () => {
   const source = readFileSync(new URL("./accounts.ts", import.meta.url), "utf8");
-  assert.match(source, /MILLIE_PASSWORD/);
+  assert.match(source, /env\["MILLIE_PASSWORD"\]/);
   assert.doesNotMatch(source, /MILLIE_PASSWORD\s*=\s*["'`]/);
   assert.equal(accountsFromEnv({}).length, 0);
+});
+
+test("MILLIE_PASSWORD is read from the env object when sign-in runs", () => {
+  assert.equal(milliePasswordFromEnv({ MILLIE_PASSWORD: "runtime-millie-secret" }), "runtime-millie-secret");
+  assert.equal(
+    milliePasswordFromEnv({ MANAGEMENT_PASSWORD: "runtime-fallback-secret" }),
+    "runtime-fallback-secret",
+  );
+  assert.equal(
+    milliePasswordFromEnv({ MILLIE_PASSWORD: "", MANAGEMENT_PASSWORD: "runtime-fallback-secret" }),
+    "runtime-fallback-secret",
+  );
+  assert.equal(milliePasswordFromEnv({}), null);
 });
