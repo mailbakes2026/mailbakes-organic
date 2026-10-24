@@ -1,8 +1,10 @@
 "use client";
 
+import { DateGroups } from "@/components/date-groups";
 import { InstaGrid, TikTokGrid } from "@/components/insta-grid";
 import { COLUMNS, approverMayAct, columnFor, onBoard, type BoardId, type ReviewAction } from "@/lib/pipeline";
 import { contentLabel, platformColour, platformLabel, statusLabel } from "@/lib/constants";
+import { scheduleBadge } from "@/lib/schedule-groups";
 import type { IgProfileDTO, PlatformId, PostDTO, StatusId, UserDTO } from "@/lib/types";
 
 function statusClass(status: StatusId) {
@@ -22,12 +24,8 @@ function formatWhen(date: string, time: string | null) {
   return time ? `${label} · ${time}` : label;
 }
 
-function bySchedule(a: PostDTO, b: PostDTO) {
-  return (
-    a.plannedDate.localeCompare(b.plannedDate) ||
-    (a.plannedTime ?? "99:99").localeCompare(b.plannedTime ?? "99:99") ||
-    a.createdAt.localeCompare(b.createdAt)
-  );
+function StoryDateBadge({ date, now }: { date: string; now: Date }) {
+  return <span className="story-date-badge">{scheduleBadge(date, now)}</span>;
 }
 
 export function ChannelBoard({
@@ -55,6 +53,7 @@ export function ChannelBoard({
   onRestore: (id: string) => void;
   onChanged: () => void;
 }) {
+  const now = new Date();
   const mine = posts.filter((post) => onBoard(post, board));
   const feedPosts = posts.filter((post) => post.status !== "REJECTED");
 
@@ -84,7 +83,7 @@ export function ChannelBoard({
         <div className="board-scroll">
           <div className="board-cols">
             {COLUMNS.map((column) => {
-              const items = mine.filter((post) => columnFor(post.status) === column.id).sort(bySchedule);
+              const items = mine.filter((post) => columnFor(post.status) === column.id);
               return (
                 <section key={column.id} className={`pipe-col pipe-${column.id}`} aria-label={column.label}>
                   <header className="col-head">
@@ -94,20 +93,23 @@ export function ChannelBoard({
                     </div>
                     <span className="pill">{items.length}</span>
                   </header>
-                  {items.length === 0 ? <p className="empty">Nothing here</p> : null}
-                  {items.map((post) => (
-                    <PipeCard
-                      key={post.id}
-                      post={post}
-                      user={user}
-                      busy={busy}
-                      onOpen={() => onOpen(post)}
-                      onEdit={() => onEdit(post)}
-                      onReview={onReview}
-                      onAmend={onAmend}
-                      onRestore={onRestore}
-                    />
-                  ))}
+                  <DateGroups
+                    items={items}
+                    now={now}
+                    empty={<p className="empty">Nothing here</p>}
+                    render={(post) => (
+                      <PipeCard
+                        post={post}
+                        user={user}
+                        busy={busy}
+                        onOpen={() => onOpen(post)}
+                        onEdit={() => onEdit(post)}
+                        onReview={onReview}
+                        onAmend={onAmend}
+                        onRestore={onRestore}
+                      />
+                    )}
+                  />
                 </section>
               );
             })}
@@ -116,14 +118,20 @@ export function ChannelBoard({
       </div>
       <aside className="channel-feed" aria-label="Feed preview">
         {board === "meta-posts" ? (
-          <InstaGrid posts={feedPosts} profile={profile} onOpen={onOpen} onChanged={onChanged} embedded />
+          <InstaGrid posts={feedPosts} profile={profile} onOpen={onOpen} onChanged={onChanged} embedded now={now} />
         ) : null}
-        {board === "tiktok" ? <TikTokGrid posts={feedPosts} profile={profile} onOpen={onOpen} embedded /> : null}
-        {board === "meta-stories" ? <StoryFeed posts={feedPosts} onOpen={onOpen} /> : null}
-        {board === "snapchat" ? <TileFeed posts={feedPosts} onOpen={onOpen} kind="snap" label="Snapchat preview" /> : null}
-        {board === "youtube" ? <TileFeed posts={feedPosts} onOpen={onOpen} kind="shorts" label="Shorts preview" /> : null}
-        {board === "pinterest" ? <TileFeed posts={feedPosts} onOpen={onOpen} kind="pin" label="Pinterest preview" /> : null}
-        {board === "linkedin" ? <LinkedInFeed posts={feedPosts} onOpen={onOpen} /> : null}
+        {board === "tiktok" ? <TikTokGrid posts={feedPosts} profile={profile} onOpen={onOpen} embedded now={now} /> : null}
+        {board === "meta-stories" ? <StoryFeed posts={feedPosts} onOpen={onOpen} now={now} /> : null}
+        {board === "snapchat" ? (
+          <TileFeed posts={feedPosts} onOpen={onOpen} now={now} kind="snap" label="Snapchat preview" />
+        ) : null}
+        {board === "youtube" ? (
+          <TileFeed posts={feedPosts} onOpen={onOpen} now={now} kind="shorts" label="Shorts preview" />
+        ) : null}
+        {board === "pinterest" ? (
+          <TileFeed posts={feedPosts} onOpen={onOpen} now={now} kind="pin" label="Pinterest preview" />
+        ) : null}
+        {board === "linkedin" ? <LinkedInFeed posts={feedPosts} onOpen={onOpen} now={now} /> : null}
       </aside>
     </div>
   );
@@ -242,24 +250,20 @@ export function ReviewButtons({
   );
 }
 
-function StoryFeed({ posts, onOpen }: { posts: PostDTO[]; onOpen: (post: PostDTO) => void }) {
-  const stories = posts
-    .filter((post) => post.contentType === "STORY" && post.status !== "REJECTED")
-    .sort(
-      (a, b) =>
-        b.plannedDate.localeCompare(a.plannedDate) ||
-        (b.plannedTime ?? "").localeCompare(a.plannedTime ?? "") ||
-        b.createdAt.localeCompare(a.createdAt),
-    );
+function StoryFeed({ posts, onOpen, now }: { posts: PostDTO[]; onOpen: (post: PostDTO) => void; now: Date }) {
+  const stories = posts.filter((post) => post.contentType === "STORY" && post.status !== "REJECTED");
   return (
     <div className="story-feed">
-      <p className="muted small">Story frames, newest first. Tap one to open it.</p>
-      {stories.length === 0 ? <p className="empty">No stories in this plan yet.</p> : null}
-      <div className="story-rail">
-        {stories.map((post) => {
+      <p className="muted small">Story frames, soonest first. Tap one to open it.</p>
+      <DateGroups
+        items={stories}
+        now={now}
+        empty={<p className="empty">No stories in this plan yet.</p>}
+        itemsClassName="story-rail"
+        render={(post) => {
           const media = post.media[0];
           return (
-            <button key={post.id} type="button" className="story-rail-card" onClick={() => onOpen(post)}>
+            <button type="button" className="story-rail-card" onClick={() => onOpen(post)}>
               <span className="story-rail-frame">
                 {media ? (
                   media.mimeType.startsWith("video/") ? (
@@ -270,24 +274,16 @@ function StoryFeed({ posts, onOpen }: { posts: PostDTO[]; onOpen: (post: PostDTO
                 ) : (
                   <span className="story-empty" />
                 )}
+                <StoryDateBadge date={post.plannedDate} now={now} />
                 {post.media.length > 1 ? <span className="story-rail-count">{post.media.length}</span> : null}
               </span>
               <span className="story-rail-title">{post.title}</span>
               <span className="small muted">{post.platforms.map((item: PlatformId) => platformLabel(item)).join(" · ")}</span>
             </button>
           );
-        })}
-      </div>
+        }}
+      />
     </div>
-  );
-}
-
-function previewOrder(posts: PostDTO[]) {
-  return [...posts].sort(
-    (a, b) =>
-      b.plannedDate.localeCompare(a.plannedDate) ||
-      (b.plannedTime ?? "").localeCompare(a.plannedTime ?? "") ||
-      b.createdAt.localeCompare(a.createdAt),
   );
 }
 
@@ -303,50 +299,58 @@ function TileMedia({ post }: { post: PostDTO }) {
 function TileFeed({
   posts,
   onOpen,
+  now,
   kind,
   label,
 }: {
   posts: PostDTO[];
   onOpen: (post: PostDTO) => void;
+  now: Date;
   kind: "snap" | "shorts" | "pin";
   label: string;
 }) {
-  const items = previewOrder(posts);
   return (
     <div className={`tile-feed tile-${kind}`}>
-      <p className="muted small">{label}. Tap one to open it.</p>
-      {items.length === 0 ? <p className="empty">Nothing in this plan yet.</p> : null}
-      <div className="tile-grid">
-        {items.map((post) => (
-          <button key={post.id} type="button" className="preview-tile" onClick={() => onOpen(post)}>
+      <p className="muted small">{label}, soonest first. Tap one to open it.</p>
+      <DateGroups
+        items={posts}
+        now={now}
+        empty={<p className="empty">Nothing in this plan yet.</p>}
+        itemsClassName="tile-grid"
+        render={(post) => (
+          <button type="button" className="preview-tile" onClick={() => onOpen(post)}>
             <span className="preview-frame">
               <TileMedia post={post} />
+              {kind === "snap" ? <StoryDateBadge date={post.plannedDate} now={now} /> : null}
             </span>
             <span className="preview-title">{post.title}</span>
           </button>
-        ))}
-      </div>
+        )}
+      />
     </div>
   );
 }
 
-function LinkedInFeed({ posts, onOpen }: { posts: PostDTO[]; onOpen: (post: PostDTO) => void }) {
-  const items = previewOrder(posts);
+function LinkedInFeed({ posts, onOpen, now }: { posts: PostDTO[]; onOpen: (post: PostDTO) => void; now: Date }) {
   return (
     <div className="li-feed">
-      <p className="muted small">LinkedIn preview. Tap one to open it.</p>
-      {items.length === 0 ? <p className="empty">Nothing in this plan yet.</p> : null}
-      {items.map((post) => (
-        <button key={post.id} type="button" className="li-card" onClick={() => onOpen(post)}>
-          <span className="li-media">
-            <TileMedia post={post} />
-          </span>
-          <span className="li-copy">
-            <b>{post.title}</b>
-            {post.caption ? <span>{post.caption}</span> : null}
-          </span>
-        </button>
-      ))}
+      <p className="muted small">LinkedIn preview, soonest first. Tap one to open it.</p>
+      <DateGroups
+        items={posts}
+        now={now}
+        empty={<p className="empty">Nothing in this plan yet.</p>}
+        render={(post) => (
+          <button type="button" className="li-card" onClick={() => onOpen(post)}>
+            <span className="li-media">
+              <TileMedia post={post} />
+            </span>
+            <span className="li-copy">
+              <b>{post.title}</b>
+              {post.caption ? <span>{post.caption}</span> : null}
+            </span>
+          </button>
+        )}
+      />
     </div>
   );
 }

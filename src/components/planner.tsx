@@ -26,6 +26,7 @@ import {
   statusLabel,
 } from "@/lib/constants";
 import { approverMayAct, type BoardId, type ReviewAction } from "@/lib/pipeline";
+import { scheduleBadge } from "@/lib/schedule-groups";
 import { NoteForm } from "@/components/notes-board";
 import { NotesDates } from "@/components/notes-dates";
 import { MediaCarousel } from "@/components/media-carousel";
@@ -788,6 +789,7 @@ function StoryStage({
       ) : (
         <div className="story-empty" />
       )}
+      <span className="story-date-badge">{scheduleBadge(post.plannedDate, new Date())}</span>
       <div className="story-progress" aria-hidden="true">
         {Array.from({ length: count }, (_, segment) => (
           <i key={segment} className={segment < safe ? "done" : segment === safe ? "on" : ""} />
