@@ -30,6 +30,8 @@ services:
         sync: false
       - key: MILLIE_PASSWORD
         sync: false
+      - key: ORGANIC_API_TOKEN
+        sync: false
       - key: TEAM_EMAIL
         sync: false
       - key: TEAM_PASSWORD

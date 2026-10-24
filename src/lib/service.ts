@@ -719,6 +719,28 @@ export async function markAmendments(user: UserDTO, id: string) {
   return serializePost(updated);
 }
 
+export async function restoreToApproval(user: UserDTO, id: string) {
+  const post = await prisma.post.findUnique({ where: { id } });
+  if (!post) throw new HttpError(404, "That post has gone.");
+  if (post.status !== "REJECTED") throw new HttpError(400, "This post isn't declined.");
+  const updated = await prisma.post.update({
+    where: { id },
+    data: {
+      status: "PENDING_APPROVAL",
+      comments: {
+        create: {
+          authorId: user.id,
+          authorName: user.name,
+          kind: "NOTE",
+          body: "Moved back to approval.",
+        },
+      },
+    },
+    select: postSelect,
+  });
+  return serializePost(updated);
+}
+
 export async function reviewPost(user: UserDTO, id: string, action: string, comment: string) {
   const post = await prisma.post.findUnique({ where: { id } });
   if (!post) throw new HttpError(404, "That post has gone.");

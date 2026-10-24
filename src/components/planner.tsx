@@ -148,6 +148,12 @@ export function Planner({
     if (window.matchMedia("(max-width: 767px)").matches) setCalView("week");
   }, []);
   const [banner, setBanner] = useState<string | null>(null);
+  const showDeclined = useRef(false);
+  useEffect(() => {
+    if (!showDeclined.current) return;
+    showDeclined.current = false;
+    document.querySelector(".pipe-declined")?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [posts]);
   const [busy, setBusy] = useState(false);
 
   const openPost = detail ? posts.find((post) => post.id === detail.id) ?? detail : null;
@@ -171,6 +177,20 @@ export function Planner({
       return;
     }
     setPrompt(null);
+    if (action === "reject") showDeclined.current = true;
+    refresh();
+  }
+
+  async function restore(id: string) {
+    setBusy(true);
+    setBanner(null);
+    const response = await fetch(`/api/posts/${id}/restore`, { method: "POST" });
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    setBusy(false);
+    if (!response.ok) {
+      setBanner(data.error || "Couldn't move that post back.");
+      return;
+    }
     refresh();
   }
 
@@ -318,6 +338,7 @@ export function Planner({
           onEdit={setPostForm}
           onReview={askReview}
           onAmend={(id) => void amend(id)}
+          onRestore={(id) => void restore(id)}
           onChanged={refresh}
         />
       ) : tab === "notes" ? (
@@ -413,6 +434,7 @@ export function Planner({
               }}
               onReview={askReview}
               onAmend={(id) => void amend(id)}
+              onRestore={(id) => void restore(id)}
               onDelete={() => void removePost(openPost.id)}
               prompt={prompt && prompt.id === openPost.id ? prompt : null}
               onPromptComment={(comment) => setPrompt((current) => (current ? { ...current, comment } : current))}
@@ -510,6 +532,7 @@ function PostDetail({
   onEdit,
   onReview,
   onAmend,
+  onRestore,
   onDelete,
   onPreview,
   prompt,
@@ -524,6 +547,7 @@ function PostDetail({
   onEdit: () => void;
   onReview: (id: string, action: ReviewAction) => void;
   onAmend: (id: string) => void;
+  onRestore: (id: string) => void;
   onDelete: () => void;
   onPreview: () => void;
   prompt: { action: ReviewAction; comment: string } | null;
@@ -670,30 +694,38 @@ function PostDetail({
       ) : user.role === "MANAGEMENT" ? (
         <div className="post-footer">
           <div className="footer-group">
-            <button
-              type="button"
-              className="decision approve"
-              disabled={busy || !approverMayAct(user.role, post.status, "approve")}
-              onClick={() => onReview(post.id, "approve")}
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              className="decision changes"
-              disabled={busy || !approverMayAct(user.role, post.status, "request_changes")}
-              onClick={() => onReview(post.id, "request_changes")}
-            >
-              Changes needed
-            </button>
-            <button
-              type="button"
-              className="decision decline"
-              disabled={busy || !approverMayAct(user.role, post.status, "reject")}
-              onClick={() => onReview(post.id, "reject")}
-            >
-              Decline
-            </button>
+            {post.status === "REJECTED" ? (
+              <button type="button" className="decision restore" disabled={busy} onClick={() => onRestore(post.id)}>
+                Move back to approval
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="decision approve"
+                  disabled={busy || !approverMayAct(user.role, post.status, "approve")}
+                  onClick={() => onReview(post.id, "approve")}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="decision changes"
+                  disabled={busy || !approverMayAct(user.role, post.status, "request_changes")}
+                  onClick={() => onReview(post.id, "request_changes")}
+                >
+                  Changes needed
+                </button>
+                <button
+                  type="button"
+                  className="decision decline"
+                  disabled={busy || !approverMayAct(user.role, post.status, "reject")}
+                  onClick={() => onReview(post.id, "reject")}
+                >
+                  Decline
+                </button>
+              </>
+            )}
           </div>
           {tools}
         </div>
@@ -701,6 +733,11 @@ function PostDetail({
         <div className="post-footer">
           <div className="footer-group footer-note">
             <p className="approver-note">Only Millie can approve</p>
+            {post.status === "REJECTED" ? (
+              <button type="button" className="decision restore" disabled={busy} onClick={() => onRestore(post.id)}>
+                Move back to approval
+              </button>
+            ) : null}
             {post.status === "CHANGES_REQUESTED" ? (
               <button type="button" className="decision changes" disabled={busy} onClick={() => onAmend(post.id)}>
                 Amendments made
