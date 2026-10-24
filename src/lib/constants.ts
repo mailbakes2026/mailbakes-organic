@@ -24,7 +24,7 @@ export const STATUSES: { id: StatusId; label: string }[] = [
   { id: "CHANGES_REQUESTED", label: "Needs changes" },
   { id: "AMENDMENTS_MADE", label: "Amendments made" },
   { id: "APPROVED", label: "Approved" },
-  { id: "REJECTED", label: "Rejected" },
+  { id: "REJECTED", label: "Declined" },
 ];
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
