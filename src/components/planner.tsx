@@ -400,7 +400,7 @@ export function Planner({
       </Dialog>
 
       <Dialog open={Boolean(openPost)} onOpenChange={(open) => !open && setDetail(null)}>
-        <DialogContent showCloseButton={false} className="sheet-form">
+        <DialogContent showCloseButton={false} className="sheet-post">
           {openPost ? (
             <PostDetail
               post={openPost}
@@ -470,6 +470,38 @@ export function Planner({
 }
 
 
+function ModalTools({
+  editLabel,
+  canDelete,
+  busy,
+  onEdit,
+  onConfirm,
+  onClose,
+}: {
+  editLabel: string;
+  canDelete: boolean;
+  busy: boolean;
+  onEdit: () => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="footer-group">
+      <button type="button" className="tool" disabled={busy} onClick={onEdit}>
+        {editLabel}
+      </button>
+      {canDelete ? (
+        <button type="button" className="tool danger" disabled={busy} onClick={onConfirm}>
+          Delete
+        </button>
+      ) : null}
+      <button type="button" className="tool" onClick={onClose}>
+        Close
+      </button>
+    </div>
+  );
+}
+
 function PostDetail({
   post,
   user,
@@ -500,8 +532,36 @@ function PostDetail({
   onCancelPrompt: () => void;
 }) {
   const canDelete = user.role === "MANAGEMENT" || (post.authorId === user.id && post.status === "DRAFT");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const confirmArmed = useRef(false);
+  useEffect(() => {
+    setConfirmDelete(false);
+    confirmArmed.current = false;
+  }, [post.id]);
+  function askDelete() {
+    confirmArmed.current = false;
+    setConfirmDelete(true);
+    window.setTimeout(() => {
+      confirmArmed.current = true;
+    }, 400);
+  }
+  function commitDelete() {
+    if (!confirmArmed.current) return;
+    onDelete();
+  }
+  const tools = (
+    <ModalTools
+      editLabel={user.role === "MANAGEMENT" ? "Edit" : "Edit post"}
+      canDelete={canDelete}
+      busy={busy}
+      onEdit={onEdit}
+      onConfirm={askDelete}
+      onClose={onClose}
+    />
+  );
   return (
-    <div className="stack">
+    <div className="post-detail">
+      <div className="stack post-detail-body">
       <div className="sheet-head">
         <DialogHeader>
           <DialogTitle>{post.title}</DialogTitle>
@@ -509,7 +569,6 @@ function PostDetail({
             {contentLabel(post.contentType)} · {formatSchedule(post.plannedDate, post.plannedTime)} · {statusLabel(post.status)}
           </DialogDescription>
         </DialogHeader>
-        <DialogClose render={<button type="button" className="btn ghost sm" />}>Close</DialogClose>
       </div>
       <div className="row">
         {post.platforms.map((item) => (
@@ -565,9 +624,10 @@ function PostDetail({
           </ol>
         ) : null}
       </section>
+      </div>
       {prompt ? (
         <form
-          className="stack post-footer"
+          className="post-footer prompting"
           onSubmit={(event) => {
             event.preventDefault();
             onSubmitPrompt();
@@ -577,24 +637,39 @@ function PostDetail({
             What needs to change?
             <textarea
               id="review-comment"
-              rows={4}
+              rows={3}
               value={prompt.comment}
               onChange={(event) => onPromptComment(event.target.value)}
               required
             />
           </label>
-          <div className="post-actions">
-            <button type="button" className="btn ghost" onClick={onCancelPrompt}>
-              Cancel
-            </button>
-            <button type="submit" className="decision changes" disabled={busy}>
-              Changes needed
-            </button>
+          <div className="footer-bar">
+            <div className="footer-group" />
+            <div className="footer-group">
+              <button type="button" className="tool" onClick={onCancelPrompt}>
+                Cancel
+              </button>
+              <button type="submit" className="decision changes" disabled={busy}>
+                Changes needed
+              </button>
+            </div>
           </div>
         </form>
+      ) : confirmDelete ? (
+        <div className="post-footer confirming">
+          <p className="confirm-copy">Delete this post?</p>
+          <div className="footer-group">
+            <button type="button" className="tool" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </button>
+            <button type="button" className="tool danger" disabled={busy} onClick={commitDelete}>
+              Delete post
+            </button>
+          </div>
+        </div>
       ) : user.role === "MANAGEMENT" ? (
         <div className="post-footer">
-          <div className="decision-row">
+          <div className="footer-group">
             <button
               type="button"
               className="decision approve"
@@ -620,33 +695,19 @@ function PostDetail({
               Decline
             </button>
           </div>
-          {canDelete ? (
-            <button type="button" className="subtle" disabled={busy} onClick={onDelete}>
-              Delete
-            </button>
-          ) : null}
+          {tools}
         </div>
       ) : (
         <div className="post-footer">
-          <p className="approver-note">Only Millie can approve</p>
-          <div className="post-actions">
+          <div className="footer-group footer-note">
+            <p className="approver-note">Only Millie can approve</p>
             {post.status === "CHANGES_REQUESTED" ? (
-              <button type="button" className="btn sm" disabled={busy} onClick={() => onAmend(post.id)}>
+              <button type="button" className="decision changes" disabled={busy} onClick={() => onAmend(post.id)}>
                 Amendments made
               </button>
             ) : null}
-            <button type="button" className="btn sm" onClick={onEdit}>
-              Edit post
-            </button>
-            <button type="button" className="btn ghost sm" onClick={onClose}>
-              Close
-            </button>
-            {canDelete ? (
-              <button type="button" className="subtle" disabled={busy} onClick={onDelete}>
-                Delete
-              </button>
-            ) : null}
           </div>
+          {tools}
         </div>
       )}
     </div>
