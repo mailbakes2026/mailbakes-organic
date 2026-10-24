@@ -1235,6 +1235,8 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
   align-items: stretch;
   gap: 10px;
 }
+.post-footer.confirming { justify-content: flex-start; }
+.post-footer.confirming .confirm-copy { margin: 0; }
 .footer-bar {
   display: flex;
   align-items: center;
@@ -1323,6 +1325,13 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
   .footer-bar { gap: 8px; }
   .post-footer .decision,
   .post-footer .tool { width: 100%; }
+  .post-footer.confirming,
+  .post-footer.confirming .footer-group {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .post-footer.confirming .tool { width: auto; }
   .confirm-copy { white-space: normal; text-align: center; }
 }
 .pipe-declined { background: #FDF4F6; }

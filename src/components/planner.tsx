@@ -474,36 +474,17 @@ function ModalTools({
   editLabel,
   canDelete,
   busy,
-  confirming,
   onEdit,
   onConfirm,
-  onDelete,
-  onCancelConfirm,
   onClose,
 }: {
   editLabel: string;
   canDelete: boolean;
   busy: boolean;
-  confirming: boolean;
   onEdit: () => void;
   onConfirm: () => void;
-  onDelete: () => void;
-  onCancelConfirm: () => void;
   onClose: () => void;
 }) {
-  if (confirming) {
-    return (
-      <div className="footer-group footer-confirm">
-        <span className="confirm-copy">Delete this post?</span>
-        <button type="button" className="tool danger" disabled={busy} onClick={onDelete}>
-          Delete
-        </button>
-        <button type="button" className="tool" onClick={onCancelConfirm}>
-          Cancel
-        </button>
-      </div>
-    );
-  }
   return (
     <div className="footer-group">
       <button type="button" className="tool" disabled={busy} onClick={onEdit}>
@@ -552,19 +533,29 @@ function PostDetail({
 }) {
   const canDelete = user.role === "MANAGEMENT" || (post.authorId === user.id && post.status === "DRAFT");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const confirmArmed = useRef(false);
   useEffect(() => {
     setConfirmDelete(false);
+    confirmArmed.current = false;
   }, [post.id]);
+  function askDelete() {
+    confirmArmed.current = false;
+    setConfirmDelete(true);
+    window.setTimeout(() => {
+      confirmArmed.current = true;
+    }, 400);
+  }
+  function commitDelete() {
+    if (!confirmArmed.current) return;
+    onDelete();
+  }
   const tools = (
     <ModalTools
       editLabel={user.role === "MANAGEMENT" ? "Edit" : "Edit post"}
       canDelete={canDelete}
       busy={busy}
-      confirming={confirmDelete}
       onEdit={onEdit}
-      onConfirm={() => setConfirmDelete(true)}
-      onDelete={onDelete}
-      onCancelConfirm={() => setConfirmDelete(false)}
+      onConfirm={askDelete}
       onClose={onClose}
     />
   );
@@ -664,6 +655,18 @@ function PostDetail({
             </div>
           </div>
         </form>
+      ) : confirmDelete ? (
+        <div className="post-footer confirming">
+          <p className="confirm-copy">Delete this post?</p>
+          <div className="footer-group">
+            <button type="button" className="tool" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </button>
+            <button type="button" className="tool danger" disabled={busy} onClick={commitDelete}>
+              Delete post
+            </button>
+          </div>
+        </div>
       ) : user.role === "MANAGEMENT" ? (
         <div className="post-footer">
           <div className="footer-group">
