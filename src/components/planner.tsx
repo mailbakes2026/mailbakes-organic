@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarBoard } from "@/components/calendar-board";
-import { ChannelBoard, ReviewButtons } from "@/components/channel-board";
+import { ChannelBoard } from "@/components/channel-board";
 import { useAppTab } from "@/components/shell";
 import {
   Dialog,
@@ -75,8 +75,8 @@ function formatWhen(iso: string) {
 
 const COMMENT_LABEL = {
   APPROVAL: "Approved",
-  REJECTION: "Rejected",
-  CHANGES: "Changes requested",
+  REJECTION: "Declined",
+  CHANGES: "Changes needed",
   NOTE: "Note",
 };
 
@@ -196,6 +196,10 @@ export function Planner({
     setDetail(post);
     if (action === "approve") {
       void sendReview(id, action, "");
+      return;
+    }
+    if (action === "reject") {
+      void sendReview(id, action, "Declined.");
       return;
     }
     setPrompt({ id, action, comment: "" });
@@ -543,16 +547,22 @@ function PostDetail({
         <h3>Comments</h3>
         {post.comments.length === 0 ? <p className="muted small">No comments yet.</p> : null}
         {post.comments.length > 0 ? (
-          <ul className="notes">
-            {post.comments.map((comment) => (
-              <li key={comment.id}>
-                <b>
-                  {comment.authorName} · {COMMENT_LABEL[comment.kind]} · {formatWhen(comment.createdAt)}
-                </b>
-                <p>{comment.body}</p>
-              </li>
-            ))}
-          </ul>
+          <ol className="comment-timeline">
+            {post.comments.map((comment) => {
+              const quiet =
+                comment.body === "Approved." || comment.body === "Declined." || comment.body === "Amendments made.";
+              return (
+                <li key={comment.id} className={`kind-${comment.kind.toLowerCase()}`}>
+                  <span className="timeline-meta">
+                    <b>{comment.authorName}</b>
+                    <span>{COMMENT_LABEL[comment.kind]}</span>
+                    <time dateTime={comment.createdAt}>{formatWhen(comment.createdAt)}</time>
+                  </span>
+                  {quiet ? null : <p>{comment.body}</p>}
+                </li>
+              );
+            })}
+          </ol>
         ) : null}
       </section>
       {prompt ? (
@@ -564,7 +574,7 @@ function PostDetail({
           }}
         >
           <label className="field" htmlFor="review-comment">
-            {prompt.action === "reject" ? "Why is this rejected?" : "What needs to change?"}
+            What needs to change?
             <textarea
               id="review-comment"
               rows={4}
@@ -577,23 +587,65 @@ function PostDetail({
             <button type="button" className="btn ghost" onClick={onCancelPrompt}>
               Cancel
             </button>
-            <button type="submit" className="btn" disabled={busy}>
-              {prompt.action === "reject" ? "Reject" : "Needs changes"}
+            <button type="submit" className="decision changes" disabled={busy}>
+              Changes needed
             </button>
           </div>
         </form>
+      ) : user.role === "MANAGEMENT" ? (
+        <div className="post-footer">
+          <div className="decision-row">
+            <button
+              type="button"
+              className="decision approve"
+              disabled={busy || !approverMayAct(user.role, post.status, "approve")}
+              onClick={() => onReview(post.id, "approve")}
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              className="decision changes"
+              disabled={busy || !approverMayAct(user.role, post.status, "request_changes")}
+              onClick={() => onReview(post.id, "request_changes")}
+            >
+              Changes needed
+            </button>
+            <button
+              type="button"
+              className="decision decline"
+              disabled={busy || !approverMayAct(user.role, post.status, "reject")}
+              onClick={() => onReview(post.id, "reject")}
+            >
+              Decline
+            </button>
+          </div>
+          {canDelete ? (
+            <button type="button" className="subtle" disabled={busy} onClick={onDelete}>
+              Delete
+            </button>
+          ) : null}
+        </div>
       ) : (
         <div className="post-footer">
+          <p className="approver-note">Only Millie can approve</p>
           <div className="post-actions">
-            <ReviewButtons post={post} user={user} busy={busy} onEdit={onEdit} onReview={onReview} onAmend={onAmend} />
+            {post.status === "CHANGES_REQUESTED" ? (
+              <button type="button" className="btn sm" disabled={busy} onClick={() => onAmend(post.id)}>
+                Amendments made
+              </button>
+            ) : null}
+            <button type="button" className="btn sm" onClick={onEdit}>
+              Edit post
+            </button>
+            <button type="button" className="btn ghost sm" onClick={onClose}>
+              Close
+            </button>
             {canDelete ? (
-              <button type="button" className="btn danger sm" disabled={busy} onClick={onDelete}>
+              <button type="button" className="subtle" disabled={busy} onClick={onDelete}>
                 Delete
               </button>
             ) : null}
-            <button type="button" className="btn ghost sm" onClick={onClose}>
-              Done
-            </button>
           </div>
         </div>
       )}

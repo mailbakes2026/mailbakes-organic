@@ -727,7 +727,7 @@ export async function reviewPost(user: UserDTO, id: string, action: string, comm
   }
   if (!approverMayAct(user.role, post.status, action)) {
     if (user.role !== "MANAGEMENT") {
-      throw new HttpError(403, "Only Millie can approve or request changes.");
+      throw new HttpError(403, "Only Millie can approve.");
     }
     throw new HttpError(400, "This post isn't waiting for approval.");
   }
@@ -738,7 +738,6 @@ export async function reviewPost(user: UserDTO, id: string, action: string, comm
     status = "APPROVED";
     kind = "APPROVAL";
   } else if (action === "reject") {
-    if (!text) throw new HttpError(400, "Add a comment explaining the rejection.");
     status = "REJECTED";
     kind = "REJECTION";
   } else {
@@ -757,7 +756,7 @@ export async function reviewPost(user: UserDTO, id: string, action: string, comm
           authorId: user.id,
           authorName: user.name,
           kind,
-          body: text || "Approved.",
+          body: text || (action === "reject" ? "Declined." : "Approved."),
         },
       },
     },

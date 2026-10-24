@@ -12,7 +12,7 @@ export type BoardId =
   | "youtube"
   | "pinterest";
 
-export type ColumnId = "approval" | "changes" | "amended" | "approved";
+export type ColumnId = "approval" | "changes" | "amended" | "approved" | "declined";
 
 export type ReviewAction = "approve" | "request_changes" | "reject";
 
@@ -21,6 +21,7 @@ export const COLUMNS: { id: ColumnId; label: string; hint: string }[] = [
   { id: "changes", label: "Needs changes", hint: "Manager to amend" },
   { id: "amended", label: "Amendments made", hint: "Back for approval" },
   { id: "approved", label: "Approved", hint: "Ready to post by hand" },
+  { id: "declined", label: "Declined", hint: "Not going ahead" },
 ];
 
 type CommentLike = { kind: string; body: string };
@@ -40,6 +41,7 @@ export function columnFor(status: StatusId): ColumnId | null {
   if (status === "CHANGES_REQUESTED") return "changes";
   if (status === "AMENDMENTS_MADE") return "amended";
   if (status === "APPROVED") return "approved";
+  if (status === "REJECTED") return "declined";
   return null;
 }
 

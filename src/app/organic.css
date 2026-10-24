@@ -1216,6 +1216,59 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
   gap: 8px;
 }
 .post-actions .pipe-actions { display: contents; }
+.decision-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.decision {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.decision:disabled { opacity: 0.45; cursor: default; }
+.decision.approve { background: var(--good-soft); color: var(--good); }
+.decision.changes { background: var(--warning-soft); color: var(--warning); }
+.decision.decline { background: #FDE8EE; color: #A32045; }
+.approver-note { margin: 0; font-size: 12.5px; color: var(--text-muted); }
+.pipe-declined { background: #FDF4F6; }
+.comment-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.comment-timeline li { position: relative; min-width: 0; }
+.comment-timeline li::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.comment-timeline li.kind-approval::before { background: var(--good); }
+.comment-timeline li.kind-changes::before { background: var(--warning); }
+.comment-timeline li.kind-rejection::before { background: #A32045; }
+.timeline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.timeline-meta b { color: var(--text-primary); font-size: 13px; }
+.comment-timeline p { margin: 2px 0 0; font-size: 13px; white-space: pre-wrap; }
 
 .sidebar { overflow-y: auto; }
 .nav-block { display: flex; flex-direction: column; }

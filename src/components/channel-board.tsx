@@ -54,7 +54,6 @@ export function ChannelBoard({
   onChanged: () => void;
 }) {
   const mine = posts.filter((post) => onBoard(post, board));
-  const rejected = mine.filter((post) => post.status === "REJECTED");
   const feedPosts = posts.filter((post) => post.status !== "REJECTED");
 
   return (
@@ -91,26 +90,6 @@ export function ChannelBoard({
             })}
           </div>
         </div>
-        {rejected.length > 0 ? (
-          <details className="fold">
-            <summary>
-              Rejected
-              <span className="pill">{rejected.length}</span>
-            </summary>
-            {rejected.map((post) => (
-              <PipeCard
-                key={post.id}
-                post={post}
-                user={user}
-                busy={busy}
-                onOpen={() => onOpen(post)}
-                onEdit={() => onEdit(post)}
-                onReview={onReview}
-                onAmend={onAmend}
-              />
-            ))}
-          </details>
-        ) : null}
       </div>
       <aside className="channel-feed" aria-label="Feed preview">
         {board === "meta-posts" ? (
@@ -202,7 +181,7 @@ export function ReviewButtons({
       ) : null}
       {changes ? (
         <button type="button" className="btn ghost sm" disabled={busy} onClick={() => onReview(post.id, "request_changes")}>
-          Needs changes
+          Changes needed
         </button>
       ) : null}
       {amend ? (
@@ -212,7 +191,7 @@ export function ReviewButtons({
       ) : null}
       {reject ? (
         <button type="button" className="btn danger sm" disabled={busy} onClick={() => onReview(post.id, "reject")}>
-          Reject
+          Decline
         </button>
       ) : null}
       <button type="button" className="btn ghost sm" onClick={onEdit}>

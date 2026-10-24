@@ -27,7 +27,7 @@ test("a first submission stays in For approval", () => {
   assert.equal(columnFor("DRAFT"), "approval");
   assert.equal(columnFor("CHANGES_REQUESTED"), "changes");
   assert.equal(columnFor("APPROVED"), "approved");
-  assert.equal(columnFor("REJECTED"), null);
+  assert.equal(columnFor("REJECTED"), "declined");
 });
 
 test("the approver can act again after a changes round", () => {
