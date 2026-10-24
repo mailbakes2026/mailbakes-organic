@@ -233,8 +233,14 @@ textarea { resize: vertical; }
 }
 .signin-card .field { gap: 8px; }
 .signin-card input { font-size: 16px; min-height: 44px; border-radius: 9px; }
-.signin-card .btn { align-self: stretch; min-height: 44px; background: #ED217A; color: #fff; }
-.signin-card .btn:hover { background: #C31A63; }
+form.card.signin-card > .btn {
+  align-self: stretch;
+  width: 100%;
+  min-height: 44px;
+  background: #ED217A;
+  color: #fff;
+}
+form.card.signin-card > .btn:hover { background: #C31A63; }
 .signin-card .error { margin: 0; }
 .signin-card .alert { margin: 0; }
 .check {
