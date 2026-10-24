@@ -202,6 +202,7 @@ export function NoteForm({
     body.set("date", date);
     body.set("doThisWeek", doThisWeek ? "true" : "false");
     body.set("status", status);
+    body.set("checked", status === "DONE" ? "true" : "false");
     body.set("removeImageIds", JSON.stringify(removeIds));
     for (const file of files) body.append("images", file);
     const response = await fetch(initial ? `/api/notes/${initial.id}` : "/api/notes", {

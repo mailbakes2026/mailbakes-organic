@@ -3,9 +3,21 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { UserDTO } from "@/lib/types";
 
-export type AppTab = "approval" | "grid" | "tiktok" | "calendar" | "notes" | "connections" | "reports";
+export type AppTab = "meta-posts" | "meta-stories" | "tiktok" | "calendar";
 
-const TAB_IDS: AppTab[] = ["approval", "grid", "tiktok", "calendar", "notes", "connections", "reports"];
+const TAB_IDS: AppTab[] = ["meta-posts", "meta-stories", "tiktok", "calendar"];
+
+const LEGACY: Record<string, AppTab> = {
+  approval: "meta-posts",
+  grid: "meta-posts",
+  notes: "calendar",
+  connections: "meta-posts",
+  reports: "meta-posts",
+  tiktok: "tiktok",
+  calendar: "calendar",
+  "meta-posts": "meta-posts",
+  "meta-stories": "meta-stories",
+};
 
 const TabContext = createContext<{ tab: AppTab; setTab: (tab: AppTab) => void } | null>(null);
 
@@ -16,28 +28,25 @@ export function useAppTab() {
 }
 
 const LINKS: { id: AppTab; label: string }[] = [
-  { id: "approval", label: "Posts for approval" },
-  { id: "grid", label: "Meta preview" },
-  { id: "tiktok", label: "TikTok preview" },
+  { id: "meta-posts", label: "Meta posts" },
+  { id: "meta-stories", label: "Meta stories" },
+  { id: "tiktok", label: "TikTok" },
   { id: "calendar", label: "Content calendar" },
-  { id: "notes", label: "Notes" },
-  { id: "connections", label: "Connections" },
-  { id: "reports", label: "Reports" },
 ];
 
 export function Shell({ user, children }: { user: UserDTO; children: React.ReactNode }) {
-  const [tab, setTabState] = useState<AppTab>("approval");
+  const [tab, setTabState] = useState<AppTab>("meta-posts");
 
-  // Each tab has its own address (/?view=grid) so it can be bookmarked or shared.
   useEffect(() => {
-    const view = new URLSearchParams(window.location.search).get("view") as AppTab | null;
-    if (view && TAB_IDS.includes(view)) setTabState(view);
+    const view = new URLSearchParams(window.location.search).get("view");
+    const next = view ? LEGACY[view] : null;
+    if (next && TAB_IDS.includes(next)) setTabState(next);
   }, []);
 
   function setTab(next: AppTab) {
     setTabState(next);
     const url = new URL(window.location.href);
-    if (next === "approval") url.searchParams.delete("view");
+    if (next === "meta-posts") url.searchParams.delete("view");
     else url.searchParams.set("view", next);
     window.history.replaceState(null, "", url.toString());
   }
@@ -47,7 +56,7 @@ export function Shell({ user, children }: { user: UserDTO; children: React.React
     window.location.href = "/login";
   }
 
-  const access = user.role === "MANAGEMENT" ? " · full access" : " · team";
+  const access = user.role === "MANAGEMENT" ? "Approver" : "Manager";
 
   return (
     <TabContext.Provider value={{ tab, setTab }}>
@@ -72,7 +81,7 @@ export function Shell({ user, children }: { user: UserDTO; children: React.React
           <div className="sidebar-footer">
             <div className="signed-in">
               Signed in as {user.name}
-              {access}
+              <span className="muted"> · {access}</span>
             </div>
             <button className="subtle" type="button" onClick={signOut}>
               Sign out

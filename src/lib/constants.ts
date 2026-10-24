@@ -19,8 +19,9 @@ export const CONTENT_TYPES: { id: ContentTypeId; label: string }[] = [
 
 export const STATUSES: { id: StatusId; label: string }[] = [
   { id: "DRAFT", label: "Draft" },
-  { id: "PENDING_APPROVAL", label: "Pending approval" },
-  { id: "CHANGES_REQUESTED", label: "Changes requested" },
+  { id: "PENDING_APPROVAL", label: "For approval" },
+  { id: "CHANGES_REQUESTED", label: "Needs changes" },
+  { id: "AMENDMENTS_MADE", label: "Amendments made" },
   { id: "APPROVED", label: "Approved" },
   { id: "REJECTED", label: "Rejected" },
 ];

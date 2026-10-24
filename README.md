@@ -8,22 +8,26 @@ Requires Node 20+ and PostgreSQL.
 
 ```bash
 cp .env.example .env
-# set SESSION_SECRET, MANAGEMENT_PASSWORD and TEAM_PASSWORD
+# set SESSION_SECRET, TEAM_PASSWORD and MILLIE_PASSWORD
 npm install
 npx prisma migrate deploy
 npm run dev
 ```
 
-Open http://127.0.0.1:3000 and sign in with the emails and passwords from `.env`.
+Open http://127.0.0.1:3000 and sign in as Manager or Millie with the passwords from `.env`.
 
 `npm run dev -- -p 43123` uses another port.
 
 ## Roles
 
-- **Management** (Millie): create, edit, approve, reject with a comment, or request changes.
-- **Team**: create and edit. Saving an approved post sends it back to pending approval.
+Sign in with a name and a password.
 
-Passwords are read from the environment on startup. Change `MANAGEMENT_PASSWORD` or `TEAM_PASSWORD` and restart to rotate them. Add more people with `EXTRA_USERS` (see `.env.example`).
+- **Millie** (approver): approve a post, or send it back with **Needs changes**. Her password is `MILLIE_PASSWORD` (at least 10 characters). `MANAGEMENT_PASSWORD` is only used if `MILLIE_PASSWORD` is not set.
+- **Manager** (content team): create posts and make amendments. Sign in as **Manager** with the existing `TEAM_PASSWORD`. Email `team@mailbakes.com` still matches that same password. Saving a post that needs changes, or editing an approved post, puts it in **Amendments made** so Millie can approve it again.
+
+Every approval, change request and amendment is stored with the name of the person who did it.
+
+Passwords are read from the environment on startup. Change `MILLIE_PASSWORD` or `TEAM_PASSWORD` and restart to rotate them. Add more people with `EXTRA_USERS` (see `.env.example`).
 
 ## What is stored
 
@@ -38,17 +42,18 @@ The public URL comes from the service name: `mailbakes-organic` → https://mail
 1. Push this project to the Git host Render can see (GitHub or GitLab).
 2. In Render: **New** → **Blueprint** → select the repo. Render reads `render.yaml`.
 3. When asked, set:
-   - `MANAGEMENT_EMAIL`
-   - `MANAGEMENT_PASSWORD` (at least 10 characters)
-   - `TEAM_EMAIL`
-   - `TEAM_PASSWORD` (at least 10 characters)
+   - `MILLIE_PASSWORD` (at least 10 characters) — Millie's approver login
+   - `TEAM_EMAIL` (the Manager account, usually `team@mailbakes.com`)
+   - `TEAM_PASSWORD` (at least 10 characters) — the existing team password
 4. Leave `SESSION_SECRET` to Render’s generated value.
 5. Deploy. The first boot runs the database migration and creates the two accounts.
 6. Open https://mailbakes-organic.onrender.com
 
 Use the Frankfurt region for the web service and the database so they can use the private connection string. The web service plan is `starter` and the database is `basic-256mb` (Render’s smallest current Postgres). Change the plan names in `render.yaml` if your account uses different ones.
 
-The app starts empty. It no longer creates example posts; any left over from the first version are removed once at startup. Accounts are never touched by that cleanup. Meta preview (`/?view=grid`) shows Instagram and Facebook posts on the MailBakes Instagram profile, newest top left, in portrait 3:4 tiles. The header matches the live profile and can be edited from that page. TikTok preview (`/?view=tiktok`) is a 9:16 grid of posts marked for TikTok. The content calendar groups Instagram and Facebook as Meta. Notes (`/?view=notes`) is an ideas board: a dated note appears on the content calendar, and an undated note ticked “do this week” stays in the This week list. Turn into post makes a draft from that note. Connections (`/?view=connections`) stores each platform login, encrypted, and pulls organic stats once a day for Reports. Paid ads are not part of that pull. Reports (`/?view=reports`) counts approved posts by week and platform, and holds the views, likes, comments, shares, saves and link clicks typed in for each post. Those same fields are where a later platform connection would write.
+The app starts empty. It no longer creates example posts; any left over from the first version are removed once at startup. Accounts are never touched by that cleanup.
+
+The sidebar is Meta posts, Meta stories, TikTok and Content calendar. Each channel is a board with columns For approval, Needs changes, Amendments made and Approved, with that channel's feed preview beside it. The content calendar is a month or week view, coloured by channel and status. Notes sit under the calendar as a checklist on a day. Performance stats stay on each post. Platform connections still sync in the background for those stats; they are not a separate tab.
 
 The start command runs `prisma migrate deploy` before the server listens. `/api/health` checks the database and is the Render health check.
 

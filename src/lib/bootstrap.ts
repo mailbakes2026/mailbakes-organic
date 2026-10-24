@@ -1,17 +1,10 @@
 import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
+import { accountsFromEnv, type AccountSpec } from "@/lib/accounts";
 import { ensureIgProfile } from "@/lib/ig-profile";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/types";
 
 type Db = Prisma.TransactionClient;
-
-type AccountSpec = {
-  email: string;
-  password: string;
-  name: string;
-  role: Role;
-};
 
 let pending: Promise<void> | null = null;
 
@@ -31,58 +24,8 @@ export function bootstrap() {
   return pending;
 }
 
-function accountsFromEnv(): AccountSpec[] {
-  const accounts: AccountSpec[] = [];
-  const managementEmail = process.env.MANAGEMENT_EMAIL?.trim().toLowerCase();
-  const managementPassword = process.env.MANAGEMENT_PASSWORD;
-  if (managementEmail && managementPassword) {
-    accounts.push({
-      email: managementEmail,
-      password: managementPassword,
-      name: process.env.MANAGEMENT_NAME?.trim() || "Millie",
-      role: "MANAGEMENT",
-    });
-  }
-  const teamEmail = process.env.TEAM_EMAIL?.trim().toLowerCase();
-  const teamPassword = process.env.TEAM_PASSWORD;
-  if (teamEmail && teamPassword) {
-    accounts.push({
-      email: teamEmail,
-      password: teamPassword,
-      name: process.env.TEAM_NAME?.trim() || "Content team",
-      role: "TEAM",
-    });
-  }
-  if (process.env.EXTRA_USERS) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(process.env.EXTRA_USERS);
-    } catch {
-      throw new Error("EXTRA_USERS must be JSON.");
-    }
-    if (Array.isArray(parsed)) {
-      for (const item of parsed) {
-        if (!item || typeof item !== "object") continue;
-        const record = item as Record<string, unknown>;
-        const email = String(record.email ?? "").trim().toLowerCase();
-        const password = String(record.password ?? "");
-        const role = record.role === "MANAGEMENT" || record.role === "TEAM" ? record.role : null;
-        if (!email || !password || !role) continue;
-        accounts.push({
-          email,
-          password,
-          name: String(record.name || email),
-          role,
-        });
-      }
-    }
-  }
-  for (const account of accounts) {
-    if (account.password.length < 10) {
-      throw new Error(`The password for ${account.email} must be at least 10 characters.`);
-    }
-  }
-  return accounts;
+function accounts(): AccountSpec[] {
+  return accountsFromEnv(process.env);
 }
 
 async function upsertAccounts(db: Db, accounts: AccountSpec[]) {
@@ -152,6 +95,25 @@ async function removeSamples(db: Db) {
   });
 }
 
+// Same rule as the SQL migration: a pending post that already has a changes
+// round is waiting in Amendments made, where Millie can approve it again.
+async function backfillAmendments(db: Db) {
+  await db.$executeRaw`
+    UPDATE "Post" AS p
+    SET status = 'AMENDMENTS_MADE'
+    WHERE p.status = 'PENDING_APPROVAL'
+      AND EXISTS (
+        SELECT 1
+        FROM "Comment" AS c
+        WHERE c."postId" = p.id
+          AND (
+            c.kind = 'CHANGES'
+            OR c.body = 'Sent back for approval.'
+          )
+      )
+  `;
+}
+
 function lockIsBusy(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return /lock timeout|lock_timeout|55P03|unable to start a transaction in the given time|expired transaction/i.test(
@@ -175,7 +137,8 @@ async function run() {
           console.warn("Bootstrap skipped; another instance holds the lock.");
           return false;
         }
-        await upsertAccounts(db, accountsFromEnv());
+        await upsertAccounts(db, accounts());
+        await backfillAmendments(db);
         await removeSamples(db);
         await ensureIgProfile(db);
         return true;

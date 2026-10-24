@@ -25,7 +25,7 @@ export default async function LoginPage() {
       nextPath="/"
       setup={
         count === 0
-          ? "No accounts yet. Set MANAGEMENT_EMAIL, MANAGEMENT_PASSWORD, TEAM_EMAIL and TEAM_PASSWORD, then restart."
+          ? "No accounts yet. Set TEAM_PASSWORD for the Manager and MILLIE_PASSWORD for Millie, then restart."
           : null
       }
     />

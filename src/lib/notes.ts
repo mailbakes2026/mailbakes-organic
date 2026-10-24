@@ -19,6 +19,7 @@ const noteSelect = {
   date: true,
   doThisWeek: true,
   status: true,
+  checked: true,
   postId: true,
   createdAt: true,
   updatedAt: true,
@@ -38,6 +39,7 @@ type NoteRow = {
   date: Date | null;
   doThisWeek: boolean;
   status: NoteStatus;
+  checked: boolean;
   postId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -128,6 +130,7 @@ function readNoteInput(form: FormData) {
     date: parseOptionalDay(field(form, "date")),
     doThisWeek: field(form, "doThisWeek") === "true",
     status: status as NoteStatus,
+    checked: field(form, "checked") ? field(form, "checked") === "true" : status === "DONE",
     removeImageIds,
   };
 }
@@ -160,6 +163,7 @@ function serializeNote(note: NoteRow): NoteDTO {
     date: note.date ? dayString(note.date) : null,
     doThisWeek: note.doThisWeek,
     status: note.status,
+    checked: note.checked,
     authorName: note.author.name,
     postId: note.postId,
     images: note.images,
@@ -187,7 +191,8 @@ export async function createNote(user: UserDTO, form: FormData) {
       platform: input.platform,
       date: input.date,
       doThisWeek: input.doThisWeek,
-      status: input.status,
+      status: input.checked ? "DONE" : input.status,
+      checked: input.checked,
       authorId: user.id,
       images: { create: images },
     },
@@ -221,12 +226,44 @@ export async function updateNote(id: string, form: FormData) {
         platform: input.platform,
         date: input.date,
         doThisWeek: input.doThisWeek,
-        status: input.status,
+        status: input.checked ? "DONE" : input.status === "DONE" ? "IDEA" : input.status,
+        checked: input.checked,
         images: { create: images },
       },
       select: noteSelect,
     });
   });
+  return serializeNote(note);
+}
+
+export async function patchNote(
+  id: string,
+  body: { checked?: boolean; date?: string | null; title?: string } | null,
+) {
+  const existing = await prisma.note.findUnique({ where: { id } });
+  if (!existing) throw new HttpError(404, "That note has gone.");
+  if (!body || typeof body !== "object") throw new HttpError(400, "Couldn't update that note.");
+  const data: {
+    checked?: boolean;
+    status?: NoteStatus;
+    date?: Date | null;
+    title?: string;
+  } = {};
+  if (typeof body.checked === "boolean") {
+    data.checked = body.checked;
+    if (body.checked) data.status = "DONE";
+    else if (existing.status === "DONE") data.status = "IDEA";
+  }
+  if (body.date !== undefined) {
+    data.date = body.date ? parseOptionalDay(body.date) : null;
+  }
+  if (typeof body.title === "string") {
+    const title = body.title.trim();
+    if (!title || title.length > 140) throw new HttpError(400, "Enter a title, up to 140 characters.");
+    data.title = title;
+  }
+  if (Object.keys(data).length === 0) throw new HttpError(400, "Nothing to update.");
+  const note = await prisma.note.update({ where: { id }, data, select: noteSelect });
   return serializeNote(note);
 }
 

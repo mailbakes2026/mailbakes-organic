@@ -31,6 +31,7 @@ enum PostStatus {
   DRAFT
   PENDING_APPROVAL
   CHANGES_REQUESTED
+  AMENDMENTS_MADE
   APPROVED
   REJECTED
 }
@@ -152,9 +153,11 @@ model Comment {
   post      Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
   authorId  String
   author    User        @relation(fields: [authorId], references: [id])
-  kind      CommentKind
-  body      String
-  createdAt DateTime    @default(now())
+  kind       CommentKind
+  body       String
+  // Snapshot of who did this, so renaming an account does not rewrite history.
+  authorName String      @default("")
+  createdAt  DateTime    @default(now())
 
   @@index([postId])
 }
@@ -197,6 +200,8 @@ model Note {
   date        DateTime?  @db.Date
   doThisWeek  Boolean    @default(false)
   status      NoteStatus @default(IDEA)
+  // Checklist tick on the content calendar. Done notes are ticked.
+  checked     Boolean    @default(false)
   authorId    String
   author      User       @relation(fields: [authorId], references: [id])
   postId      String?    @unique

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { CommentKind, ContentType, KeyDateKind, Platform, PostStatus, Role } from "@prisma/client";
 import { ALLOWED_MIME, MAX_FILES, MAX_UPLOAD_BYTES, STORY_PLATFORMS } from "@/lib/constants";
+import { approverMayAct, statusAfterSave } from "@/lib/pipeline";
 import { prisma } from "@/lib/prisma";
 import type { ContentTypeId, KeyDateDTO, PlatformId, PostDTO, StatusId, UserDTO } from "@/lib/types";
 
@@ -25,6 +26,7 @@ const STATUSES: StatusId[] = [
   "DRAFT",
   "PENDING_APPROVAL",
   "CHANGES_REQUESTED",
+  "AMENDMENTS_MADE",
   "APPROVED",
   "REJECTED",
 ];
@@ -55,6 +57,7 @@ const postSelect = {
       kind: true,
       body: true,
       createdAt: true,
+      authorName: true,
       author: { select: { name: true } },
     },
     orderBy: { createdAt: "asc" as const },
@@ -135,7 +138,7 @@ function serializePost(post: PostRow): PostDTO {
       kind: comment.kind,
       body: comment.body,
       createdAt: comment.createdAt.toISOString(),
-      authorName: comment.author.name,
+      authorName: comment.authorName || comment.author.name,
     })),
   };
 }
@@ -356,14 +359,9 @@ function attachmentOrder(keptIds: string[], createdIds: string[], order: string[
   return ordered;
 }
 
-function assertTeamStatus(role: Role, status: PostStatus, previous?: PostStatus) {
-  if (role !== "TEAM") return status;
-  if (previous === "APPROVED") return "PENDING_APPROVAL" as PostStatus;
-  const allowed =
-    status === "DRAFT" ||
-    status === "PENDING_APPROVAL" ||
-    (status === "CHANGES_REQUESTED" && previous === "CHANGES_REQUESTED");
-  if (!allowed) {
+function savedStatus(role: Role, requested: PostStatus, previous?: PostStatus) {
+  const status = statusAfterSave(role, requested, previous);
+  if (!status) {
     throw new HttpError(403, "The team can save a draft or send it for approval.");
   }
   return status;
@@ -390,7 +388,7 @@ export async function listKeyDates(): Promise<KeyDateDTO[]> {
 
 export async function createPost(user: UserDTO, form: FormData) {
   const input = readPostInput(form);
-  const status = assertTeamStatus(user.role, input.status);
+  const status = savedStatus(user.role, input.status);
   const files = orderNewFiles(await readFiles(form), readMediaOrder(form));
   const cover = input.contentType === "REEL" ? await readCover(form) : null;
   const reviewed =
@@ -435,7 +433,7 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
   });
   if (!existing) throw new HttpError(404, "That post has gone.");
   const input = readPostInput(form);
-  const status = assertTeamStatus(user.role, input.status, existing.status);
+  const status = savedStatus(user.role, input.status, existing.status);
   const files = await readFiles(form);
   const order = readMediaOrder(form);
   const attachments = existing.media
@@ -450,8 +448,10 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
     throw new HttpError(400, `You can attach up to ${MAX_FILES} files.`);
   }
   const notes: string[] = [];
-  if (user.role === "TEAM" && existing.status === "APPROVED") {
-    notes.push("Edited after approval, so it's back in the queue.");
+  if (existing.status === "APPROVED" && status === "AMENDMENTS_MADE") {
+    notes.push("Edited after approval, so it's back for approval.");
+  } else if (existing.status === "CHANGES_REQUESTED" && status === "AMENDMENTS_MADE") {
+    notes.push("Amendments made.");
   } else if (existing.status === "CHANGES_REQUESTED" && status === "PENDING_APPROVAL") {
     notes.push("Sent back for approval.");
   }
@@ -511,6 +511,7 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
           ? {
               create: notes.map((body) => ({
                 authorId: user.id,
+                authorName: user.name,
                 kind: "NOTE" as CommentKind,
                 body,
               })),
@@ -660,12 +661,47 @@ export async function deletePost(user: UserDTO, id: string) {
   await prisma.post.delete({ where: { id } });
 }
 
-export async function reviewPost(user: UserDTO, id: string, action: string, comment: string) {
-  if (user.role !== "MANAGEMENT") {
-    throw new HttpError(403, "Only management can approve, reject or request changes.");
+export async function markAmendments(user: UserDTO, id: string) {
+  if (user.role !== "TEAM") {
+    throw new HttpError(403, "The manager sends amendments back for approval.");
   }
   const post = await prisma.post.findUnique({ where: { id } });
   if (!post) throw new HttpError(404, "That post has gone.");
+  if (post.status !== "CHANGES_REQUESTED") {
+    const current = await prisma.post.findUnique({ where: { id }, select: postSelect });
+    if (!current) throw new HttpError(404, "That post has gone.");
+    return serializePost(current);
+  }
+  const updated = await prisma.post.update({
+    where: { id },
+    data: {
+      status: "AMENDMENTS_MADE",
+      comments: {
+        create: {
+          authorId: user.id,
+          authorName: user.name,
+          kind: "NOTE",
+          body: "Amendments made.",
+        },
+      },
+    },
+    select: postSelect,
+  });
+  return serializePost(updated);
+}
+
+export async function reviewPost(user: UserDTO, id: string, action: string, comment: string) {
+  const post = await prisma.post.findUnique({ where: { id } });
+  if (!post) throw new HttpError(404, "That post has gone.");
+  if (action !== "approve" && action !== "reject" && action !== "request_changes") {
+    throw new HttpError(400, "Unknown action.");
+  }
+  if (!approverMayAct(user.role, post.status, action)) {
+    if (user.role !== "MANAGEMENT") {
+      throw new HttpError(403, "Only Millie can approve or request changes.");
+    }
+    throw new HttpError(400, "This post isn't waiting for approval.");
+  }
   const text = comment.trim();
   let status: PostStatus;
   let kind: CommentKind;
@@ -676,12 +712,10 @@ export async function reviewPost(user: UserDTO, id: string, action: string, comm
     if (!text) throw new HttpError(400, "Add a comment explaining the rejection.");
     status = "REJECTED";
     kind = "REJECTION";
-  } else if (action === "request_changes") {
-    if (!text) throw new HttpError(400, "Add a comment so the team knows what to change.");
+  } else {
+    if (!text) throw new HttpError(400, "Add a comment so the manager knows what to change.");
     status = "CHANGES_REQUESTED";
     kind = "CHANGES";
-  } else {
-    throw new HttpError(400, "Unknown action.");
   }
   const updated = await prisma.post.update({
     where: { id },
@@ -692,6 +726,7 @@ export async function reviewPost(user: UserDTO, id: string, action: string, comm
       comments: {
         create: {
           authorId: user.id,
+          authorName: user.name,
           kind,
           body: text || "Approved.",
         },

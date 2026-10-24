@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CalendarBoard } from "@/components/calendar-board";
+import { ChannelBoard, ReviewButtons } from "@/components/channel-board";
 import { useAppTab } from "@/components/shell";
 import {
   Dialog,
@@ -12,39 +14,31 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  CHANNELS,
   CONTENT_TYPES,
   MAX_FILES,
   MAX_UPLOAD_BYTES,
   PLATFORMS,
   STATUSES,
   STORY_PLATFORMS,
-  channelsFor,
   contentLabel,
   platformColour,
   platformLabel,
   statusLabel,
 } from "@/lib/constants";
-import { InstaGrid, TikTokGrid } from "@/components/insta-grid";
+import { approverMayAct, type BoardId, type ReviewAction } from "@/lib/pipeline";
 import { PostStatsForm } from "@/components/post-stats";
-import { Connections } from "@/components/connections";
-import { NoteForm, NotesBoard } from "@/components/notes-board";
-import { Reports } from "@/components/reports";
+import { NoteForm } from "@/components/notes-board";
 import { MediaCarousel } from "@/components/media-carousel";
 import type {
   ContentTypeId,
-  ConnectionCardDTO,
   IgProfileDTO,
   KeyDateDTO,
   NoteDTO,
-  OrganicReportDTO,
   PlatformId,
   PostDTO,
   StatusId,
   UserDTO,
 } from "@/lib/types";
-
-type ReviewAction = "approve" | "reject" | "request_changes";
 
 function londonToday() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -55,27 +49,8 @@ function londonToday() {
   }).format(new Date());
 }
 
-function addDays(iso: string, days: number) {
-  const [year, month, day] = iso.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function startOfWeek(iso: string) {
-  const [year, month, day] = iso.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  const weekday = date.getUTCDay();
-  const diff = weekday === 0 ? -6 : 1 - weekday;
-  return addDays(iso, diff);
-}
-
 function formatSchedule(date: string, time: string | null) {
   return time ? `${formatDay(date)} at ${time}` : formatDay(date);
-}
-
-function byPostingTime(a: PostDTO, b: PostDTO) {
-  return (a.plannedTime ?? "99:99").localeCompare(b.plannedTime ?? "99:99") || a.createdAt.localeCompare(b.createdAt);
 }
 
 function formatDay(iso: string) {
@@ -88,15 +63,6 @@ function formatDay(iso: string) {
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-function formatMonth(iso: string) {
-  const [year, month] = iso.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month - 1, 1)));
-}
-
 function formatWhen(iso: string) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
@@ -105,26 +71,6 @@ function formatWhen(iso: string) {
     minute: "2-digit",
     timeZone: "Europe/London",
   }).format(new Date(iso));
-}
-
-function monthCells(iso: string) {
-  const [year, month] = iso.split("-").map(Number);
-  const first = `${year}-${String(month).padStart(2, "0")}-01`;
-  const start = startOfWeek(first);
-  const cells = Array.from({ length: 42 }, (_, index) => addDays(start, index));
-  const monthKey = first.slice(0, 7);
-  while (cells.length > 7 && cells.slice(-7).every((day) => day.slice(0, 7) !== monthKey)) {
-    cells.splice(-7, 7);
-  }
-  return cells;
-}
-
-function monthBounds(iso: string) {
-  const [year, month] = iso.split("-").map(Number);
-  const start = `${year}-${String(month).padStart(2, "0")}-01`;
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const end = `${year}-${String(month).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
-  return { start, end };
 }
 
 const COMMENT_LABEL = {
@@ -137,9 +83,25 @@ const COMMENT_LABEL = {
 function statusPill(status: StatusId) {
   if (status === "APPROVED") return "pill ok";
   if (status === "REJECTED") return "pill hot";
+  if (status === "AMENDMENTS_MADE") return "pill";
   if (status === "PENDING_APPROVAL" || status === "CHANGES_REQUESTED") return "pill warn";
   return "pill";
 }
+
+const BOARD_COPY: Record<BoardId, { title: string; blurb: string }> = {
+  "meta-posts": {
+    title: "Meta posts",
+    blurb: "Instagram and Facebook feed posts and reels. The grid beside the board is how the feed will look.",
+  },
+  "meta-stories": {
+    title: "Meta stories",
+    blurb: "Story frames for Instagram and Facebook. Approving does not publish anything.",
+  },
+  tiktok: {
+    title: "TikTok",
+    blurb: "TikToks move through the same approval columns. The grid beside the board is the TikTok preview.",
+  },
+};
 
 export function Planner({
   user,
@@ -147,18 +109,12 @@ export function Planner({
   keyDates,
   profile,
   notes,
-  connections,
-  organic,
-  notice,
 }: {
   user: UserDTO;
   posts: PostDTO[];
   keyDates: KeyDateDTO[];
   profile: IgProfileDTO;
   notes: NoteDTO[];
-  connections: ConnectionCardDTO[];
-  organic: OrganicReportDTO;
-  notice: string | null;
 }) {
   const router = useRouter();
   const { tab } = useAppTab();
@@ -202,7 +158,26 @@ export function Planner({
     refresh();
   }
 
+  async function amend(id: string) {
+    setBusy(true);
+    setBanner(null);
+    const response = await fetch(`/api/posts/${id}/amend`, { method: "POST" });
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    setBusy(false);
+    if (!response.ok) {
+      setBanner(data.error || "Couldn't send that back for approval.");
+      return;
+    }
+    refresh();
+  }
+
   function askReview(id: string, action: ReviewAction) {
+    const post = posts.find((item) => item.id === id);
+    if (!post || !approverMayAct(user.role, post.status, action)) {
+      setBanner("This post isn't waiting for approval.");
+      return;
+    }
+    setDetail(post);
     if (action === "approve") {
       void sendReview(id, action, "");
       return;
@@ -235,169 +210,71 @@ export function Planner({
     refresh();
   }
 
-  const waiting = posts.filter((post) => post.status === "PENDING_APPROVAL");
-  const changes = posts.filter((post) => post.status === "CHANGES_REQUESTED");
-  const drafts = posts.filter((post) => post.status === "DRAFT");
-  const approved = posts.filter((post) => post.status === "APPROVED");
-  const rejected = posts.filter((post) => post.status === "REJECTED");
+  const board: BoardId | null = tab === "calendar" ? null : tab;
+  const copy = board ? BOARD_COPY[board] : null;
 
   return (
-    <div className={`planner${tab === "calendar" ? " cal-open" : ""}`}>
-      <div className="page-head">
-        <div>
-          <h1>Social media</h1>
-          <p className="muted intro">
-            Plan posts for Instagram, Facebook, TikTok, LinkedIn, YouTube Shorts and Snapchat.
-            Management approves them here before anything is treated as ready. Approving doesn&apos;t
-            publish anything.
-          </p>
+    <div className="planner">
+      {copy ? (
+        <div className="page-head">
+          <div>
+            <h1>{copy.title}</h1>
+            <p className="muted intro">{copy.blurb}</p>
+          </div>
+          <div className="row">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setPresetDate(null);
+                setPostForm("new");
+              }}
+            >
+              + New post
+            </button>
+          </div>
         </div>
-        <div className="row">
-          <button type="button" className="btn ghost" onClick={() => setKeyOpen(true)}>
-            + Launch / key date
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              setPresetDate(null);
-              setPostForm("new");
-            }}
-          >
-            + New post
-          </button>
+      ) : (
+        <div className="page-head">
+          <div>
+            <h1>Content calendar</h1>
+            <p className="muted intro">Posts are coloured by channel and status. Click one to open it.</p>
+          </div>
+          <div className="row">
+            <button type="button" className="btn ghost" onClick={() => setKeyOpen(true)}>
+              + Launch / key date
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setPresetDate(null);
+                setPostForm("new");
+              }}
+            >
+              + New post
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {banner ? <p className="alert crit">{banner}</p> : null}
 
-      {tab === "approval" && posts.length === 0 ? (
-        <EmptyStart
-          onNew={() => {
-            setPresetDate(null);
-            setPostForm("new");
-          }}
-        />
-      ) : null}
-
-      {tab === "approval" && posts.length > 0 ? (
-        <div>
-          <section>
-            {waiting.length === 0 ? (
-              <p className="muted">Nothing waiting for approval.</p>
-            ) : (
-              waiting.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  user={user}
-                  busy={busy}
-                  onOpen={() => setDetail(post)}
-                  onEdit={() => setPostForm(post)}
-                  onReview={askReview}
-                />
-              ))
-            )}
-          </section>
-          {changes.length > 0 ? (
-            <Section title="Changes requested">
-              {changes.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  user={user}
-                  busy={busy}
-                  onOpen={() => setDetail(post)}
-                  onEdit={() => setPostForm(post)}
-                  onReview={askReview}
-                />
-              ))}
-            </Section>
-          ) : null}
-          {drafts.length > 0 ? (
-            <Section title="Drafts">
-              {drafts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  user={user}
-                  busy={busy}
-                  onOpen={() => setDetail(post)}
-                  onEdit={() => setPostForm(post)}
-                  onReview={askReview}
-                />
-              ))}
-            </Section>
-          ) : null}
-          <details className="fold">
-            <summary>
-              Approved and scheduled posts
-              <span className="pill">{approved.length}</span>
-            </summary>
-            {approved.length === 0 ? (
-              <p className="muted">Nothing approved yet.</p>
-            ) : (
-              approved.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  user={user}
-                  busy={busy}
-                  onOpen={() => setDetail(post)}
-                  onEdit={() => setPostForm(post)}
-                  onReview={askReview}
-                />
-              ))
-            )}
-          </details>
-          {rejected.length > 0 ? (
-            <details className="fold">
-              <summary>
-                Rejected
-                <span className="pill">{rejected.length}</span>
-              </summary>
-              {rejected.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  user={user}
-                  busy={busy}
-                  onOpen={() => setDetail(post)}
-                  onEdit={() => setPostForm(post)}
-                  onReview={askReview}
-                />
-              ))}
-            </details>
-          ) : null}
-        </div>
-      ) : null}
-
-      {tab === "grid" ? (
-        <InstaGrid posts={posts} profile={profile} onOpen={setDetail} onChanged={refresh} />
-      ) : null}
-
-      {tab === "tiktok" ? <TikTokGrid posts={posts} profile={profile} onOpen={setDetail} /> : null}
-
-      {tab === "notes" ? (
-        <NotesBoard
-          notes={notes}
-          onEdit={setNoteForm}
-          onCreate={() => setNoteForm("new")}
+      {board ? (
+        <ChannelBoard
+          board={board}
+          user={user}
+          posts={posts}
+          profile={profile}
+          busy={busy}
+          onOpen={setDetail}
+          onEdit={setPostForm}
+          onReview={askReview}
+          onAmend={(id) => void amend(id)}
           onChanged={refresh}
-          onDraft={(post) => setDetail(post)}
         />
-      ) : null}
-
-      {tab === "connections" ? (
-        <Connections cards={connections} canManage={user.role === "MANAGEMENT"} notice={notice} />
-      ) : null}
-
-      {tab === "reports" ? (
-        <Reports posts={posts} organic={organic} connections={connections} onChanged={refresh} />
-      ) : null}
-
-      {tab === "calendar" ? (
-        <Calendar
+      ) : (
+        <CalendarBoard
           posts={posts}
           notes={notes}
           keyDates={keyDates}
@@ -406,14 +283,15 @@ export function Planner({
           onCursor={setCursor}
           onView={setCalView}
           onOpenPost={setDetail}
-          onOpenNote={setNoteForm}
           onOpenKey={setActiveKey}
-          onCreate={(date) => {
+          onCreatePost={(date) => {
             setPresetDate(date);
             setPostForm("new");
           }}
+          onEditNote={setNoteForm}
+          onChanged={refresh}
         />
-      ) : null}
+      )}
 
       <Dialog open={noteForm !== null} onOpenChange={(open) => !open && setNoteForm(null)}>
         <DialogContent showCloseButton={false} className="sheet-form">
@@ -445,6 +323,7 @@ export function Planner({
               user={user}
               initial={postForm === "new" ? null : postForm}
               presetDate={presetDate}
+              board={board}
               onClose={() => setPostForm(null)}
               onSaved={() => {
                 setPostForm(null);
@@ -480,7 +359,14 @@ export function Planner({
                 setDetail(null);
               }}
               onReview={askReview}
+              onAmend={(id) => void amend(id)}
               onDelete={() => void removePost(openPost.id)}
+              prompt={prompt && prompt.id === openPost.id ? prompt : null}
+              onPromptComment={(comment) => setPrompt((current) => (current ? { ...current, comment } : current))}
+              onSubmitPrompt={() => {
+                if (prompt) void sendReview(prompt.id, prompt.action, prompt.comment);
+              }}
+              onCancelPrompt={() => setPrompt(null)}
               onPreview={() => setStory({ items: [openPost], index: 0 })}
               onChanged={refresh}
             />
@@ -497,43 +383,6 @@ export function Planner({
               onIndex={(index) => setStory({ items: story.items, index })}
               onClose={() => setStory(null)}
             />
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(prompt)} onOpenChange={(open) => !open && setPrompt(null)}>
-        <DialogContent showCloseButton={false}>
-          {prompt ? (
-            <form
-              className="stack"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void sendReview(prompt.id, prompt.action, prompt.comment);
-              }}
-            >
-              <DialogHeader>
-                <DialogTitle>{prompt.action === "reject" ? "Reject post" : "Request changes"}</DialogTitle>
-                <DialogDescription>
-                  {prompt.action === "reject"
-                    ? "Add a comment explaining the rejection. Nothing is published."
-                    : "Tell the team what to change. Nothing is published."}
-                </DialogDescription>
-              </DialogHeader>
-              <textarea
-                rows={5}
-                value={prompt.comment}
-                onChange={(event) => setPrompt({ ...prompt, comment: event.target.value })}
-                required
-              />
-              <div className="row">
-                <button type="button" className="btn ghost" onClick={() => setPrompt(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn" disabled={busy}>
-                  {prompt.action === "reject" ? "Reject" : "Request changes"}
-                </button>
-              </div>
-            </form>
           ) : null}
         </DialogContent>
       </Dialog>
@@ -568,131 +417,6 @@ export function Planner({
   );
 }
 
-function EmptyStart({ onNew }: { onNew: () => void }) {
-  return (
-    <div className="empty-start">
-      <div className="empty-start-badge" aria-hidden="true">
-        <img src="/icon.svg" alt="" />
-      </div>
-      <h2>Your social media manager is starting soon</h2>
-      <p className="muted">
-        Nothing&apos;s been planned yet. New posts will appear here for approval as soon as they&apos;re
-        added, and you can see how they&apos;ll sit in Meta preview or TikTok preview.
-      </p>
-      <button type="button" className="btn" onClick={onNew}>
-        + Add the first post
-      </button>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <h3>{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function PostCard({
-  post,
-  user,
-  busy,
-  onOpen,
-  onEdit,
-  onReview,
-}: {
-  post: PostDTO;
-  user: UserDTO;
-  busy: boolean;
-  onOpen: () => void;
-  onEdit: () => void;
-  onReview: (id: string, action: ReviewAction) => void;
-}) {
-  const note = [...post.comments].reverse().find((comment) => comment.kind !== "APPROVAL");
-  return (
-    <article className="card">
-      <button type="button" className={`post-open${post.reelCover ? " has-cover" : ""}`} onClick={onOpen}>
-        {post.contentType === "REEL" && post.reelCover ? (
-          <img className="reel-cover-card" src={`/api/media/${post.reelCover.id}`} alt="" />
-        ) : null}
-        <span className="post-copy">
-        <div className="row">
-          {post.platforms.map((item) => (
-            <span key={item} className="plat">
-              <span className="mark" style={{ background: platformColour(item) }} />
-              {platformLabel(item)}
-            </span>
-          ))}
-          <span className="pill">{contentLabel(post.contentType)}</span>
-          <span className={statusPill(post.status)}>{statusLabel(post.status)}</span>
-        </div>
-        <h2>{post.title}</h2>
-        <p className="muted clamp-2">{post.caption}</p>
-        <p className="small muted">
-          {post.authorName} · {formatSchedule(post.plannedDate, post.plannedTime)}
-        </p>
-        </span>
-      </button>
-      {note ? (
-        <p className="alert warn">
-          <span>
-            <b>{note.authorName}: </b>
-            {note.body}
-          </span>
-        </p>
-      ) : null}
-      <div className="row">
-        <ReviewButtons post={post} user={user} busy={busy} onEdit={onEdit} onReview={onReview} />
-      </div>
-    </article>
-  );
-}
-
-function ReviewButtons({
-  post,
-  user,
-  busy,
-  onEdit,
-  onReview,
-}: {
-  post: PostDTO;
-  user: UserDTO;
-  busy: boolean;
-  onEdit: () => void;
-  onReview: (id: string, action: ReviewAction) => void;
-}) {
-  if (user.role !== "MANAGEMENT") {
-    return (
-      <button type="button" className="btn ghost" onClick={onEdit}>
-        Edit
-      </button>
-    );
-  }
-  return (
-    <>
-      {post.status !== "APPROVED" ? (
-        <button type="button" className="btn" disabled={busy} onClick={() => onReview(post.id, "approve")}>
-          Approve
-        </button>
-      ) : null}
-      {post.status !== "CHANGES_REQUESTED" ? (
-        <button type="button" className="btn ghost" onClick={() => onReview(post.id, "request_changes")}>
-          Request changes
-        </button>
-      ) : null}
-      {post.status !== "REJECTED" ? (
-        <button type="button" className="btn danger" onClick={() => onReview(post.id, "reject")}>
-          Reject
-        </button>
-      ) : null}
-      <button type="button" className="btn ghost" onClick={onEdit}>
-        Edit
-      </button>
-    </>
-  );
-}
 
 function PostDetail({
   post,
@@ -701,9 +425,14 @@ function PostDetail({
   onClose,
   onEdit,
   onReview,
+  onAmend,
   onDelete,
   onPreview,
   onChanged,
+  prompt,
+  onPromptComment,
+  onSubmitPrompt,
+  onCancelPrompt,
 }: {
   post: PostDTO;
   user: UserDTO;
@@ -711,9 +440,14 @@ function PostDetail({
   onClose: () => void;
   onEdit: () => void;
   onReview: (id: string, action: ReviewAction) => void;
+  onAmend: (id: string) => void;
   onDelete: () => void;
   onPreview: () => void;
   onChanged: () => void;
+  prompt: { action: ReviewAction; comment: string } | null;
+  onPromptComment: (comment: string) => void;
+  onSubmitPrompt: () => void;
+  onCancelPrompt: () => void;
 }) {
   const canDelete = user.role === "MANAGEMENT" || (post.authorId === user.id && post.status === "DRAFT");
   return (
@@ -775,17 +509,48 @@ function PostDetail({
           ))}
         </ul>
       ) : null}
-      <div className="row">
-        <ReviewButtons post={post} user={user} busy={busy} onEdit={onEdit} onReview={onReview} />
-        {canDelete ? (
-          <button type="button" className="btn danger" disabled={busy} onClick={onDelete}>
-            Delete
-          </button>
-        ) : null}
-        <button type="button" className="btn ghost" onClick={onClose}>
-          Done
-        </button>
-      </div>
+      {prompt ? (
+        <form
+          className="stack review-bar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmitPrompt();
+          }}
+        >
+          <label className="field" htmlFor="review-comment">
+            {prompt.action === "reject" ? "Why is this rejected?" : "What needs to change?"}
+            <textarea
+              id="review-comment"
+              rows={4}
+              value={prompt.comment}
+              onChange={(event) => onPromptComment(event.target.value)}
+              required
+            />
+          </label>
+          <div className="row">
+            <button type="button" className="btn ghost" onClick={onCancelPrompt}>
+              Cancel
+            </button>
+            <button type="submit" className="btn" disabled={busy}>
+              {prompt.action === "reject" ? "Reject" : "Needs changes"}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="review-bar">
+          <ReviewButtons post={post} user={user} busy={busy} onEdit={onEdit} onReview={onReview} onAmend={onAmend} />
+          <div className="row">
+            {canDelete ? (
+              <button type="button" className="btn danger sm" disabled={busy} onClick={onDelete}>
+                Delete
+              </button>
+            ) : null}
+            <button type="button" className="btn ghost sm" onClick={onClose}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -933,228 +698,6 @@ function StoryViewer({
   );
 }
 
-function Calendar({
-  posts,
-  notes,
-  keyDates,
-  cursor,
-  view,
-  onCursor,
-  onView,
-  onOpenPost,
-  onOpenNote,
-  onOpenKey,
-  onCreate,
-}: {
-  posts: PostDTO[];
-  notes: NoteDTO[];
-  keyDates: KeyDateDTO[];
-  cursor: string;
-  view: "month" | "week";
-  onCursor: (iso: string) => void;
-  onView: (view: "month" | "week") => void;
-  onOpenPost: (post: PostDTO) => void;
-  onOpenNote: (note: NoteDTO) => void;
-  onOpenKey: (item: KeyDateDTO) => void;
-  onCreate: (date: string) => void;
-}) {
-  const today = londonToday();
-  const range = useMemo(() => {
-    if (view === "week") {
-      const start = startOfWeek(cursor);
-      return { start, end: addDays(start, 6), days: Array.from({ length: 7 }, (_, index) => addDays(start, index)) };
-    }
-    const bounds = monthBounds(cursor);
-    return { ...bounds, days: monthCells(cursor) };
-  }, [cursor, view]);
-
-  const inView = (iso: string) => iso >= range.start && iso <= range.end;
-  const visiblePosts = posts.filter((post) => post.status !== "REJECTED" && inView(post.plannedDate));
-  const visibleDates = keyDates.filter((item) => inView(item.date));
-
-  function shift(direction: number) {
-    if (view === "week") onCursor(addDays(cursor, direction * 7));
-    else {
-      const [year, month] = cursor.split("-").map(Number);
-      const date = new Date(Date.UTC(year, month - 1 + direction, 1));
-      onCursor(date.toISOString().slice(0, 10));
-    }
-  }
-
-  return (
-    <div className="stack cal-page">
-      <div className="page-head">
-        <div className="row">
-          <button type="button" className="btn ghost" onClick={() => shift(-1)} aria-label="Previous">
-            ‹
-          </button>
-          <button type="button" className="btn ghost" onClick={() => onCursor(today)}>
-            Today
-          </button>
-          <button type="button" className="btn ghost" onClick={() => shift(1)} aria-label="Next">
-            ›
-          </button>
-          <h2>{view === "month" ? formatMonth(cursor) : `${formatDay(range.start)} – ${formatDay(range.end)}`}</h2>
-        </div>
-        <div className="view-toggle">
-          <button type="button" className={view === "week" ? "on" : ""} onClick={() => onView("week")}>
-            Week
-          </button>
-          <button type="button" className={view === "month" ? "on" : ""} onClick={() => onView("month")}>
-            Month
-          </button>
-        </div>
-      </div>
-
-      <div className="kpi-row">
-        {CHANNELS.map((channel) => (
-          <CountCard
-            key={channel.id}
-            value={visiblePosts.filter((post) => channel.platforms.some((id) => post.platforms.includes(id))).length}
-            label={channel.id === "META" ? "Meta" : channel.label}
-          />
-        ))}
-        <CountCard value={visiblePosts.filter((post) => post.status === "APPROVED").length} label="Approved" tone="green" />
-        <CountCard
-          value={visiblePosts.filter((post) => post.status === "PENDING_APPROVAL").length}
-          label="Waiting for approval"
-          tone="orange"
-        />
-        <CountCard value={visibleDates.length} label="Launches & key dates" />
-      </div>
-
-      <div className="legend">
-        {CHANNELS.map((channel) => (
-          <span key={channel.id}>
-            <span className="cal-tag" style={{ background: channel.colour, color: channel.ink }}>
-              {channel.short}
-            </span>
-            {channel.id === "META" ? "Instagram & Facebook" : channel.label}
-          </span>
-        ))}
-        <span>
-          <span className="key launch" /> Launch
-        </span>
-        <span>
-          <span className="key event" /> Key date
-        </span>
-        <span>
-          <span className="key note" /> Note
-        </span>
-        <span>✓ approved</span>
-        <span>○ waiting (dashed)</span>
-      </div>
-
-      <div className="cal-board">
-        <div className="cal-head">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-            <div key={day} className="cal-dow">
-              {day}
-            </div>
-          ))}
-        </div>
-        <div className={`cal${view === "week" ? " cal-week" : ""}`}>
-          {range.days.map((day) => {
-            const outside = view === "month" && day.slice(0, 7) !== range.start.slice(0, 7);
-            const dayPosts = posts
-              .filter((post) => post.plannedDate === day && post.status !== "REJECTED")
-              .sort(byPostingTime);
-            const dayNotes = notes.filter((note) => note.date === day);
-            const shownNotes = dayNotes.slice(0, 2);
-            const postRoom = shownNotes.length === 0 ? 3 : Math.max(1, 3 - shownNotes.length);
-            const shownPosts = dayPosts.slice(0, postRoom);
-            const hidden = dayNotes.length - shownNotes.length + dayPosts.length - shownPosts.length;
-            const dayKeys = keyDates.filter((item) => item.date === day);
-            return (
-              <div
-                key={day}
-                className={`cal-cell${day === today ? " today" : ""}${outside ? " closed" : ""}`}
-              >
-                <button type="button" className="cal-date" onClick={() => onCreate(day)}>
-                  <span>{Number(day.slice(8))}</span>
-                </button>
-                {dayKeys.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`cal-chip ${item.kind === "LAUNCH" ? "launch" : "keydate"}`}
-                    onClick={() => onOpenKey(item)}
-                  >
-                    <span className="grow">{item.title}</span>
-                  </button>
-                ))}
-                {shownNotes.map((note) => (
-                  <button
-                    key={note.id}
-                    type="button"
-                    className="cal-chip note"
-                    onClick={() => onOpenNote(note)}
-                  >
-                    <span className="cal-tag note-tag">Note</span>
-                    <span className="grow">{note.title}</span>
-                  </button>
-                ))}
-                {shownPosts.map((post) => {
-                  const channels = channelsFor(post.platforms);
-                  const colours = channels.map((channel) => channel.colour);
-                  const bar =
-                    colours.length > 1
-                      ? `linear-gradient(to bottom, ${colours
-                          .map((colour, index) => {
-                            const start = (index / colours.length) * 100;
-                            const end = ((index + 1) / colours.length) * 100;
-                            return `${colour} ${start}% ${end}%`;
-                          })
-                          .join(", ")})`
-                      : colours[0] ?? "#1E1A1C";
-                  return (
-                    <button
-                      key={post.id}
-                      type="button"
-                      className={`cal-chip ${post.status === "APPROVED" ? "approved" : "waiting"}`}
-                      style={{ ["--ch" as string]: bar }}
-                      onClick={() => onOpenPost(post)}
-                    >
-                      <span className="cal-tags">
-                        {channels.map((channel) => (
-                          <span
-                            key={channel.id}
-                            className="cal-tag"
-                            style={{ background: channel.colour, color: channel.ink }}
-                          >
-                            {channel.short}
-                          </span>
-                        ))}
-                      </span>
-                      {post.plannedTime ? <span className="cal-time">{post.plannedTime}</span> : null}
-                      <span className="cal-tick" aria-hidden="true">
-                        {post.status === "APPROVED" ? "✓" : "○"}
-                      </span>
-                      <span className="grow">
-                        {post.contentType === "STORY" ? "Story · " : ""}
-                        {post.title}
-                      </span>
-                    </button>
-                  );
-                })}
-                {hidden > 0 ? <p className="small muted">+{hidden}</p> : null}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CountCard({ value, label, tone }: { value: number; label: string; tone?: "green" | "orange" }) {
-  return (
-    <div className={`kpi${tone ? ` ${tone}` : ""}`}>
-      <div className="eyebrow">{label}</div>
-      <div className="kpi-figure">{value}</div>
-    </div>
-  );
-}
 
 type MediaSlot =
   | { key: string; kind: "saved"; id: string; name: string }
@@ -1164,22 +707,34 @@ function PostForm({
   user,
   initial,
   presetDate,
+  board,
   onClose,
   onSaved,
 }: {
   user: UserDTO;
   initial: PostDTO | null;
   presetDate: string | null;
+  board: BoardId | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const preset =
+    board === "meta-stories"
+      ? { contentType: "STORY" as const, platforms: ["INSTAGRAM" as const] }
+      : board === "tiktok"
+        ? { contentType: "REEL" as const, platforms: ["TIKTOK" as const] }
+        : { contentType: "FEED" as const, platforms: ["INSTAGRAM" as const] };
   const [title, setTitle] = useState(initial?.title ?? "");
-  const [platforms, setPlatforms] = useState<PlatformId[]>(initial?.platforms ?? ["INSTAGRAM"]);
-  const [contentType, setContentType] = useState<ContentTypeId>(initial?.contentType ?? "FEED");
+  const [platforms, setPlatforms] = useState<PlatformId[]>(initial?.platforms ?? [...preset.platforms]);
+  const [contentType, setContentType] = useState<ContentTypeId>(initial?.contentType ?? preset.contentType);
   const [plannedDate, setPlannedDate] = useState(initial?.plannedDate ?? presetDate ?? londonToday());
   const [plannedTime, setPlannedTime] = useState(initial?.plannedTime ?? "12:00");
   const [status, setStatus] = useState<StatusId>(
-    initial?.status === "APPROVED" && user.role === "TEAM" ? "PENDING_APPROVAL" : initial?.status ?? "PENDING_APPROVAL",
+    !initial
+      ? "PENDING_APPROVAL"
+      : user.role === "TEAM" && (initial.status === "APPROVED" || initial.status === "CHANGES_REQUESTED")
+        ? "AMENDMENTS_MADE"
+        : initial.status,
   );
   const [caption, setCaption] = useState(initial?.caption ?? "");
   const [notes, setNotes] = useState(initial?.creativeNotes ?? "");
@@ -1195,8 +750,10 @@ function PostForm({
 
   const statusOptions = STATUSES.filter((item) => {
     if (user.role === "MANAGEMENT") return true;
-    if (item.id === "DRAFT" || item.id === "PENDING_APPROVAL") return true;
-    return item.id === "CHANGES_REQUESTED" && initial?.status === "CHANGES_REQUESTED";
+    if (initial && (initial.status === "CHANGES_REQUESTED" || initial.status === "AMENDMENTS_MADE" || initial.status === "APPROVED")) {
+      return item.id === "DRAFT" || item.id === "AMENDMENTS_MADE";
+    }
+    return item.id === "DRAFT" || item.id === "PENDING_APPROVAL";
   });
 
   useEffect(() => {

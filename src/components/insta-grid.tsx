@@ -59,6 +59,7 @@ function gridLabel(post: PostDTO) {
   if (post.status === "APPROVED") return "Scheduled";
   if (post.status === "DRAFT") return "Draft";
   if (post.status === "CHANGES_REQUESTED") return "Changes";
+  if (post.status === "AMENDMENTS_MADE") return "Amended";
   return "In review";
 }
 
@@ -88,11 +89,13 @@ export function InstaGrid({
   profile,
   onOpen,
   onChanged,
+  embedded = false,
 }: {
   posts: PostDTO[];
   profile: IgProfileDTO;
   onOpen: (post: PostDTO) => void;
   onChanged: () => void;
+  embedded?: boolean;
 }) {
   const [includeDrafts, setIncludeDrafts] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -108,8 +111,8 @@ export function InstaGrid({
     );
 
   return (
-    <div className="ig-page">
-      <div className="feed-tools">
+    <div className={`ig-page${embedded ? " ig-embed" : ""}`}>
+      {embedded ? null : <div className="feed-tools">
         <p className="muted">
           Instagram layout for Meta posts (Instagram and Facebook). Newest top left. Tap a tile to open it.
         </p>
@@ -120,7 +123,7 @@ export function InstaGrid({
           <input type="checkbox" checked={includeDrafts} onChange={(event) => setIncludeDrafts(event.target.checked)} />
           Include drafts and posts in review
         </label>
-      </div>
+      </div>}
       <div className="ig-phone">
         <div className="ig-top">
           <div className="ig-avatar">
@@ -274,10 +277,12 @@ export function TikTokGrid({
   posts,
   profile,
   onOpen,
+  embedded = false,
 }: {
   posts: PostDTO[];
   profile: IgProfileDTO;
   onOpen: (post: PostDTO) => void;
+  embedded?: boolean;
 }) {
   const [includeDrafts, setIncludeDrafts] = useState(true);
   const planned = posts.filter(
@@ -294,8 +299,8 @@ export function TikTokGrid({
     );
 
   return (
-    <div className="tt-page">
-      <div className="feed-tools">
+    <div className={`tt-page${embedded ? " tt-embed" : ""}`}>
+      {embedded ? null : <div className="feed-tools">
         <p className="muted">How planned TikToks will look. Newest top left. Videos use their cover image.</p>
         <p className="muted small">
           In this plan: {planned.length} {planned.length === 1 ? "post" : "posts"} · {scheduled} scheduled
@@ -304,7 +309,7 @@ export function TikTokGrid({
           <input type="checkbox" checked={includeDrafts} onChange={(event) => setIncludeDrafts(event.target.checked)} />
           Include drafts and posts in review
         </label>
-      </div>
+      </div>}
       <div className="tt-phone">
         <div className="tt-head">
           <span className="tt-avatar">

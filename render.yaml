@@ -21,12 +21,14 @@ services:
       - key: MANAGEMENT_NAME
         value: Millie
       - key: TEAM_NAME
-        value: Content team
+        value: Manager
       - key: SEED_SAMPLE_CONTENT
         value: "false"
       - key: MANAGEMENT_EMAIL
         sync: false
       - key: MANAGEMENT_PASSWORD
+        sync: false
+      - key: MILLIE_PASSWORD
         sync: false
       - key: TEAM_EMAIL
         sync: false

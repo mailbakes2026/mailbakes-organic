@@ -14,6 +14,7 @@ export type StatusId =
   | "DRAFT"
   | "PENDING_APPROVAL"
   | "CHANGES_REQUESTED"
+  | "AMENDMENTS_MADE"
   | "APPROVED"
   | "REJECTED";
 
@@ -87,6 +88,7 @@ export type NoteDTO = {
   date: string | null;
   doThisWeek: boolean;
   status: NoteStatusId;
+  checked: boolean;
   authorName: string;
   postId: string | null;
   images: NoteImageDTO[];
