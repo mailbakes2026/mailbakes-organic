@@ -33,7 +33,9 @@ export function LoginForm({ setup, nextPath }: { setup: string | null; nextPath:
   return (
     <main className="signin">
       <form className="card signin-card" onSubmit={onSubmit}>
-        <h1 className="wordmark">MailBakes</h1>
+        <h1 className="signin-logo">
+          <img src="/mailbakes-logo.svg" alt="MailBakes" />
+        </h1>
         <label className="field" htmlFor="name">
           Name
           <input

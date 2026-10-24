@@ -2,6 +2,18 @@ export const SIGN_IN_ERROR = "That name or password isn't right.";
 
 type NamedAccount = { id: string; email: string; name: string };
 
+const MILLIE_ALIASES = new Set(["millie", "millie@mailbakes.com"]);
+
+export function isMillieAlias(identifier: string) {
+  return MILLIE_ALIASES.has(identifier.trim().toLowerCase());
+}
+
+function isMillieAccount(account: NamedAccount) {
+  const name = account.name.trim().toLowerCase();
+  const email = account.email.trim().toLowerCase();
+  return name === "millie" || email === "millie@mailbakes.com";
+}
+
 export function signInIdentifier(name: unknown, email: unknown) {
   const fromName = typeof name === "string" ? name.trim() : "";
   if (fromName) return fromName;
@@ -21,7 +33,13 @@ export function signInCandidates<T extends NamedAccount>(identifier: string, acc
   const byName = accounts
     .filter((account) => !emailIds.has(account.id) && account.name.trim().toLowerCase() === name.toLowerCase())
     .sort((a, b) => a.id.localeCompare(b.id));
-  return [...byEmail, ...byName];
+  const direct = [...byEmail, ...byName];
+  if (!isMillieAlias(name)) return direct;
+  const seen = new Set(direct.map((account) => account.id));
+  const aliases = accounts
+    .filter((account) => !seen.has(account.id) && isMillieAccount(account))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return [...direct, ...aliases];
 }
 
 export async function accountForPassword<T extends { passwordHash: string }>(

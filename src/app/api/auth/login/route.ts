@@ -2,7 +2,8 @@ import bcrypt from "bcryptjs";
 import { setSessionCookie, signSession } from "@/lib/auth";
 import { bootstrap } from "@/lib/bootstrap";
 import { prisma } from "@/lib/prisma";
-import { accountForPassword, SIGN_IN_ERROR, signInCandidates, signInIdentifier } from "@/lib/sign-in";
+import { milliePasswordFromEnv, samePassword } from "@/lib/accounts";
+import { accountForPassword, isMillieAlias, SIGN_IN_ERROR, signInCandidates, signInIdentifier } from "@/lib/sign-in";
 
 export const dynamic = "force-dynamic";
 
@@ -32,20 +33,39 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as { name?: string; email?: string; password?: string } | null;
   const identifier = signInIdentifier(body?.name, body?.email);
   const password = body?.password ?? "";
-  const accounts = identifier
+  const typed = identifier.trim();
+  const millieAlias = isMillieAlias(typed);
+  const accounts = typed
     ? await prisma.user.findMany({
         where: {
           OR: [
-            { email: identifier.toLowerCase() },
-            { name: { equals: identifier, mode: "insensitive" } },
+            { email: { equals: typed, mode: "insensitive" } },
+            { name: { equals: typed, mode: "insensitive" } },
+            ...(millieAlias
+              ? [
+                  { name: { equals: "Millie", mode: "insensitive" as const } },
+                  { email: { equals: "millie@mailbakes.com", mode: "insensitive" as const } },
+                ]
+              : []),
           ],
         },
         select: { id: true, email: true, name: true, role: true, passwordHash: true },
       })
     : [];
-  const user = await accountForPassword(password, signInCandidates(identifier, accounts), (plain, hash) =>
-    bcrypt.compare(plain, hash),
-  );
+  const candidates = signInCandidates(identifier, accounts);
+  let user = await accountForPassword(password, candidates, (plain, hash) => bcrypt.compare(plain, hash));
+  if (!user && millieAlias) {
+    const expected = milliePasswordFromEnv(process.env);
+    const millie = candidates.find(
+      (account) =>
+        account.name.trim().toLowerCase() === "millie" || account.email.trim().toLowerCase() === "millie@mailbakes.com",
+    );
+    if (expected && millie && samePassword(password, expected)) {
+      user = millie;
+      const hash = await bcrypt.hash(expected, 10);
+      await prisma.user.update({ where: { id: millie.id }, data: { passwordHash: hash } }).catch(() => undefined);
+    }
+  }
   if (!user) {
     const next = attempts.get(ip);
     if (!next || next.reset <= now) {

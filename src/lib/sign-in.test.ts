@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { accountForPassword, signInCandidates, signInIdentifier } from "./sign-in.ts";
+import { samePassword } from "./accounts.ts";
+import { accountForPassword, isMillieAlias, signInCandidates, signInIdentifier } from "./sign-in.ts";
 
 const accounts = [
   {
@@ -56,6 +57,23 @@ test("an email match is preferred, and the other password does not cross over", 
   const hits = signInCandidates("millie@mailbakes.com", mixed);
   assert.equal((await accountForPassword("management-secret", hits, compare))?.id, "inbox");
   assert.equal((await accountForPassword("team-secret", hits, compare))?.role, "TEAM");
+});
+
+test("Millie, millie and millie@mailbakes.com all find her account", () => {
+  const millie = accounts[0];
+  for (const typed of ["Millie", "millie", "MILLIE", "millie@mailbakes.com", "Millie@MailBakes.com"]) {
+    assert.deepEqual(
+      signInCandidates(typed, accounts).map((account) => account.id),
+      ["m"],
+      typed,
+    );
+  }
+  const renamed = { ...millie, email: "studio@mailbakes.com" };
+  assert.equal(signInCandidates("millie@mailbakes.com", [renamed])[0]?.id, "m");
+  assert.equal(isMillieAlias("  Millie@MailBakes.com "), true);
+  assert.equal(isMillieAlias("Manager"), false);
+  assert.equal(samePassword("millie-secret-value", "millie-secret-value"), true);
+  assert.equal(samePassword("millie-secret-value", "other-secret-value"), false);
 });
 
 test("a blank name matches nobody", async () => {
