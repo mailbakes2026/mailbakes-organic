@@ -6,7 +6,8 @@ export type PlatformId =
   | "TIKTOK"
   | "LINKEDIN"
   | "YOUTUBE_SHORTS"
-  | "SNAPCHAT";
+  | "SNAPCHAT"
+  | "PINTEREST";
 
 export type ContentTypeId = "FEED" | "REEL" | "STORY";
 

@@ -1,9 +1,16 @@
 type Role = "MANAGEMENT" | "TEAM";
 type StatusId = "DRAFT" | "PENDING_APPROVAL" | "CHANGES_REQUESTED" | "AMENDMENTS_MADE" | "APPROVED" | "REJECTED";
-type PlatformId = "INSTAGRAM" | "FACEBOOK" | "TIKTOK" | "LINKEDIN" | "YOUTUBE_SHORTS" | "SNAPCHAT";
+type PlatformId = "INSTAGRAM" | "FACEBOOK" | "TIKTOK" | "LINKEDIN" | "YOUTUBE_SHORTS" | "SNAPCHAT" | "PINTEREST";
 type ContentTypeId = "FEED" | "REEL" | "STORY";
 
-export type BoardId = "meta-posts" | "meta-stories" | "tiktok";
+export type BoardId =
+  | "meta-posts"
+  | "meta-stories"
+  | "tiktok"
+  | "snapchat"
+  | "linkedin"
+  | "youtube"
+  | "pinterest";
 
 export type ColumnId = "approval" | "changes" | "amended" | "approved";
 
@@ -73,9 +80,12 @@ export function onBoard(
   post: { platforms: PlatformId[]; contentType: ContentTypeId },
   board: BoardId,
 ) {
-  if (board === "meta-stories") return post.contentType === "STORY";
-  if (board === "tiktok") return post.contentType !== "STORY" && post.platforms.includes("TIKTOK");
-  if (post.contentType === "STORY") return false;
-  if (post.platforms.includes("INSTAGRAM") || post.platforms.includes("FACEBOOK")) return true;
-  return post.platforms.some((id) => id !== "TIKTOK");
+  const meta = post.platforms.includes("INSTAGRAM") || post.platforms.includes("FACEBOOK");
+  if (board === "meta-stories") return post.contentType === "STORY" && meta;
+  if (board === "meta-posts") return post.contentType !== "STORY" && meta;
+  if (board === "tiktok") return post.platforms.includes("TIKTOK");
+  if (board === "snapchat") return post.platforms.includes("SNAPCHAT");
+  if (board === "linkedin") return post.platforms.includes("LINKEDIN");
+  if (board === "youtube") return post.platforms.includes("YOUTUBE_SHORTS");
+  return post.platforms.includes("PINTEREST");
 }

@@ -1,6 +1,6 @@
 # MailBakes organic social
 
-Planning and approval for MailBakes organic posts and stories. Approving a post here does not publish it to Instagram, Facebook, TikTok, LinkedIn, YouTube Shorts or Snapchat.
+Planning and approval for MailBakes organic posts and stories. Approving a post here does not publish it to Instagram, Facebook, TikTok, Snapchat, LinkedIn, YouTube Shorts or Pinterest.
 
 ## Local
 
@@ -53,7 +53,7 @@ Use the Frankfurt region for the web service and the database so they can use th
 
 The app starts empty. It no longer creates example posts; any left over from the first version are removed once at startup. Accounts are never touched by that cleanup.
 
-The sidebar is Meta posts, Meta stories, TikTok and Content calendar. Each channel is a board with columns For approval, Needs changes, Amendments made and Approved, with that channel's feed preview beside it. The content calendar is a month or week view, coloured by channel and status. Notes sit under the calendar as a checklist on a day. Performance stats stay on each post. Platform connections still sync in the background for those stats; they are not a separate tab.
+The sidebar is grouped into Channels (Meta Posts, Meta Stories, TikTok, Snapchat, LinkedIn, YouTube Shorts, Pinterest) and Plan (Content Calendar, Notes & Key Dates). Each channel is a board with columns For approval, Needs changes, Amendments made and Approved, with that channel's feed preview beside it. The content calendar is a month or week view: drag a post to another day to reschedule it, click a day to add a post, hover a post to peek, and filter by channel. Key dates still show as markers on the calendar. Notes and key dates live on their own page. Performance stats stay in the database and are filled in later; the post screen does not ask for them. Platform connections still sync in the background; they are not a separate tab.
 
 The start command runs `prisma migrate deploy` before the server listens. `/api/health` checks the database and is the Render health check.
 

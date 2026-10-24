@@ -67,8 +67,7 @@ export function NotesBoard({
         <div>
           <h2>Notes</h2>
           <p className="muted">
-            Ideas and inspo. A date puts the note on the content calendar. Undated notes ticked “do this week” stay in
-            the list below.
+            Ideas and inspo. Tick a note when it’s done. A date stays on this list.
           </p>
         </div>
         <button type="button" className="btn" onClick={onCreate}>
@@ -259,7 +258,7 @@ export function NoteForm({
         <label className="field" htmlFor="note-date">
           Date
           <input id="note-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          <p className="small muted">Optional. A date shows this note on the content calendar.</p>
+          <p className="small muted">Optional. The date stays on this list, not on the content calendar.</p>
         </label>
       </div>
       <label className="check-line">

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { channelsFor, statusLabel } from "@/lib/constants";
-import type { KeyDateDTO, NoteDTO, PostDTO, StatusId } from "@/lib/types";
+import { CHANNELS, channelsFor, statusLabel, type ChannelId } from "@/lib/constants";
+import type { KeyDateDTO, PostDTO, StatusId } from "@/lib/types";
 
 function londonToday() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -74,9 +74,13 @@ function chipClass(status: StatusId) {
   return "pending";
 }
 
+function matchesChannel(post: PostDTO, selected: Set<ChannelId>) {
+  if (selected.size === 0) return false;
+  return channelsFor(post.platforms).some((channel) => selected.has(channel.id));
+}
+
 export function CalendarBoard({
   posts,
-  notes,
   keyDates,
   cursor,
   view,
@@ -85,11 +89,9 @@ export function CalendarBoard({
   onOpenPost,
   onOpenKey,
   onCreatePost,
-  onEditNote,
-  onChanged,
+  onMove,
 }: {
   posts: PostDTO[];
-  notes: NoteDTO[];
   keyDates: KeyDateDTO[];
   cursor: string;
   view: "month" | "week";
@@ -98,14 +100,14 @@ export function CalendarBoard({
   onOpenPost: (post: PostDTO) => void;
   onOpenKey: (item: KeyDateDTO) => void;
   onCreatePost: (date: string) => void;
-  onEditNote: (note: NoteDTO) => void;
-  onChanged: () => void;
+  onMove: (id: string, date: string) => Promise<string | null>;
 }) {
   const today = londonToday();
-  const [selected, setSelected] = useState(today);
-  const [draft, setDraft] = useState("");
+  const [channels, setChannels] = useState<Set<ChannelId>>(() => new Set(CHANNELS.map((item) => item.id)));
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overDay, setOverDay] = useState<string | null>(null);
+  const [peek, setPeek] = useState<{ post: PostDTO; x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const range = useMemo(() => {
     if (view === "week") {
@@ -116,6 +118,9 @@ export function CalendarBoard({
     return { ...bounds, days: monthCells(cursor) };
   }, [cursor, view]);
 
+  const visible = posts.filter((post) => post.status !== "REJECTED" && matchesChannel(post, channels));
+  const monthKey = cursor.slice(0, 7);
+
   function shift(direction: number) {
     if (view === "week") onCursor(addDays(cursor, direction * 7));
     else {
@@ -125,57 +130,75 @@ export function CalendarBoard({
     }
   }
 
-  const dayNotes = notes
-    .filter((note) => note.date === selected)
-    .sort((a, b) => Number(a.checked) - Number(b.checked) || a.title.localeCompare(b.title));
-  const loose = notes
-    .filter((note) => !note.date)
-    .sort((a, b) => Number(a.checked) - Number(b.checked) || a.title.localeCompare(b.title));
-
-  async function addNote(event: React.FormEvent) {
-    event.preventDefault();
-    const title = draft.trim();
-    if (!title) return;
-    setBusy(true);
-    setError(null);
-    const body = new FormData();
-    body.set("title", title);
-    body.set("description", "");
-    body.set("links", "[]");
-    body.set("platform", "");
-    body.set("date", selected);
-    body.set("doThisWeek", "false");
-    body.set("status", "IDEA");
-    body.set("checked", "false");
-    const response = await fetch("/api/notes", { method: "POST", body });
-    setBusy(false);
-    if (!response.ok) {
-      setError("Couldn't add that note.");
-      return;
-    }
-    setDraft("");
-    onChanged();
-  }
-
-  async function patch(id: string, change: { checked?: boolean; date?: string | null }) {
-    setBusy(true);
-    setError(null);
-    const response = await fetch(`/api/notes/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(change),
+  function toggleChannel(id: ChannelId) {
+    setChannels((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
-    setBusy(false);
-    if (!response.ok) {
-      setError("Couldn't update that note.");
-      return;
-    }
-    onChanged();
   }
+
+  function showPeek(post: PostDTO, target: HTMLElement) {
+    if (dragId) return;
+    const rect = target.getBoundingClientRect();
+    const width = 260;
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+    const top = rect.bottom + 8 + 160 > window.innerHeight ? Math.max(8, rect.top - 168) : rect.bottom + 8;
+    setPeek({ post, x: left, y: top });
+  }
+
+  function startDrag(event: React.PointerEvent<HTMLButtonElement>, post: PostDTO) {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    setPeek(null);
+    let moved = false;
+    let day = post.plannedDate;
+
+    function move(pointer: PointerEvent) {
+      if (Math.hypot(pointer.clientX - startX, pointer.clientY - startY) > 6) moved = true;
+      if (!moved) return;
+      setDragId(post.id);
+      const hit = document.elementFromPoint(pointer.clientX, pointer.clientY)?.closest("[data-day]");
+      day = hit?.getAttribute("data-day") || post.plannedDate;
+      setOverDay(day);
+    }
+
+    function up(pointer: PointerEvent) {
+      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setDragId(null);
+      setOverDay(null);
+      if (!moved) {
+        onOpenPost(post);
+        return;
+      }
+      pointer.preventDefault();
+      const swallow = (click: Event) => {
+        click.preventDefault();
+        click.stopPropagation();
+        window.removeEventListener("click", swallow, true);
+      };
+      window.addEventListener("click", swallow, true);
+      if (day === post.plannedDate) return;
+      void onMove(post.id, day).then((message) => setError(message));
+    }
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  const peekPost = peek?.post;
+  const peekMedia = peekPost?.media[0];
 
   return (
-    <div className="stack plan-cal">
-      <div className="page-head">
+    <div className={`stack plan-cal${dragId ? " is-dragging" : ""}`}>
+      <div className="page-head cal-toolbar">
         <div className="row">
           <button type="button" className="btn ghost" onClick={() => shift(-1)} aria-label="Previous">
             ‹
@@ -188,7 +211,7 @@ export function CalendarBoard({
           </button>
           <h2>{view === "month" ? formatMonth(cursor) : `${formatDay(range.start)} – ${formatDay(range.end)}`}</h2>
         </div>
-        <div className="view-toggle">
+        <div className="view-toggle" role="group" aria-label="Calendar range">
           <button type="button" className={view === "week" ? "on" : ""} onClick={() => onView("week")}>
             Week
           </button>
@@ -198,177 +221,141 @@ export function CalendarBoard({
         </div>
       </div>
 
-      <div className="legend">
-        <span><i className="swatch pending" /> For approval</span>
-        <span><i className="swatch changes" /> Needs changes</span>
-        <span><i className="swatch amended" /> Amendments made</span>
-        <span><i className="swatch approved" /> Approved</span>
-        <span><i className="swatch draft" /> Draft</span>
-        <span>Colour bar is the channel</span>
-      </div>
-
-      <div className="cal-board">
-        <div className="cal-head">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-            <div key={day} className="cal-dow">
-              {day}
-            </div>
-          ))}
-        </div>
-        <div className={`cal plan-grid${view === "week" ? " plan-week" : ""}`}>
-          {range.days.map((day) => {
-            const outside = view === "month" && day.slice(0, 7) !== range.start.slice(0, 7);
-            const dayPosts = posts
-              .filter((post) => post.plannedDate === day && post.status !== "REJECTED")
-              .sort(
-                (a, b) =>
-                  (a.plannedTime ?? "99:99").localeCompare(b.plannedTime ?? "99:99") ||
-                  a.title.localeCompare(b.title),
-              );
-            const count = notes.filter((note) => note.date === day && !note.checked).length;
-            return (
-              <div
-                key={day}
-                className={`cal-cell plan-day${day === today ? " today" : ""}${day === selected ? " selected" : ""}${outside ? " closed" : ""}`}
-              >
-                <div className="plan-day-head">
-                  <button type="button" className="cal-date" onClick={() => setSelected(day)}>
-                    <span>{Number(day.slice(8))}</span>
-                    {count > 0 ? <span className="plan-note-count">{count}</span> : null}
-                  </button>
-                  <button type="button" className="plan-add" aria-label={`New post on ${formatDay(day)}`} onClick={() => onCreatePost(day)}>
-                    +
-                  </button>
-                </div>
-                {keyDates
-                  .filter((item) => item.date === day)
-                  .map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`cal-chip ${item.kind === "LAUNCH" ? "launch" : "keydate"}`}
-                      onClick={() => onOpenKey(item)}
-                    >
-                      <span className="grow">{item.title}</span>
-                    </button>
-                  ))}
-                {dayPosts.map((post) => {
-                  const channels = channelsFor(post.platforms);
-                  const colour = channels[0]?.colour ?? "#1E1A1C";
-                  return (
-                    <button
-                      key={post.id}
-                      type="button"
-                      className={`plan-chip ${chipClass(post.status)}`}
-                      style={{ ["--ch" as string]: colour }}
-                      onClick={() => onOpenPost(post)}
-                    >
-                      <span className="plan-chip-meta">
-                        {post.plannedTime ? <span className="cal-time">{post.plannedTime}</span> : null}
-                        <span className="plan-channels">
-                          {channels.map((channel) => (
-                            <span key={channel.id} className="cal-tag" style={{ background: channel.colour, color: channel.ink }}>
-                              {channel.short}
-                            </span>
-                          ))}
-                        </span>
-                      </span>
-                      <span className="grow">
-                        {post.contentType === "STORY" ? "Story · " : ""}
-                        {post.title}
-                      </span>
-                      <span className="plan-status">{statusLabel(post.status)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <section className="day-notes" aria-label="Notes">
-        <div className="page-head">
-          <div>
-            <h2>Notes · {formatDay(selected)}</h2>
-            <p className="muted">Tick items off. Notes stay on the day you attach them to.</p>
-          </div>
-        </div>
-        {error ? <p className="alert crit">{error}</p> : null}
-        <form className="row note-add" onSubmit={(event) => void addNote(event)}>
-          <input
-            aria-label="New note"
-            placeholder="Add a note for this day"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <button type="submit" className="btn" disabled={busy || !draft.trim()}>
-            Add
+      <div className="channel-filters" role="group" aria-label="Filter by channel">
+        <button
+          type="button"
+          className={`filter-chip${channels.size === CHANNELS.length ? " on" : ""}`}
+          onClick={() => setChannels(new Set(CHANNELS.map((item) => item.id)))}
+        >
+          All
+        </button>
+        {CHANNELS.map((channel) => (
+          <button
+            key={channel.id}
+            type="button"
+            className={`filter-chip${channels.has(channel.id) ? " on" : ""}`}
+            onClick={() => toggleChannel(channel.id)}
+            style={{ ["--ch" as string]: channel.colour, ["--ink" as string]: channel.ink }}
+          >
+            {channel.label}
           </button>
-        </form>
-        {dayNotes.length === 0 ? <p className="muted">Nothing on this day yet.</p> : null}
-        <ul className="check-list">
-          {dayNotes.map((note) => (
-            <NoteRow key={note.id} note={note} busy={busy} onToggle={(checked) => void patch(note.id, { checked })} onEdit={() => onEditNote(note)} onDetach={() => void patch(note.id, { date: null })} />
-          ))}
-        </ul>
-        {loose.length > 0 ? (
-          <div className="loose-notes">
-            <h3>Not on a day yet</h3>
-            <ul className="check-list">
-              {loose.map((note) => (
-                <NoteRow
-                  key={note.id}
-                  note={note}
-                  busy={busy}
-                  onToggle={(checked) => void patch(note.id, { checked })}
-                  onEdit={() => onEditNote(note)}
-                  onAttach={() => void patch(note.id, { date: selected })}
-                />
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </section>
-    </div>
-  );
-}
+        ))}
+      </div>
 
-function NoteRow({
-  note,
-  busy,
-  onToggle,
-  onEdit,
-  onAttach,
-  onDetach,
-}: {
-  note: NoteDTO;
-  busy: boolean;
-  onToggle: (checked: boolean) => void;
-  onEdit: () => void;
-  onAttach?: () => void;
-  onDetach?: () => void;
-}) {
-  return (
-    <li className={note.checked ? "is-done" : ""}>
-      <label>
-        <input type="checkbox" checked={note.checked} disabled={busy} onChange={(event) => onToggle(event.target.checked)} />
-        <span>{note.title}</span>
-      </label>
-      <span className="small muted">{note.authorName}</span>
-      <button type="button" className="subtle" onClick={onEdit}>
-        Edit
-      </button>
-      {onAttach ? (
-        <button type="button" className="subtle" disabled={busy} onClick={onAttach}>
-          Put on this day
-        </button>
+      <p className="muted small cal-hint">
+        Drag a post to another day to reschedule it. Click an empty part of a day to add a post. Hover a post to peek.
+      </p>
+      {error ? <p className="alert crit">{error}</p> : null}
+
+      <div className="cal-head" aria-hidden="true">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
+          <div key={label} className="cal-dow">
+            {label}
+          </div>
+        ))}
+      </div>
+      <div className={`cal${view === "week" ? " cal-week" : ""}`}>
+        {range.days.map((day) => {
+          const outside = view === "month" && day.slice(0, 7) !== monthKey;
+          const dayPosts = visible
+            .filter((post) => post.plannedDate === day)
+            .sort((a, b) => (a.plannedTime ?? "").localeCompare(b.plannedTime ?? "") || a.title.localeCompare(b.title));
+          const marks = keyDates.filter((item) => item.date === day);
+          return (
+            <article
+              key={day}
+              data-day={day}
+              className={`cal-cell${day === today ? " today" : ""}${outside ? " outside" : ""}${overDay === day ? " drop" : ""}`}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("[data-post], [data-key]")) return;
+                onCreatePost(day);
+              }}
+            >
+              <div className="cal-date">
+                <span>{Number(day.slice(8))}</span>
+                <button
+                  type="button"
+                  className="cal-add"
+                  aria-label={`Add a post on ${formatDay(day)}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCreatePost(day);
+                  }}
+                >
+                  +
+                </button>
+              </div>
+              {marks.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-key={item.id}
+                  className={`cal-marker ${item.kind === "LAUNCH" ? "launch" : "keydate"}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenKey(item);
+                  }}
+                >
+                  {item.kind === "LAUNCH" ? "Launch" : "Key"} · {item.title}
+                </button>
+              ))}
+              {dayPosts.map((post) => {
+                const tags = channelsFor(post.platforms);
+                return (
+                  <button
+                    key={post.id}
+                    type="button"
+                    data-post={post.id}
+                    className={`cal-chip ${chipClass(post.status)}${dragId === post.id ? " dragging" : ""}`}
+                    style={{ ["--ch" as string]: tags[0]?.colour ?? "#1E1A1C" }}
+                    onPointerDown={(event) => startDrag(event, post)}
+                    onMouseEnter={(event) => showPeek(post, event.currentTarget)}
+                    onMouseLeave={() => setPeek((current) => (current?.post.id === post.id ? null : current))}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {post.plannedTime ? <span className="cal-time">{post.plannedTime}</span> : null}
+                    <span className="grow">{post.title}</span>
+                  </button>
+                );
+              })}
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="legend">
+        {CHANNELS.map((channel) => (
+          <span key={channel.id}>
+            <i className="swatch" style={{ background: channel.colour }} />
+            {channel.label}
+          </span>
+        ))}
+        <span>Solid is approved. Dashed is still in review.</span>
+      </div>
+
+      {peek && peekPost ? (
+        <div className="cal-peek" style={{ left: peek.x, top: peek.y }} role="tooltip">
+          <span className="cal-peek-media">
+            {peekMedia ? (
+              peekMedia.mimeType.startsWith("video/") ? (
+                <video src={`/api/media/${peekMedia.id}#t=0.1`} muted playsInline preload="metadata" />
+              ) : (
+                <img src={`/api/media/${peekMedia.id}`} alt="" />
+              )
+            ) : (
+              <span className="story-empty" />
+            )}
+          </span>
+          <span className="cal-peek-copy">
+            <b>{peekPost.title}</b>
+            <span className="small muted">
+              {formatDay(peekPost.plannedDate)}
+              {peekPost.plannedTime ? ` · ${peekPost.plannedTime}` : ""} · {statusLabel(peekPost.status)}
+            </span>
+            {peekPost.caption ? <p>{peekPost.caption}</p> : null}
+          </span>
+        </div>
       ) : null}
-      {onDetach ? (
-        <button type="button" className="subtle" disabled={busy} onClick={onDetach}>
-          Remove from day
-        </button>
-      ) : null}
-    </li>
+    </div>
   );
 }
