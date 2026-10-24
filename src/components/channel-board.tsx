@@ -40,6 +40,7 @@ export function ChannelBoard({
   onEdit,
   onReview,
   onAmend,
+  onRestore,
   onChanged,
 }: {
   board: BoardId;
@@ -51,14 +52,35 @@ export function ChannelBoard({
   onEdit: (post: PostDTO) => void;
   onReview: (id: string, action: ReviewAction) => void;
   onAmend: (id: string) => void;
+  onRestore: (id: string) => void;
   onChanged: () => void;
 }) {
   const mine = posts.filter((post) => onBoard(post, board));
   const feedPosts = posts.filter((post) => post.status !== "REJECTED");
 
+  function showColumn(id: string) {
+    document.querySelector(`.pipe-${id}`)?.scrollIntoView({ inline: "center", block: "nearest" });
+  }
+
   return (
     <div className="channel-layout">
       <div className="channel-board">
+        <div className="board-jumps" aria-label="Board columns">
+          {COLUMNS.map((column) => {
+            const count = mine.filter((post) => columnFor(post.status) === column.id).length;
+            return (
+              <button
+                key={column.id}
+                type="button"
+                className={`jump-chip${column.id === "declined" ? " declined" : ""}${count > 0 && column.id === "declined" ? " on" : ""}`}
+                onClick={() => showColumn(column.id)}
+              >
+                {column.label}
+                <span>{count}</span>
+              </button>
+            );
+          })}
+        </div>
         <div className="board-scroll">
           <div className="board-cols">
             {COLUMNS.map((column) => {
@@ -83,6 +105,7 @@ export function ChannelBoard({
                       onEdit={() => onEdit(post)}
                       onReview={onReview}
                       onAmend={onAmend}
+                      onRestore={onRestore}
                     />
                   ))}
                 </section>
@@ -114,6 +137,7 @@ function PipeCard({
   onEdit,
   onReview,
   onAmend,
+  onRestore,
 }: {
   post: PostDTO;
   user: UserDTO;
@@ -122,6 +146,7 @@ function PipeCard({
   onEdit: () => void;
   onReview: (id: string, action: ReviewAction) => void;
   onAmend: (id: string) => void;
+  onRestore: (id: string) => void;
 }) {
   const note = [...post.comments].reverse().find((comment) => comment.kind !== "APPROVAL");
   return (
@@ -146,7 +171,16 @@ function PipeCard({
           </span>
         ) : null}
       </button>
-      <ReviewButtons post={post} user={user} busy={busy} compact onEdit={onEdit} onReview={onReview} onAmend={onAmend} />
+      <ReviewButtons
+        post={post}
+        user={user}
+        busy={busy}
+        compact
+        onEdit={onEdit}
+        onReview={onReview}
+        onAmend={onAmend}
+        onRestore={onRestore}
+      />
     </article>
   );
 }
@@ -159,6 +193,7 @@ export function ReviewButtons({
   onEdit,
   onReview,
   onAmend,
+  onRestore,
 }: {
   post: PostDTO;
   user: UserDTO;
@@ -167,6 +202,7 @@ export function ReviewButtons({
   onEdit: () => void;
   onReview: (id: string, action: ReviewAction) => void;
   onAmend: (id: string) => void;
+  onRestore?: (id: string) => void;
 }) {
   const approve = approverMayAct(user.role, post.status, "approve");
   const changes = approverMayAct(user.role, post.status, "request_changes");
@@ -192,6 +228,11 @@ export function ReviewButtons({
       {reject ? (
         <button type="button" className="btn danger sm" disabled={busy} onClick={() => onReview(post.id, "reject")}>
           Decline
+        </button>
+      ) : null}
+      {post.status === "REJECTED" && onRestore ? (
+        <button type="button" className="btn ghost sm" disabled={busy} onClick={() => onRestore(post.id)}>
+          Move back to approval
         </button>
       ) : null}
       <button type="button" className="btn ghost sm" onClick={onEdit}>

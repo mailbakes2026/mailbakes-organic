@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  COLUMNS,
   approverMayAct,
   awaitingApproval,
   columnFor,
@@ -28,6 +29,7 @@ test("a first submission stays in For approval", () => {
   assert.equal(columnFor("CHANGES_REQUESTED"), "changes");
   assert.equal(columnFor("APPROVED"), "approved");
   assert.equal(columnFor("REJECTED"), "declined");
+  assert.equal(COLUMNS.find((column) => column.id === "declined")?.label, "Declined");
 });
 
 test("the approver can act again after a changes round", () => {
