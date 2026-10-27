@@ -50,7 +50,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       {calendarError ? <p className="alert warn">Google: {calendarError}</p> : null}
       {!google.connected ? <p className="alert warn">Google isn&apos;t connected, so only your own appointments are shown.</p> : null}
       {warnings.length > 0 ? <p className="muted small">Could not read: {warnings.join(", ")}.</p> : null}
-      <WeekCalendar weekStart={weekStart} today={today} appointments={appointments} google={googleEvents} />
+      <WeekCalendar weekStart={weekStart} today={today} focusDay={asked} appointments={appointments} google={googleEvents} />
     </div>
   );
 }

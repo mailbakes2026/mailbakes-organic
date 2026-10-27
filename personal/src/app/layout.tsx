@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
@@ -11,6 +11,12 @@ export const metadata: Metadata = {
   title: "Personal · MailBakes",
   description: "Millie's command centre for email, the diary, reminders and the run-through with her PA.",
   robots: { index: false, follow: false },
+  // Home-screen app on iPhone: full screen, named "Personal".
+  appleWebApp: { capable: true, title: "Personal", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ED217A",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

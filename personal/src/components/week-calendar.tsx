@@ -147,15 +147,15 @@ function layoutDay(items: Item[]) {
 }
 
 /** Stack all-day bars into rows so overlapping trips don't sit on top of each other. */
-function layoutBars(items: Item[], weekStart: string) {
-  const weekEnd = plusDays(weekStart, 6);
-  const sorted = [...items].sort(
-    (a, b) => a.startDay.localeCompare(b.startDay) || b.endDay.localeCompare(a.endDay) || a.title.localeCompare(b.title),
-  );
+function layoutBars(items: Item[], weekStart: string, count = 7) {
+  const weekEnd = plusDays(weekStart, count - 1);
+  const sorted = items
+    .filter((item) => item.endDay >= weekStart && item.startDay <= weekEnd)
+    .sort((a, b) => a.startDay.localeCompare(b.startDay) || b.endDay.localeCompare(a.endDay) || a.title.localeCompare(b.title));
   const rows: [number, number][][] = [];
   return sorted.map((item) => {
     const first = Math.max(0, daysApart(weekStart, item.startDay));
-    const last = Math.min(6, daysApart(weekStart, item.endDay));
+    const last = Math.min(count - 1, daysApart(weekStart, item.endDay));
     let row = rows.findIndex((taken) => taken.every(([a, b]) => last < a || first > b));
     if (row < 0) {
       rows.push([]);
@@ -171,11 +171,14 @@ function layoutBars(items: Item[], weekStart: string) {
 export function WeekCalendar({
   weekStart,
   today,
+  focusDay,
   appointments,
   google,
 }: {
   weekStart: string;
   today: string;
+  /** The day the phone's day view opens on (the date in the link, or today). */
+  focusDay?: string;
   appointments: AppointmentDto[];
   google: GoogleWeekItem[];
 }) {
@@ -191,6 +194,31 @@ export function WeekCalendar({
   const scroller = useRef<HTMLDivElement>(null);
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => plusDays(weekStart, index)), [weekStart]);
+  const pickDay = (wanted?: string) => (wanted && wanted >= weekStart && wanted <= days[6] ? wanted : today >= weekStart && today <= days[6] ? today : weekStart);
+
+  // On a phone the calendar opens on one day; a toggle switches to the full week.
+  const [isPhone, setIsPhone] = useState(false);
+  const [view, setView] = useState<"day" | "week">("week");
+  const [selected, setSelected] = useState(() => pickDay(focusDay));
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 700px)");
+    const apply = () => {
+      setIsPhone(query.matches);
+      setView(query.matches ? "day" : "week");
+    };
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    setSelected(pickDay(focusDay));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStart, focusDay]);
+
+  const shown = view === "day" ? [selected] : days;
 
   useEffect(() => {
     setNow(londonNow());
@@ -246,7 +274,7 @@ export function WeekCalendar({
     return [...mine, ...theirs];
   }, [appointments, google, hidden, showGoogle]);
 
-  const bars = layoutBars(items.filter((item) => item.allDay), weekStart);
+  const bars = layoutBars(items.filter((item) => item.allDay), shown[0], shown.length);
   const barRows = Math.max(1, ...bars.map((bar) => bar.row + 1));
 
   function closeAll() {
@@ -260,6 +288,29 @@ export function WeekCalendar({
     router.push(`/calendar?week=${day}`);
   }
 
+  /** Day view: step one day, loading the next week when it crosses Sunday/Monday. */
+  function stepDay(by: number) {
+    const next = plusDays(selected, by);
+    if (next >= weekStart && next <= days[6]) setSelected(next);
+    else goToWeek(next);
+  }
+
+  function onTouchStart(event: React.TouchEvent) {
+    const touch = event.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function onTouchEnd(event: React.TouchEvent) {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start || view !== "day") return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    // A clear sideways swipe, not a scroll.
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) stepDay(dx < 0 ? 1 : -1);
+  }
+
   function openNew(preset: Partial<Draft>) {
     setError(null);
     setConfirmDelete(false);
@@ -267,7 +318,7 @@ export function WeekCalendar({
       title: "",
       type: "Hair",
       allDay: false,
-      startDay: today >= weekStart && today <= days[6] ? today : weekStart,
+      startDay: view === "day" ? selected : pickDay(),
       endDay: "",
       startTime: "10:00",
       endTime: "11:00",
@@ -360,24 +411,49 @@ export function WeekCalendar({
     month: "short",
     year: "numeric",
   })}`;
+  const dayTitle = dayLabel(selected, { weekday: "long", day: "numeric", month: "short" });
   const update = (patch: Partial<Draft>) => setDraft((current) => (current ? { ...current, ...patch } : current));
 
   return (
     <div className="wk">
       <div className="wk-toolbar">
         <div className="wk-nav">
-          <button type="button" className="btn ghost sm" onClick={() => goToWeek(plusDays(weekStart, -7))} aria-label="Previous week">
+          <button
+            type="button"
+            className="btn ghost sm"
+            onClick={() => (view === "day" ? stepDay(-1) : goToWeek(plusDays(weekStart, -7)))}
+            aria-label={view === "day" ? "Previous day" : "Previous week"}
+          >
             ‹
           </button>
-          <button type="button" className="btn ghost sm" onClick={() => goToWeek(today)}>
+          <button
+            type="button"
+            className="btn ghost sm"
+            onClick={() => (today >= weekStart && today <= days[6] ? setSelected(today) : goToWeek(today))}
+          >
             Today
           </button>
-          <button type="button" className="btn ghost sm" onClick={() => goToWeek(plusDays(weekStart, 7))} aria-label="Next week">
+          <button
+            type="button"
+            className="btn ghost sm"
+            onClick={() => (view === "day" ? stepDay(1) : goToWeek(plusDays(weekStart, 7)))}
+            aria-label={view === "day" ? "Next day" : "Next week"}
+          >
             ›
           </button>
-          <b className="wk-range">{rangeLabel}</b>
+          <b className="wk-range">{view === "day" ? dayTitle : rangeLabel}</b>
         </div>
         <div className="wk-nav">
+          {isPhone ? (
+            <span className="wk-views" role="group" aria-label="Calendar view">
+              <button type="button" className={view === "day" ? "on" : ""} aria-pressed={view === "day"} onClick={() => setView("day")}>
+                Day
+              </button>
+              <button type="button" className={view === "week" ? "on" : ""} aria-pressed={view === "week"} onClick={() => setView("week")}>
+                Week
+              </button>
+            </span>
+          ) : null}
           <label className="wk-toggle">
             <input type="checkbox" checked={showGoogle} onChange={(event) => setShowGoogle(event.target.checked)} /> Show Google
           </label>
@@ -415,11 +491,32 @@ export function WeekCalendar({
         ) : null}
       </div>
 
-      <div className="wk-frame">
-        <div className="wk-inner">
-          <div className="wk-row wk-heads">
+      {view === "day" ? (
+        <div className="wk-strip" role="group" aria-label="Pick a day">
+          {days.map((day) => (
+            <button
+              key={day}
+              type="button"
+              className={`wk-strip-day${day === selected ? " on" : ""}${day === today ? " today" : ""}`}
+              aria-pressed={day === selected}
+              onClick={() => setSelected(day)}
+            >
+              <span className="wk-dow">{dayLabel(day, { weekday: "narrow" })}</span>
+              <span className="wk-strip-num">{dayLabel(day, { day: "numeric" })}</span>
+              {items.some((item) => item.startDay <= day && item.endDay >= day) ? <span className="wk-strip-dot" /> : <span className="wk-strip-dot empty" />}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="wk-frame" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div
+          className={`wk-inner${view === "day" ? " single" : ""}`}
+          style={{ ["--wk-cols" as string]: shown.length } as React.CSSProperties}
+        >
+          <div className={`wk-row wk-heads${view === "day" ? " wk-hide" : ""}`}>
             <div />
-            {days.map((day) => (
+            {shown.map((day) => (
               <button
                 key={day}
                 type="button"
@@ -437,7 +534,7 @@ export function WeekCalendar({
             <div className="wk-gutter" style={{ gridRow: `1 / span ${barRows}` }}>
               all day
             </div>
-            {days.map((day, index) => (
+            {shown.map((day, index) => (
               <div key={day} className="wk-allday-cell" style={{ gridColumn: index + 2, gridRow: `1 / span ${barRows}` }} />
             ))}
             {bars.map(({ item, first, last, row, carriesIn, carriesOut }) => (
@@ -471,7 +568,7 @@ export function WeekCalendar({
                   </div>
                 ))}
               </div>
-              {days.map((day) => {
+              {shown.map((day) => {
                 const onDay = items.filter((item) => !item.allDay && item.startDay === day);
                 return (
                   <div
@@ -518,7 +615,11 @@ export function WeekCalendar({
           </div>
         </div>
       </div>
-      <p className="muted small">Click an empty slot to add an appointment there, or a date to add an all-day one. Click an appointment to change or delete it.</p>
+      <p className="muted small">
+        {view === "day"
+          ? "Tap an empty time to add an appointment, or the date to add an all-day one. Swipe left or right to change day."
+          : "Click an empty slot to add an appointment there, or a date to add an all-day one. Click an appointment to change or delete it."}
+      </p>
 
       {draft ? (
         <div className="wk-overlay" onClick={(event) => event.target === event.currentTarget && closeAll()}>
