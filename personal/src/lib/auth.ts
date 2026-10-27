@@ -13,7 +13,15 @@ function key() {
   return new TextEncoder().encode(secret);
 }
 
-export function cookieOptions(maxAge = 60 * 60 * 24 * 14) {
+/**
+ * Millie stays signed in on her own devices, including the home-screen app:
+ * the session lasts a year and is renewed each day she uses the app (see
+ * middleware.ts), so it only runs out after a year without opening it.
+ * Signing out, or changing SESSION_SECRET, still ends every session.
+ */
+export const SESSION_DAYS = 365;
+
+export function cookieOptions(maxAge = 60 * 60 * 24 * SESSION_DAYS) {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
@@ -30,7 +38,7 @@ export async function signSession(user: SessionUser) {
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
-    .setExpirationTime("14d")
+    .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(secret);
 }
 
