@@ -50,6 +50,27 @@ services:
       - key: PERSONAL_CALENDAR_NAMES
         value: personal,home,private,family
 
+  # Emails appointment reminders (7am on the day, 6pm the day before).
+  # It only calls the web service; the web service does the sending.
+  - type: cron
+    name: mailbakes-personal-reminders
+    runtime: node
+    plan: starter
+    region: frankfurt
+    rootDir: personal
+    schedule: "*/15 * * * *"
+    buildCommand: echo "nothing to build"
+    startCommand: node scripts/send-reminders.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: APP_URL
+        value: https://personal.mailbakes.com
+      # Same value as PERSONAL_API_TOKEN on the web service. Set by hand, because
+      # the live web service may not be named mailbakes-personal.
+      - key: PERSONAL_API_TOKEN
+        sync: false
+
 databases:
   - name: mailbakes-personal-db
     databaseName: mailbakes_personal
