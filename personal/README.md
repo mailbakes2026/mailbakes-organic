@@ -7,13 +7,38 @@ It is a separate app from organic social. It has its own database and its own Re
 ## Pages
 
 - **Inbox** groups mail that needs attention into MailBakes, suppliers, invoices and personal. Refresh reads Gmail. Archive removes the inbox label (the mail stays in All Mail). Send to finance, on an invoice only, forwards it with its attachments, adds the label "Sent to finance", and archives it.
-- **Calendar** shows what is on now and the next two weeks, split into MailBakes and Personal.
+- **Calendar** is a week view (Monday to Sunday) of Millie's own appointments and her Google Calendar together.
+  - Add, change and delete appointments here. They are saved in this app's database and are **never written to Google Calendar**. Google events are shown striped and read-only, with a link to open them in Google.
+  - Each appointment has a type (Hair, Aesthetics, Work, Meeting, Meal, Party, Dinner, Travel, Other) with its own colour. Tap a type in the key to hide or show it.
+  - All-day appointments can run across several days (a trip), drawn as one bar across the week.
+  - Optional email reminder: the morning of (7am), the day before (6pm), or both. Sent from Millie's Gmail to herself by the `mailbakes-personal-reminders` cron job. A missed run never sends late reminders: each one is only sent inside its own window.
 - **Reminders** can be added, ticked off, or snoozed. Today is Europe/London.
 - **Run-through** is open follow-ups (waiting, needs Millie, done), with notes and a link to the email.
 - **Briefings** are markdown notes by date.
 - **Payslips** keeps a name and a Google Drive folder for each person. It finds Paul's latest "Payslips" email, matches each PDF by the file name, and shows anything unmatched or missing. **Send payslips** uploads each PDF into that person's folder, skipping a file that is already there, and can email the PDFs to Jess as a new message. Paul's thread is never forwarded. Bank details, phone numbers and emergency contacts are not read out of the PDFs or put in the email.
 
 Sign-in is one password, `APP_PASSWORD`.
+
+## Appointments API
+
+Signed in, the calendar uses `/api/board/appointments`. The assistant uses the same routes under `/api/v1/` with `Authorization: Bearer $PERSONAL_API_TOKEN`.
+
+| Call | What it does |
+| --- | --- |
+| `GET /api/v1/appointments?from=2026-11-01&to=2026-11-30` | Appointments touching those dates. Both are optional. |
+| `POST /api/v1/appointments` | Add one. Body: `title`, `type`, `startDay` (YYYY-MM-DD), then either `allDay: true` with optional `endDay`, or `startTime` (HH:MM) with optional `endTime` (default one hour). Optional `location`, `notes`, `reminder` (`none`, `morning`, `day-before`, `both`). |
+| `PATCH /api/v1/appointments/:id` | Change only the fields sent. Moving it or changing the reminder lets reminders go again. |
+| `DELETE /api/v1/appointments/:id` | Delete it. |
+| `POST /api/v1/appointments/import` | Bulk add: `{ "appointments": [...] }`, up to 200. All rows are checked first; one bad row saves nothing and the answer names the row. A row with the same title, date and start time as a saved one is skipped, so it is safe to run twice. |
+| `POST /api/v1/appointments/send-reminders` | Sends any reminders due now. The cron job calls this every 15 minutes. |
+
+Load the saved list once after deploying:
+
+```bash
+curl -X POST https://personal.mailbakes.com/api/v1/appointments/import \
+  -H "Authorization: Bearer $PERSONAL_API_TOKEN" -H "Content-Type: application/json" \
+  --data @scripts/appointments-import.json
+```
 
 ## Local
 

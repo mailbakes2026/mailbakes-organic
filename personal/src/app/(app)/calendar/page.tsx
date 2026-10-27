@@ -1,110 +1,56 @@
-import { loadUpcoming, type CalendarItem } from "@/lib/calendar";
-import { formatLondonDay, londonToday } from "@/lib/dates";
+import { WeekCalendar } from "@/components/week-calendar";
+import { mondayOf } from "@/lib/appointment-rules";
+import { listAppointments, type AppointmentDto } from "@/lib/appointments";
+import { loadGoogleRange, type GoogleWeekItem } from "@/lib/calendar";
+import { addDays, londonToday, parseDateOnly } from "@/lib/dates";
 import { googleStatus } from "@/lib/google";
 
 export const dynamic = "force-dynamic";
 
-function Lane({ title, events }: { title: string; events: CalendarItem[] }) {
-  return (
-    <div className="card">
-      <h2>{title}</h2>
-      {events.length === 0 ? <p className="muted">Nothing here.</p> : null}
-      {events.map((event) => (
-        <div key={event.id} className="event">
-          <b>{event.title}</b>
-          <div className="small muted">
-            {event.timeLabel}
-            {event.calendar ? ` · ${event.calendar}` : ""}
-          </div>
-          {event.location ? <div className="small">{event.location}</div> : null}
-          <div className="row">
-            {event.joinUrl ? (
-              <a href={event.joinUrl} target="_blank" rel="noreferrer">
-                Join
-              </a>
-            ) : null}
-            {event.openUrl ? (
-              <a href={event.openUrl} target="_blank" rel="noreferrer">
-                Open
-              </a>
-            ) : null}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export default async function CalendarPage() {
-  const google = await googleStatus();
+export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
+  const params = await searchParams;
   const today = londonToday();
-  let events: CalendarItem[] = [];
+  const asked = typeof params.week === "string" && parseDateOnly(params.week) ? params.week : today;
+  const weekStart = mondayOf(asked);
+  const weekEnd = addDays(weekStart, 6);
+
+  const google = await googleStatus();
+  let googleEvents: GoogleWeekItem[] = [];
   let warnings: string[] = [];
   let calendarError = "";
   if (google.connected && google.configured) {
     try {
-      const loaded = await loadUpcoming();
-      events = loaded.events;
+      const loaded = await loadGoogleRange(weekStart, weekEnd);
+      googleEvents = loaded.events;
       warnings = loaded.warnings;
     } catch (error) {
       console.error(error);
-      calendarError = error instanceof Error ? error.message : "The calendar could not be loaded.";
+      calendarError = error instanceof Error ? error.message : "Google Calendar could not be loaded.";
     }
   }
 
-  const happening = events.filter((event) => event.happening);
-  const upcoming = events.filter((event) => !event.happening);
-  const days = [...new Set(upcoming.map((event) => event.day))];
+  let appointments: AppointmentDto[] = [];
+  let appointmentsError = "";
+  try {
+    appointments = await listAppointments({ from: weekStart, to: weekEnd });
+  } catch (error) {
+    console.error(error);
+    appointmentsError = "Your appointments could not be loaded. Try Refresh.";
+  }
 
   return (
     <div className="dashboard">
       <div className="page-head">
         <div>
           <h1>Calendar</h1>
-          <p className="muted">What is on now, and the next two weeks. MailBakes and personal are split by the calendar name.</p>
+          <p className="muted">Your appointments and Google Calendar together. Appointments you add here stay in this app and are never written to Google.</p>
         </div>
-        <a className="btn" href="/calendar">
-          Refresh
-        </a>
       </div>
-      {calendarError ? <p className="alert warn">{calendarError}</p> : null}
-      {warnings.length > 0 ? (
-        <p className="muted small">Could not read: {warnings.join(", ")}.</p>
-      ) : null}
-
-      <section>
-        <h2>On now</h2>
-        {happening.length === 0 ? (
-          <p className="muted">Nothing on at the moment.</p>
-        ) : (
-          <div className="lanes">
-            <Lane title="MailBakes" events={happening.filter((event) => event.lane === "mailbakes")} />
-            <Lane title="Personal" events={happening.filter((event) => event.lane === "personal")} />
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2>Coming up</h2>
-        {upcoming.length === 0 ? (
-          <p className="muted">
-            {google.connected ? "Nothing else in the next two weeks." : "Connect Google to load the diary."}
-          </p>
-        ) : (
-          days.map((day) => {
-            const onDay = upcoming.filter((event) => event.day === day);
-            return (
-              <div key={day}>
-                <h3>{formatLondonDay(day, today)}</h3>
-                <div className="lanes">
-                  <Lane title="MailBakes" events={onDay.filter((event) => event.lane === "mailbakes")} />
-                  <Lane title="Personal" events={onDay.filter((event) => event.lane === "personal")} />
-                </div>
-              </div>
-            );
-          })
-        )}
-      </section>
+      {appointmentsError ? <p className="alert crit">{appointmentsError}</p> : null}
+      {calendarError ? <p className="alert warn">Google: {calendarError}</p> : null}
+      {!google.connected ? <p className="alert warn">Google isn&apos;t connected, so only your own appointments are shown.</p> : null}
+      {warnings.length > 0 ? <p className="muted small">Could not read: {warnings.join(", ")}.</p> : null}
+      <WeekCalendar weekStart={weekStart} today={today} appointments={appointments} google={googleEvents} />
     </div>
   );
 }

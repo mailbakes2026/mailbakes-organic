@@ -136,3 +136,47 @@ model PayslipLine {
 
   @@index([runId])
 }
+
+// Millie's own appointments, added in the app. Never written to Google Calendar.
+// Days are calendar dates and times are "HH:MM" Europe/London wall-clock, so a
+// 10:00 hair appointment stays at 10:00 whatever the clocks do.
+enum AppointmentType {
+  HAIR
+  AESTHETICS
+  WORK
+  MEETING
+  MEAL
+  PARTY
+  DINNER
+  TRAVEL
+  OTHER
+}
+
+enum AppointmentReminder {
+  NONE
+  MORNING
+  DAY_BEFORE
+  BOTH
+}
+
+model Appointment {
+  id                String              @id @default(cuid())
+  title             String
+  type              AppointmentType     @default(OTHER)
+  startDay          DateTime            @db.Date
+  // Last day it covers. Same as startDay unless it is a multi-day all-day booking.
+  endDay            DateTime            @db.Date
+  allDay            Boolean             @default(false)
+  startTime         String              @default("")
+  endTime           String              @default("")
+  location          String              @default("")
+  notes             String              @default("")
+  reminder          AppointmentReminder @default(NONE)
+  morningSentAt     DateTime?
+  dayBeforeSentAt   DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([startDay])
+  @@index([endDay])
+}
