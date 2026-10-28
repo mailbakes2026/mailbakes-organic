@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DateGroups } from "@/components/date-groups";
 import {
   Dialog,
   DialogContent,
@@ -90,31 +91,26 @@ export function InstaGrid({
   onOpen,
   onChanged,
   embedded = false,
+  now = new Date(),
 }: {
   posts: PostDTO[];
   profile: IgProfileDTO;
   onOpen: (post: PostDTO) => void;
   onChanged: () => void;
   embedded?: boolean;
+  now?: Date;
 }) {
   const [includeDrafts, setIncludeDrafts] = useState(true);
   const [editing, setEditing] = useState(false);
   const planned = posts.filter(isMetaPost);
   const scheduled = planned.filter((post) => post.status === "APPROVED").length;
-  const tiles = planned
-    .filter((post) => includeDrafts || post.status === "APPROVED")
-    .sort(
-      (a, b) =>
-        b.plannedDate.localeCompare(a.plannedDate) ||
-        (b.plannedTime ?? "").localeCompare(a.plannedTime ?? "") ||
-        b.createdAt.localeCompare(a.createdAt),
-    );
+  const tiles = planned.filter((post) => includeDrafts || post.status === "APPROVED");
 
   return (
     <div className={`ig-page${embedded ? " ig-embed" : ""}`}>
       {embedded ? null : <div className="feed-tools">
         <p className="muted">
-          Instagram layout for Meta posts (Instagram and Facebook). Newest top left. Tap a tile to open it.
+          Instagram layout for Meta posts (Instagram and Facebook). Soonest first. Tap a tile to open it.
         </p>
         <p className="muted small">
           In this plan: {planned.length} {planned.length === 1 ? "post" : "posts"} · {scheduled} scheduled
@@ -194,10 +190,13 @@ export function InstaGrid({
             <p>When your social media manager adds Instagram or Facebook posts, they&apos;ll fill this grid in order.</p>
           </div>
         ) : (
-          <div className="ig-grid">
-            {tiles.map((post) => (
+          <DateGroups
+            className="ig-days"
+            items={tiles}
+            now={now}
+            itemsClassName="ig-grid"
+            render={(post) => (
               <button
-                key={post.id}
                 type="button"
                 className={`ig-tile${post.status === "APPROVED" ? "" : " pending"}${post.contentType === "REEL" ? " has-reel" : ""}`}
                 onClick={() => onOpen(post)}
@@ -223,8 +222,8 @@ export function InstaGrid({
                   <span className="ig-state">{gridLabel(post)}</span>
                 </span>
               </button>
-            ))}
-          </div>
+            )}
+          />
         )}
       </div>
       <Dialog open={editing} onOpenChange={setEditing}>
@@ -278,30 +277,25 @@ export function TikTokGrid({
   profile,
   onOpen,
   embedded = false,
+  now = new Date(),
 }: {
   posts: PostDTO[];
   profile: IgProfileDTO;
   onOpen: (post: PostDTO) => void;
   embedded?: boolean;
+  now?: Date;
 }) {
   const [includeDrafts, setIncludeDrafts] = useState(true);
   const planned = posts.filter(
     (post) => post.platforms.includes("TIKTOK") && post.contentType !== "STORY" && post.status !== "REJECTED",
   );
   const scheduled = planned.filter((post) => post.status === "APPROVED").length;
-  const tiles = planned
-    .filter((post) => includeDrafts || post.status === "APPROVED")
-    .sort(
-      (a, b) =>
-        b.plannedDate.localeCompare(a.plannedDate) ||
-        (b.plannedTime ?? "").localeCompare(a.plannedTime ?? "") ||
-        b.createdAt.localeCompare(a.createdAt),
-    );
+  const tiles = planned.filter((post) => includeDrafts || post.status === "APPROVED");
 
   return (
     <div className={`tt-page${embedded ? " tt-embed" : ""}`}>
       {embedded ? null : <div className="feed-tools">
-        <p className="muted">How planned TikToks will look. Newest top left. Videos use their cover image.</p>
+        <p className="muted">How planned TikToks will look. Soonest first. Videos use their cover image.</p>
         <p className="muted small">
           In this plan: {planned.length} {planned.length === 1 ? "post" : "posts"} · {scheduled} scheduled
         </p>
@@ -326,12 +320,15 @@ export function TikTokGrid({
             <p>Posts marked for TikTok will fill this grid.</p>
           </div>
         ) : (
-          <div className="tt-grid">
-            {tiles.map((post) => {
+          <DateGroups
+            className="tt-days"
+            items={tiles}
+            now={now}
+            itemsClassName="tt-grid"
+            render={(post) => {
               const video = post.contentType === "REEL" || post.media.some((item) => item.mimeType.startsWith("video/"));
               return (
                 <button
-                  key={post.id}
                   type="button"
                   className={`tt-tile${post.status === "APPROVED" ? "" : " pending"}${video ? " has-reel" : ""}`}
                   onClick={() => onOpen(post)}
@@ -358,8 +355,8 @@ export function TikTokGrid({
                   </span>
                 </button>
               );
-            })}
-          </div>
+            }}
+          />
         )}
       </div>
     </div>
