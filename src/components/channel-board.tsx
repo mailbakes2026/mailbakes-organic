@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { InstaGrid, TikTokGrid } from "@/components/insta-grid";
 import { COLUMNS, approverMayAct, columnFor, onBoard, type BoardId, type ReviewAction } from "@/lib/pipeline";
 import { contentLabel, platformColour, platformLabel, statusLabel } from "@/lib/constants";
@@ -57,13 +58,23 @@ export function ChannelBoard({
 }) {
   const mine = posts.filter((post) => onBoard(post, board));
   const feedPosts = posts.filter((post) => post.status !== "REJECTED");
+  // Phones show the board or the feed preview, one at a time.
+  const [phoneView, setPhoneView] = useState<"board" | "feed">("board");
 
   function showColumn(id: string) {
     document.querySelector(`.pipe-${id}`)?.scrollIntoView({ inline: "center", block: "nearest" });
   }
 
   return (
-    <div className="channel-layout">
+    <div className={`channel-layout phone-${phoneView}`}>
+      <div className="channel-switch" role="tablist" aria-label="Board or feed">
+        <button type="button" role="tab" aria-selected={phoneView === "board"} className={phoneView === "board" ? "on" : ""} onClick={() => setPhoneView("board")}>
+          Board
+        </button>
+        <button type="button" role="tab" aria-selected={phoneView === "feed"} className={phoneView === "feed" ? "on" : ""} onClick={() => setPhoneView("feed")}>
+          Feed preview
+        </button>
+      </div>
       <div className="channel-board">
         <div className="board-jumps" aria-label="Board columns">
           {COLUMNS.map((column) => {
