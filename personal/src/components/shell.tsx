@@ -4,12 +4,11 @@ import { usePathname } from "next/navigation";
 import type { GoogleStatus } from "@/lib/google-status";
 import { SetupBanner } from "@/components/setup-banner";
 
+// Reminders, Run-through and Briefings still work by address, but live in the Diary now.
 const LINKS = [
-  { href: "/inbox", label: "Inbox" },
+  { href: "/diary", label: "Diary" },
   { href: "/calendar", label: "Calendar" },
-  { href: "/reminders", label: "Reminders" },
-  { href: "/run-through", label: "Run-through" },
-  { href: "/briefings", label: "Briefings" },
+  { href: "/inbox", label: "Inbox" },
   { href: "/payslips", label: "Payslips" },
 ];
 
