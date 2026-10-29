@@ -1684,7 +1684,38 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
 .check-list li.is-done label span { text-decoration: line-through; color: var(--text-muted); }
 .loose-notes { margin-top: 16px; }
 
+.channel-switch { display: none; }
+
 @media (max-width: 1100px) {
-  .channel-layout { grid-template-columns: 1fr; }
+  /* minmax(0, 1fr): the wide board scrolls inside itself instead of
+     stretching the page, so the feed preview stays phone-width. */
+  .channel-layout.channel-layout { grid-template-columns: minmax(0, 1fr); }
+  .channel-board, .channel-feed { min-width: 0; }
   .channel-feed { position: static; max-height: none; }
+}
+
+@media (max-width: 880px) {
+  .channel-switch.channel-switch {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    padding: 4px;
+    background: var(--surface-2);
+    border-radius: 999px;
+  }
+  .channel-switch button {
+    flex: 1;
+    min-height: 40px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .channel-switch button.on { background: var(--surface-1); color: var(--text-primary); box-shadow: 0 1px 2px rgba(30, 26, 28, 0.08); }
+  .channel-layout.phone-board .channel-feed { display: none; }
+  .channel-layout.phone-feed .channel-board { display: none; }
 }
