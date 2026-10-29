@@ -92,3 +92,15 @@ export function contentLabel(id: ContentTypeId) {
 export function statusLabel(id: StatusId) {
   return STATUSES.find((item) => item.id === id)?.label ?? id;
 }
+
+export const KEY_DATE_KINDS = [
+  { id: "LAUNCH", label: "Launch", short: "Launch", pill: "pill hot", marker: "launch" },
+  { id: "EVENT", label: "Event", short: "Event", pill: "pill event", marker: "event" },
+  { id: "KEY_DATE", label: "Key date", short: "Key", pill: "pill warn", marker: "keydate" },
+] as const;
+
+export type KeyDateKindId = (typeof KEY_DATE_KINDS)[number]["id"];
+
+export function keyKind(id: string) {
+  return KEY_DATE_KINDS.find((kind) => kind.id === id) ?? KEY_DATE_KINDS[2];
+}

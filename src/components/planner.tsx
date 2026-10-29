@@ -24,6 +24,7 @@ import {
   platformColour,
   platformLabel,
   statusLabel,
+  keyKind,
 } from "@/lib/constants";
 import { approverMayAct, type BoardId, type ReviewAction } from "@/lib/pipeline";
 import { NoteForm } from "@/components/notes-board";
@@ -468,7 +469,7 @@ export function Planner({
               <DialogHeader>
                 <DialogTitle>{activeKey.title}</DialogTitle>
                 <DialogDescription>
-                  {activeKey.kind === "LAUNCH" ? "Launch" : "Key date"} · {formatDay(activeKey.date)}
+                  {keyKind(activeKey.kind).label} · {formatDay(activeKey.date)}
                 </DialogDescription>
               </DialogHeader>
               {activeKey.notes ? <p className="pre">{activeKey.notes}</p> : null}
@@ -1241,7 +1242,7 @@ function PostForm({
 function KeyDateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(londonToday());
-  const [kind, setKind] = useState<"LAUNCH" | "KEY_DATE">("LAUNCH");
+  const [kind, setKind] = useState<"LAUNCH" | "KEY_DATE" | "EVENT">("LAUNCH");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1286,8 +1287,9 @@ function KeyDateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       </label>
       <label className="field" htmlFor="key-kind">
         Type *
-        <select id="key-kind" value={kind} onChange={(event) => setKind(event.target.value as "LAUNCH" | "KEY_DATE")}>
+        <select id="key-kind" value={kind} onChange={(event) => setKind(event.target.value as "LAUNCH" | "KEY_DATE" | "EVENT")}>
           <option value="LAUNCH">Launch</option>
+          <option value="EVENT">Event</option>
           <option value="KEY_DATE">Key date</option>
         </select>
       </label>
