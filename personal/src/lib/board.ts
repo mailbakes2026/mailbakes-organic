@@ -7,6 +7,17 @@ import {
   listAppointments,
   updateAppointment,
 } from "@/lib/appointments";
+import { pullDebriefs } from "@/lib/debrief-pull";
+import {
+  addDiaryItem,
+  deleteDiaryItem,
+  listDebriefs,
+  loadDiaryDay,
+  receiveDebrief,
+  saveDiaryNote,
+  updateDiaryItem,
+} from "@/lib/diary";
+import { londonToday } from "@/lib/dates";
 import { ReconnectError } from "@/lib/google";
 import { ValidationError } from "@/lib/shapes";
 import {
@@ -95,7 +106,9 @@ async function appointments(method: string, request: Request, id?: string) {
   }
   if (method === "POST" && id === "send-reminders") {
     try {
-      return Response.json(await sendDueReminders());
+      const reminders = await sendDueReminders();
+      const pulled = await pullDebriefs(new Date(), { onlyIfStale: true }).catch(() => null);
+      return Response.json({ ...reminders, debriefs: pulled });
     } catch (error) {
       if (error instanceof ReconnectError) return Response.json({ error: error.message }, { status: 409 });
       throw error;
@@ -116,6 +129,44 @@ async function appointments(method: string, request: Request, id?: string) {
   return Response.json({ error: "Not found." }, { status: 404 });
 }
 
+async function diary(method: string, request: Request, id?: string) {
+  const url = new URL(request.url);
+  if (method === "GET" && !id) {
+    return Response.json({ diary: await loadDiaryDay(url.searchParams.get("day") || londonToday()) });
+  }
+  return Response.json({ error: "Not found." }, { status: 404 });
+}
+
+async function diaryItems(method: string, request: Request, id?: string) {
+  if (method === "POST" && !id) return Response.json({ item: await addDiaryItem(await readBody(request)) }, { status: 201 });
+  if (method === "PATCH" && id) {
+    const item = await updateDiaryItem(id, await readBody(request));
+    return item ? Response.json({ item }) : notFound();
+  }
+  if (method === "DELETE" && id) return (await deleteDiaryItem(id)) ? Response.json({ ok: true }) : notFound();
+  return Response.json({ error: "Not found." }, { status: 404 });
+}
+
+async function diaryNotes(method: string, request: Request, id?: string) {
+  if ((method === "PATCH" || method === "POST") && id) {
+    return Response.json({ note: await saveDiaryNote(id, await readBody(request)) });
+  }
+  return Response.json({ error: "Not found." }, { status: 404 });
+}
+
+/**
+ * Debriefs from the other apps.
+ * POST /api/v1/debriefs  { source, title, lines[], day?, kind?, link? }  (PERSONAL_API_TOKEN)
+ * POST /api/v1/debriefs/pull  fetches every configured app's summary now.
+ */
+async function debriefs(method: string, request: Request, id?: string) {
+  const url = new URL(request.url);
+  if (method === "GET" && !id) return Response.json({ debriefs: await listDebriefs(url.searchParams.get("day") || londonToday()) });
+  if (method === "POST" && id === "pull") return Response.json(await pullDebriefs());
+  if (method === "POST" && !id) return Response.json({ debrief: await receiveDebrief(await readBody(request)) }, { status: 201 });
+  return Response.json({ error: "Not found." }, { status: 404 });
+}
+
 export async function dispatchBoard(method: string, request: Request, path: string[]) {
   try {
     const [resource, id, extra] = path;
@@ -124,6 +175,10 @@ export async function dispatchBoard(method: string, request: Request, path: stri
     if (resource === "items") return await items(method, request, id);
     if (resource === "briefings") return await briefings(method, request, id);
     if (resource === "appointments") return await appointments(method, request, id);
+    if (resource === "diary") return await diary(method, request, id);
+    if (resource === "diary-items") return await diaryItems(method, request, id);
+    if (resource === "diary-notes") return await diaryNotes(method, request, id);
+    if (resource === "debriefs") return await debriefs(method, request, id);
     return Response.json({ error: "Not found." }, { status: 404 });
   } catch (error) {
     if (error instanceof ValidationError) return Response.json({ error: error.message }, { status: 400 });

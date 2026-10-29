@@ -180,3 +180,46 @@ model Appointment {
   @@index([startDay])
   @@index([endDay])
 }
+
+// ---------------------------------------------------------------- diary
+// One page per day: a checklist, free notes, and debriefs sent in by the other apps.
+
+// A checklist line. Unticked lines from earlier days move to today when the diary
+// opens; carriedFrom keeps the day it was first written.
+model DiaryItem {
+  id          String    @id @default(cuid())
+  day         DateTime  @db.Date
+  text        String
+  doneAt      DateTime?
+  carriedFrom DateTime? @db.Date
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([day])
+  @@index([doneAt])
+}
+
+// Free notes for a day. One row per day.
+model DiaryNote {
+  day       DateTime @id @db.Date
+  body      String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+// A short report from another app (Operations, Daily Orders, Finance, Conversion,
+// Organic). One per source, kind and day; a newer copy replaces the older one.
+model Debrief {
+  id         String   @id @default(cuid())
+  day        DateTime @db.Date
+  source     String
+  kind       String   @default("daily")
+  title      String
+  lines      Json     @default("[]")
+  link       String   @default("")
+  receivedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([source, kind, day])
+  @@index([day])
+}

@@ -6,8 +6,8 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "MailBakes Personal",
     short_name: "Personal",
-    description: "Millie's calendar, inbox and reminders.",
-    start_url: "/calendar",
+    description: "Millie's diary, calendar and inbox.",
+    start_url: "/diary",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
