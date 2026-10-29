@@ -824,6 +824,19 @@ export async function createKeyDate(user: UserDTO, form: FormData) {
   } satisfies KeyDateDTO;
 }
 
+export async function updateKeyDate(id: string, form: FormData) {
+  const existing = await prisma.keyDate.findUnique({ where: { id } });
+  if (!existing) throw new HttpError(404, "That date has gone.");
+  const row = await prisma.keyDate.update({ where: { id }, data: readKeyDate(form) });
+  return {
+    id: row.id,
+    title: row.title,
+    date: dayString(row.date),
+    kind: row.kind,
+    notes: row.notes,
+  } satisfies KeyDateDTO;
+}
+
 export async function deleteKeyDate(id: string) {
   const row = await prisma.keyDate.findUnique({ where: { id } });
   if (!row) throw new HttpError(404, "That date has gone.");
