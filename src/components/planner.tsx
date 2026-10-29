@@ -142,6 +142,7 @@ export function Planner({
   const [story, setStory] = useState<{ items: PostDTO[]; index: number } | null>(null);
   const [keyOpen, setKeyOpen] = useState(false);
   const [activeKey, setActiveKey] = useState<KeyDateDTO | null>(null);
+  const [editingKey, setEditingKey] = useState<KeyDateDTO | null>(null);
   const [prompt, setPrompt] = useState<{ id: string; action: ReviewAction; comment: string } | null>(null);
   const [cursor, setCursor] = useState(londonToday);
   const [calView, setCalView] = useState<"month" | "week">("month");
@@ -409,12 +410,24 @@ export function Planner({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={keyOpen} onOpenChange={setKeyOpen}>
+      <Dialog
+        open={keyOpen}
+        onOpenChange={(open) => {
+          setKeyOpen(open);
+          if (!open) setEditingKey(null);
+        }}
+      >
         <DialogContent showCloseButton={false}>
           <KeyDateForm
-            onClose={() => setKeyOpen(false)}
+            key={editingKey?.id ?? "new"}
+            initial={editingKey}
+            onClose={() => {
+              setKeyOpen(false);
+              setEditingKey(null);
+            }}
             onSaved={() => {
               setKeyOpen(false);
+              setEditingKey(null);
               refresh();
             }}
           />
@@ -475,6 +488,18 @@ export function Planner({
               {activeKey.notes ? <p className="pre">{activeKey.notes}</p> : null}
               <div className="row">
                 <DialogClose render={<button type="button" className="btn ghost" />}>Close</DialogClose>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => {
+                    setEditingKey(activeKey);
+                    setActiveKey(null);
+                    setKeyOpen(true);
+                  }}
+                >
+                  Edit
+                </button>
                 <button
                   type="button"
                   className="btn danger"
@@ -1239,11 +1264,19 @@ function PostForm({
   );
 }
 
-function KeyDateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState(londonToday());
-  const [kind, setKind] = useState<"LAUNCH" | "KEY_DATE" | "EVENT">("LAUNCH");
-  const [notes, setNotes] = useState("");
+function KeyDateForm({
+  initial,
+  onClose,
+  onSaved,
+}: {
+  initial?: KeyDateDTO | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [date, setDate] = useState(initial?.date ?? londonToday());
+  const [kind, setKind] = useState<"LAUNCH" | "KEY_DATE" | "EVENT">(initial?.kind ?? "LAUNCH");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -1256,7 +1289,10 @@ function KeyDateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     body.set("date", date);
     body.set("kind", kind);
     body.set("notes", notes);
-    const response = await fetch("/api/key-dates", { method: "POST", body });
+    const response = await fetch(initial ? `/api/key-dates/${initial.id}` : "/api/key-dates", {
+      method: initial ? "PATCH" : "POST",
+      body,
+    });
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     setSaving(false);
     if (!response.ok) {
@@ -1270,7 +1306,7 @@ function KeyDateForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     <form className="stack" onSubmit={onSubmit}>
       <div className="sheet-head">
         <DialogHeader>
-          <DialogTitle>Launch / key date</DialogTitle>
+          <DialogTitle>{initial ? "Edit date" : "Launch / key date"}</DialogTitle>
           <DialogDescription>Shows on the content calendar. It is not a social post.</DialogDescription>
         </DialogHeader>
         <button type="button" className="btn ghost sm" onClick={onClose}>
