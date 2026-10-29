@@ -74,7 +74,7 @@ export function NotesDates({
                   <b>{note.title}</b>
                   <span className="small muted">
                     {note.date ? formatDay(note.date) : "No date"}
-                    {note.platform ? ` · ${platformLabel(note.platform)}` : ""}
+                    {note.allPlatforms ? " · All platforms" : note.platform ? ` · ${platformLabel(note.platform)}` : ""}
                     {note.doThisWeek ? " · Do this week" : ""}
                   </span>
                 </span>

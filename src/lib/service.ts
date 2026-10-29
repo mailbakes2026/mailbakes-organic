@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { CommentKind, ContentType, KeyDateKind, Platform, PostStatus, Role } from "@prisma/client";
 import { ALLOWED_MIME, MAX_FILES, MAX_UPLOAD_BYTES, STORY_PLATFORMS } from "@/lib/constants";
+import { postsAdded, readyForApproval } from "@/lib/notify-personal";
 import { approverMayAct, statusAfterSave } from "@/lib/pipeline";
 import { prisma } from "@/lib/prisma";
 import type { ContentTypeId, KeyDateDTO, PlatformId, PostDTO, StatusId, UserDTO } from "@/lib/types";
@@ -424,6 +425,7 @@ export async function createPost(user: UserDTO, form: FormData) {
     },
     select: postSelect,
   });
+  await postsAdded(user);
   return serializePost(post);
 }
 
@@ -522,6 +524,9 @@ export async function updatePost(user: UserDTO, id: string, form: FormData) {
       select: postSelect,
     });
   });
+  if (status === "PENDING_APPROVAL" && existing.status !== "PENDING_APPROVAL") {
+    await readyForApproval(user, { id, title: input.title }, "resubmitted");
+  }
   return serializePost(post);
 }
 
@@ -639,7 +644,7 @@ export async function turnNoteIntoPost(user: UserDTO, noteId: string) {
     const created = await tx.post.create({
       data: {
         title: note.title.slice(0, 140),
-        platforms: [note.platform ?? "INSTAGRAM"],
+        platforms: note.allPlatforms ? [...PLATFORMS] as Platform[] : [note.platform ?? "INSTAGRAM"],
         contentType: "FEED",
         plannedDate,
         plannedTime: "12:00",
@@ -716,6 +721,7 @@ export async function markAmendments(user: UserDTO, id: string) {
     },
     select: postSelect,
   });
+  await readyForApproval(user, { id, title: post.title }, "amended");
   return serializePost(updated);
 }
 

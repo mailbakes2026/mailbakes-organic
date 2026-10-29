@@ -1,3 +1,5 @@
+import { notifyDue } from "@/lib/notify-due";
+import { NotifyError, receiveNotice, recentNotices } from "@/lib/notify";
 import { sendDueReminders } from "@/lib/appointment-reminders";
 import {
   createAppointment,
@@ -105,10 +107,15 @@ async function appointments(method: string, request: Request, id?: string) {
     return Response.json({ created: result.created.length, skipped: result.skipped, appointments: result.created }, { status: 201 });
   }
   if (method === "POST" && id === "send-reminders") {
+    // Phone notifications first: they don't need Google.
+    const notified = await notifyDue().catch((error) => {
+      console.error("notify due", error);
+      return null;
+    });
     try {
       const reminders = await sendDueReminders();
       const pulled = await pullDebriefs(new Date(), { onlyIfStale: true }).catch(() => null);
-      return Response.json({ ...reminders, debriefs: pulled });
+      return Response.json({ ...reminders, debriefs: pulled, notified });
     } catch (error) {
       if (error instanceof ReconnectError) return Response.json({ error: error.message }, { status: 409 });
       throw error;
@@ -167,6 +174,30 @@ async function debriefs(method: string, request: Request, id?: string) {
   return Response.json({ error: "Not found." }, { status: 404 });
 }
 
+/**
+ * Phone notifications from the other apps.
+ * POST /api/v1/notify  { source, title, body?, url?, key?, debrief?: { title, lines[], kind?, day?, link? } }
+ * A debrief, if sent, lands in the Diary under the same source.
+ */
+async function notifyResource(method: string, request: Request, id?: string) {
+  if (method === "POST" && !id) {
+    const body = (await readBody(request)) as Record<string, unknown> | null;
+    let debrief = null;
+    try {
+      const result = await receiveNotice(body);
+      if (body?.debrief && typeof body.debrief === "object") {
+        debrief = await receiveDebrief({ ...(body.debrief as object), source: body.source });
+      }
+      return Response.json({ ...result, debrief }, { status: 201 });
+    } catch (error) {
+      if (error instanceof NotifyError) return Response.json({ error: error.message }, { status: 400 });
+      throw error;
+    }
+  }
+  if (method === "GET" && !id) return Response.json({ notices: await recentNotices() });
+  return Response.json({ error: "Not found." }, { status: 404 });
+}
+
 export async function dispatchBoard(method: string, request: Request, path: string[]) {
   try {
     const [resource, id, extra] = path;
@@ -179,6 +210,7 @@ export async function dispatchBoard(method: string, request: Request, path: stri
     if (resource === "diary-items") return await diaryItems(method, request, id);
     if (resource === "diary-notes") return await diaryNotes(method, request, id);
     if (resource === "debriefs") return await debriefs(method, request, id);
+    if (resource === "notify") return await notifyResource(method, request, id);
     return Response.json({ error: "Not found." }, { status: 404 });
   } catch (error) {
     if (error instanceof ValidationError) return Response.json({ error: error.message }, { status: 400 });

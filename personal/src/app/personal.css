@@ -264,3 +264,18 @@
 }
 .ib-err { color: var(--serious, #b42318); margin-top: 2px; }
 .ib-form.ib-form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; max-width: 420px; }
+
+/* ------------------------------------------------------------ notifications */
+.nt-phone .row { align-items: center; }
+.nt-on { color: #1a7f4b; font-weight: 750; }
+.nt-sources { list-style: none; padding: 0; margin: 8px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 16px; }
+.nt-sources label { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 36px; font-weight: 600; }
+.nt-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; }
+.nt-list li { padding: 10px 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+.nt-list li:first-child { border-top: 0; }
+.nt-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.nt-src { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.nt-team { color: #b42318; }
+.nt-operations, .nt-orders { color: #0f5ea8; }
+.nt-organic { color: #c2185b; }
+.nt-body { margin: 0; white-space: pre-line; }

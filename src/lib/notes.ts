@@ -24,6 +24,7 @@ const noteSelect = {
   description: true,
   links: true,
   platform: true,
+  allPlatforms: true,
   date: true,
   doThisWeek: true,
   status: true,
@@ -44,6 +45,7 @@ type NoteRow = {
   description: string;
   links: string[];
   platform: Platform | null;
+  allPlatforms: boolean;
   date: Date | null;
   doThisWeek: boolean;
   status: NoteStatus;
@@ -114,7 +116,8 @@ function readNoteInput(form: FormData) {
   const description = field(form, "description");
   if (description.length > 5000) throw new HttpError(400, "Keep the description under 5,000 characters.");
   const platformRaw = field(form, "platform");
-  if (platformRaw && !PLATFORMS.includes(platformRaw as PlatformId)) {
+  const allPlatforms = platformRaw === "ALL";
+  if (platformRaw && !allPlatforms && !PLATFORMS.includes(platformRaw as PlatformId)) {
     throw new HttpError(400, "Choose a platform, or leave it blank.");
   }
   const status = field(form, "status");
@@ -134,7 +137,8 @@ function readNoteInput(form: FormData) {
     title,
     description,
     links: readLinks(form),
-    platform: (platformRaw || null) as Platform | null,
+    platform: (allPlatforms ? null : platformRaw || null) as Platform | null,
+    allPlatforms,
     date: parseOptionalDay(field(form, "date")),
     doThisWeek: field(form, "doThisWeek") === "true",
     status: status as NoteStatus,
@@ -168,6 +172,7 @@ function serializeNote(note: NoteRow): NoteDTO {
     description: note.description,
     links: note.links,
     platform: note.platform,
+    allPlatforms: note.allPlatforms,
     date: note.date ? dayString(note.date) : null,
     doThisWeek: note.doThisWeek,
     status: note.status,
@@ -197,6 +202,7 @@ export async function createNote(user: UserDTO, form: FormData) {
       description: input.description,
       links: input.links,
       platform: input.platform,
+      allPlatforms: input.allPlatforms,
       date: input.date,
       doThisWeek: input.doThisWeek,
       status: input.checked ? "DONE" : input.status,
@@ -232,6 +238,7 @@ export async function updateNote(id: string, form: FormData) {
         description: input.description,
         links: input.links,
         platform: input.platform,
+        allPlatforms: input.allPlatforms,
         date: input.date,
         doThisWeek: input.doThisWeek,
         status: input.checked ? "DONE" : input.status === "DONE" ? "IDEA" : input.status,

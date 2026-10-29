@@ -86,6 +86,7 @@ export type NoteDTO = {
   description: string;
   links: string[];
   platform: PlatformId | null;
+  allPlatforms: boolean;
   date: string | null;
   doThisWeek: boolean;
   status: NoteStatusId;
