@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/calendar", label: "Calendar" },
   { href: "/inbox", label: "Inbox" },
   { href: "/payslips", label: "Payslips" },
+  { href: "/notifications", label: "Notifications" },
 ];
 
 export function Shell({

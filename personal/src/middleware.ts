@@ -17,6 +17,8 @@ export async function middleware(request: NextRequest) {
     pathname === "/favicon.ico" ||
     // The home-screen manifest is fetched without the sign-in cookie.
     pathname === "/manifest.webmanifest" ||
+    // The notification worker, which has no page of its own.
+    pathname === "/sw.js" ||
     pathname === "/icon.svg" ||
     pathname.endsWith(".svg") ||
     pathname.endsWith(".png") ||

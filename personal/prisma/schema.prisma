@@ -247,3 +247,38 @@ model Debrief {
   @@unique([source, kind, day])
   @@index([day])
 }
+
+// A phone (or browser) that has turned on notifications.
+model PushDevice {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  label     String   @default("")
+  failures  Int      @default(0)
+  lastOkAt  DateTime?
+  createdAt DateTime @default(now())
+}
+
+// Every notification, from this app or sent in by the other MailBakes apps.
+// The same key twice updates the text but only buzzes the phone once.
+model Notice {
+  id        String    @id @default(cuid())
+  source    String
+  key       String    @unique
+  title     String
+  body      String    @default("")
+  url       String    @default("")
+  pushedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([createdAt])
+}
+
+// Small settings: the push keys and which sources are muted.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

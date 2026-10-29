@@ -168,3 +168,17 @@ The Inbox can show more than the work Google login. Open **Inbox → Inboxes**.
 - **Outlook / Hotmail**: uses Microsoft Graph. Register an app in Azure (Entra) → App registrations, supported account types "personal Microsoft accounts and any organisational directory", web redirect `APP_URL/api/microsoft/callback`, delegated permissions `Mail.ReadWrite`, `User.Read`, `offline_access`. Put the client id and a client secret in `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET`.
 
 Refresh reads every inbox (latest 50 each). Archive moves Gmail mail to All Mail and Outlook mail to Archive. Send to finance stays work-only. Removing an inbox only clears it from the app.
+
+## Phone notifications
+
+Open **Notifications** in the home-screen app and press **Turn on notifications** (iPhone needs iOS 16.4+ and the app added to the home screen). Push keys are created automatically and stored encrypted.
+
+Other apps send notifications with the same token as the debriefs:
+
+```
+POST /api/v1/notify   Authorization: Bearer PERSONAL_API_TOKEN
+{ "source": "team", "title": "Sam called in sick", "body": "...", "url": "https://...", "key": "sick:42",
+  "debrief": { "title": "...", "lines": ["..."] } }
+```
+
+Sources: operations, orders, team, organic, finance, conversion, inbox, reminders, appointments, other. The same `key` again updates the text without buzzing twice. `debrief` (optional) also files it in the Diary. Each source can be muted on the Notifications page. The 15-minute cron raises appointment and daily-reminder notifications itself.

@@ -3,12 +3,13 @@
 
 export class DiaryError extends Error {}
 
-export const DEBRIEF_SOURCES = ["operations", "orders", "finance", "conversion", "organic", "other"] as const;
+export const DEBRIEF_SOURCES = ["operations", "orders", "team", "finance", "conversion", "organic", "other"] as const;
 export type DebriefSource = (typeof DEBRIEF_SOURCES)[number];
 
 export const SOURCE_LABELS: Record<DebriefSource, string> = {
   operations: "Operations",
   orders: "Daily Orders",
+  team: "Team",
   finance: "Finance",
   conversion: "Conversion",
   organic: "Organic",
