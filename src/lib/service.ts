@@ -797,8 +797,8 @@ function readKeyDate(form: FormData) {
   const title = field(form, "title");
   if (!title || title.length > 140) throw new HttpError(400, "Enter a title.");
   const kind = field(form, "kind");
-  if (kind !== "LAUNCH" && kind !== "KEY_DATE") {
-    throw new HttpError(400, "Choose launch or key date.");
+  if (kind !== "LAUNCH" && kind !== "KEY_DATE" && kind !== "EVENT") {
+    throw new HttpError(400, "Choose launch, event or key date.");
   }
   const notes = field(form, "notes");
   if (notes.length > 2000) throw new HttpError(400, "Keep the notes shorter.");

@@ -102,7 +102,7 @@ export type KeyDateDTO = {
   id: string;
   title: string;
   date: string;
-  kind: "LAUNCH" | "KEY_DATE";
+  kind: "LAUNCH" | "KEY_DATE" | "EVENT";
   notes: string;
 };
 

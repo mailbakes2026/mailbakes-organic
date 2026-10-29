@@ -47,6 +47,7 @@ enum CommentKind {
 enum KeyDateKind {
   LAUNCH
   KEY_DATE
+  EVENT
 }
 
 enum MediaRole {

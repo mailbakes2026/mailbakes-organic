@@ -1728,3 +1728,7 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
 .plan-cal .cal:not(.cal-week) .cal-cell { min-height: 76px; }
 .plan-cal .cal:not(.cal-week) .cal-chip { font-size: 10.5px; padding: 1px 4px; line-height: 1.35; }
 .plan-cal .cal-chip .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* Events on key dates: purple, so they stand apart from launches (red) and key dates (amber). */
+.pill.event { background: #efe7fb; color: #6b3fa0; }
+.cal-marker.event { background: #efe7fb; color: #6b3fa0; }
