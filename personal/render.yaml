@@ -42,6 +42,12 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      # Optional. Outlook / Hotmail inboxes. From an Azure app registration
+      # (personal + work accounts) with redirect APP_URL/api/microsoft/callback.
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
       - key: PERSONAL_API_TOKEN
         sync: false
       # Optional. Blank means no extra supplier domains. Edit later to a comma-separated list.

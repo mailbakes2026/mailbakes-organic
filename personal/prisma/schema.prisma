@@ -33,6 +33,25 @@ model GoogleAccount {
   updatedAt       DateTime  @updatedAt
 }
 
+// Extra inboxes: a personal Gmail (IMAP with an app password) or Outlook
+// (Microsoft login). secretEnc is the app password or the Microsoft refresh
+// token, encrypted. The work Google login stays in GoogleAccount.
+model MailAccount {
+  id             String    @id @default(cuid())
+  provider       String
+  email          String
+  label          String    @default("")
+  secretEnc      String
+  accessTokenEnc String    @default("")
+  expiresAt      DateTime?
+  lastError      String    @default("")
+  lastSyncedAt   DateTime?
+  connectedAt    DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([provider, email])
+}
+
 // A snapshot of the inbox, written only when Refresh is pressed.
 model InboxMessage {
   id          String     @id
@@ -48,8 +67,13 @@ model InboxMessage {
   attachments Json       @default("[]")
   gmailUrl    String     @default("")
   fetchedAt   DateTime   @default(now())
+  // "work" is the Google login above. Anything else is a MailAccount id.
+  accountId   String     @default("work")
+  // The message id inside that mailbox (Gmail id, IMAP uid or Outlook id).
+  remoteId    String     @default("")
 
   @@index([group])
+  @@index([accountId])
   @@index([receivedAt])
 }
 

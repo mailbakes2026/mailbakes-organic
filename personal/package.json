@@ -10,12 +10,14 @@
     "build": "prisma generate && next build",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/classify.test.ts src/lib/dates.test.ts src/lib/markdown.test.ts src/lib/mime.test.ts src/lib/crypto.test.ts src/lib/secret.test.ts src/lib/shapes.test.ts src/lib/payslip-match.test.ts src/lib/sign-in.test.ts src/lib/appointment-rules.test.ts src/lib/diary-rules.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/classify.test.ts src/lib/dates.test.ts src/lib/markdown.test.ts src/lib/mime.test.ts src/lib/crypto.test.ts src/lib/secret.test.ts src/lib/shapes.test.ts src/lib/payslip-match.test.ts src/lib/sign-in.test.ts src/lib/appointment-rules.test.ts src/lib/diary-rules.test.ts src/lib/mail-account-rules.test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "imapflow": "^1.7.8",
     "jose": "^6.2.12",
+    "mailparser": "^3.14.1",
     "next": "^15.5.28",
     "prisma": "^6.19.3",
     "react": "19.1.0",
@@ -23,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

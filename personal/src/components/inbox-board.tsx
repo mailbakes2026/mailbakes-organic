@@ -17,6 +17,17 @@ export type MailItem = {
   unread: boolean;
   attachments: { filename: string; size: number }[];
   gmailUrl: string;
+  accountId: string;
+};
+
+export type Inbox = {
+  id: string;
+  label: string;
+  email: string;
+  provider: "gmail" | "outlook";
+  providerLabel: string;
+  lastError: string;
+  removable: boolean;
 };
 
 async function postJson(url: string, body: unknown) {
@@ -25,7 +36,12 @@ async function postJson(url: string, body: unknown) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (await response.json().catch(() => ({}))) as { error?: string; labelled?: boolean; sentTo?: string };
+  const data = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    labelled?: boolean;
+    sentTo?: string;
+    problems?: { account: string; error: string }[];
+  };
   if (!response.ok) throw new Error(data.error || "That didn't work. Try again.");
   return data;
 }
@@ -35,11 +51,15 @@ export function InboxBoard({
   refreshedAt,
   financeEmail,
   notice,
+  inboxes,
+  outlookReady,
 }: {
   messages: MailItem[];
   refreshedAt: string | null;
   financeEmail: string;
   notice: string | null;
+  inboxes: Inbox[];
+  outlookReady: boolean;
 }) {
   const router = useRouter();
   const [hidden, setHidden] = useState<string[]>([]);
@@ -49,7 +69,14 @@ export function InboxBoard({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(notice);
 
-  const visible = useMemo(() => messages.filter((message) => !hidden.includes(message.id)), [messages, hidden]);
+  const [only, setOnly] = useState<string>("all");
+  const [manage, setManage] = useState(inboxes.length === 0);
+  const inboxById = useMemo(() => new Map(inboxes.map((inbox) => [inbox.id, inbox])), [inboxes]);
+  const showBadges = inboxes.length > 1;
+  const visible = useMemo(
+    () => messages.filter((message) => !hidden.includes(message.id) && (only === "all" || message.accountId === only)),
+    [messages, hidden, only],
+  );
   const grouped = GROUP_ORDER.map((group) => ({
     group,
     label: GROUP_LABEL[group],
@@ -73,8 +100,9 @@ export function InboxBoard({
       const extra = data as { count?: number; failed?: number; truncated?: boolean };
       const bits = [`Pulled ${extra.count ?? 0} from the inbox.`];
       if (extra.failed) bits.push(`${extra.failed} could not be read.`);
-      if (extra.truncated) bits.push("Showing the latest 50. Archive some, then refresh, to see the rest.");
+      if (extra.truncated) bits.push("Showing the latest 50 per inbox. Archive some, then refresh, to see the rest.");
       setInfo(bits.join(" "));
+      if (data.problems?.length) setError(data.problems.map((problem) => `${problem.account}: ${problem.error}`).join(" "));
       setHidden([]);
       setSelected([]);
       router.refresh();
@@ -157,11 +185,52 @@ export function InboxBoard({
       {info ? <p className="alert ok">{info}</p> : null}
       {error ? <p className="error">{error}</p> : null}
 
+      <div className="ib-bar">
+        {inboxes.length > 1 ? (
+          <div className="ib-chips" role="tablist" aria-label="Which inbox">
+            {[{ id: "all", label: "All" }, ...inboxes].map((inbox) => {
+              const count = messages.filter((m) => !hidden.includes(m.id) && (inbox.id === "all" || m.accountId === inbox.id)).length;
+              return (
+                <button
+                  key={inbox.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={only === inbox.id}
+                  className={`ib-chip${only === inbox.id ? " on" : ""}`}
+                  onClick={() => setOnly(inbox.id)}
+                >
+                  {inbox.label} <span>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <span />
+        )}
+        <button className="subtle" type="button" onClick={() => setManage((open) => !open)}>
+          {manage ? "Hide inboxes" : `Inboxes (${inboxes.length})`}
+        </button>
+      </div>
+
+      {manage ? (
+        <InboxManager
+          inboxes={inboxes}
+          outlookReady={outlookReady}
+          onChanged={(message) => {
+            setInfo(message);
+            setError(null);
+            router.refresh();
+          }}
+          onError={setError}
+        />
+      ) : null}
+
       {visible.length === 0 ? (
         <section className="card">
           <h2>Nothing needing you</h2>
           <p className="muted">
-            Press Refresh to pull the latest from the inbox. Mail is grouped into MailBakes, suppliers, invoices and
+            {inboxes.length === 0 ? "Connect Google or add an inbox first, then press Refresh. " : null}
+            Press Refresh to pull the latest from your inboxes. Mail is grouped into MailBakes, suppliers, invoices and
             personal. An invoice mentions a bill or a receipt. A supplier mentions an order or a delivery, or a domain
             listed in SUPPLIER_DOMAINS. MailBakes is anything else from @mailbakes.com. The rest is personal.
           </p>
@@ -193,7 +262,14 @@ export function InboxBoard({
                       </label>
                       <div className="mail-main">
                         <div className="mail-line">
-                          <span className="mail-from">{who}</span>
+                          <span className="mail-from">
+                            {who}
+                            {showBadges ? (
+                              <span className={`ib-badge ib-${inboxById.get(message.accountId)?.provider ?? "gmail"}`}>
+                                {inboxById.get(message.accountId)?.label ?? "Inbox"}
+                              </span>
+                            ) : null}
+                          </span>
                           <span className="small muted">{formatLondonStamp(message.receivedAt)}</span>
                         </div>
                         <div className="mail-subject">{message.subject}</div>
@@ -212,7 +288,7 @@ export function InboxBoard({
                     </details>
                     <div className="row">
                       <a href={message.gmailUrl} target="_blank" rel="noreferrer">
-                        Open in Gmail
+                        Open in {inboxById.get(message.accountId)?.providerLabel ?? "Gmail"}
                       </a>
                       <button className="btn ghost sm" type="button" onClick={() => archive([message.id])} disabled={pending !== null}>
                         Archive
@@ -220,7 +296,7 @@ export function InboxBoard({
                       <button className="btn ghost sm" type="button" onClick={() => addRun(message)} disabled={pending !== null}>
                         {pending === `run-${message.id}` ? "Adding…" : "Add to run-through"}
                       </button>
-                      {message.group === "INVOICES" && confirmId !== message.id ? (
+                      {message.group === "INVOICES" && message.accountId === "work" && confirmId !== message.id ? (
                         <button className="btn sm" type="button" onClick={() => setConfirmId(message.id)} disabled={pending !== null}>
                           Send to finance
                         </button>
@@ -259,5 +335,140 @@ export function InboxBoard({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function InboxManager({
+  inboxes,
+  outlookReady,
+  onChanged,
+  onError,
+}: {
+  inboxes: Inbox[];
+  outlookReady: boolean;
+  onChanged: (message: string) => void;
+  onError: (message: string | null) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [email, setEmail] = useState("");
+  const [label, setLabel] = useState("Personal");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  async function addGmail(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy("add");
+    onError(null);
+    try {
+      await postJson("/api/mail-accounts", { email, label, appPassword: password });
+      setPassword("");
+      setEmail("");
+      setAdding(false);
+      onChanged(`${label || "Personal"} Gmail added. Press Refresh to pull it in.`);
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "That inbox could not be added.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove(inbox: Inbox) {
+    setBusy(inbox.id);
+    onError(null);
+    try {
+      const response = await fetch(`/api/mail-accounts/${encodeURIComponent(inbox.id)}`, { method: "DELETE" });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "That inbox could not be removed.");
+      setConfirmRemove(null);
+      onChanged(`${inbox.label} removed from the app. Nothing in the mailbox was changed.`);
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "That inbox could not be removed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="card ib-manage">
+      <h2>Your inboxes</h2>
+      {inboxes.length === 0 ? <p className="muted">No inboxes connected yet.</p> : null}
+      <ul className="ib-list">
+        {inboxes.map((inbox) => (
+          <li key={inbox.id}>
+            <div>
+              <strong>{inbox.label}</strong> <span className="small muted">{inbox.providerLabel}</span>
+              <div className="small muted">{inbox.email}</div>
+              {inbox.lastError ? <div className="small ib-err">{inbox.lastError}</div> : null}
+            </div>
+            {inbox.removable ? (
+              confirmRemove === inbox.id ? (
+                <div className="row">
+                  <button className="btn sm danger" type="button" disabled={busy !== null} onClick={() => remove(inbox)}>
+                    {busy === inbox.id ? "Removing…" : "Remove"}
+                  </button>
+                  <button className="btn ghost sm" type="button" onClick={() => setConfirmRemove(null)}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button className="subtle" type="button" onClick={() => setConfirmRemove(inbox.id)}>
+                  Remove
+                </button>
+              )
+            ) : (
+              <span className="small muted">Main</span>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <div className="row">
+        <button className="btn ghost sm" type="button" onClick={() => setAdding((open) => !open)}>
+          {adding ? "Cancel" : "+ Add Gmail"}
+        </button>
+        {outlookReady ? (
+          <a className="btn ghost sm" href="/api/microsoft/start">
+            + Connect Outlook
+          </a>
+        ) : (
+          <span className="small muted">Outlook: waiting for the Microsoft keys on Render.</span>
+        )}
+      </div>
+
+      {adding ? (
+        <form className="ib-form" onSubmit={addGmail}>
+          <p className="small muted">
+            Gmail needs an <strong>app password</strong>, not your normal one. Make one at{" "}
+            <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">
+              myaccount.google.com/apppasswords
+            </a>{" "}
+            (2-Step Verification must be on), then paste the 16 letters here.
+          </p>
+          <label className="field">
+            <span>Gmail address</span>
+            <input type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </label>
+          <label className="field">
+            <span>Name in the app</span>
+            <input value={label} maxLength={30} onChange={(e) => setLabel(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>App password</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="abcd efgh ijkl mnop"
+              required
+            />
+          </label>
+          <button className="btn sm" type="submit" disabled={busy !== null}>
+            {busy === "add" ? "Checking…" : "Add Gmail"}
+          </button>
+        </form>
+      ) : null}
+    </section>
   );
 }

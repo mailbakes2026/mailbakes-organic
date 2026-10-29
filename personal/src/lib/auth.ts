@@ -91,3 +91,25 @@ export async function verifyGoogleState(token: string) {
 }
 
 export { COOKIE };
+
+/** Short-lived signed state for the Microsoft (Outlook) login. */
+export async function signMicrosoftState() {
+  const secret = key();
+  if (!secret) throw new Error("Set SESSION_SECRET to at least 32 characters.");
+  return new SignJWT({ purpose: "microsoft-connect" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("15m")
+    .sign(secret);
+}
+
+export async function verifyMicrosoftState(token: string) {
+  const secret = key();
+  if (!secret) return false;
+  try {
+    const { payload } = await jwtVerify(token, secret);
+    return payload.purpose === "microsoft-connect";
+  } catch {
+    return false;
+  }
+}
