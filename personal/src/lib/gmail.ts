@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { classifyEmail, type EmailGroupName } from "@/lib/classify";
 import { financeEmail, supplierDomains } from "@/lib/env";
 import { getAccessToken, ReconnectError, SetupError } from "@/lib/google";
+import { archiveExtraMessages, refreshExtraInboxes } from "@/lib/mail-accounts";
 import { buildForward, toBase64Url } from "@/lib/mime";
 import { prisma } from "@/lib/prisma";
 
@@ -142,6 +143,8 @@ function toRow(message: GmailMessage) {
     attachments: files as unknown as Prisma.InputJsonValue,
     gmailUrl: `https://mail.google.com/mail/u/0/#inbox/${message.id}`,
     fetchedAt: new Date(),
+    accountId: "work",
+    remoteId: message.id,
   };
 }
 
@@ -159,7 +162,7 @@ async function mapPool<T>(items: T[], limit: number, worker: (item: T) => Promis
   await Promise.all(Array.from({ length: count }, () => run()));
 }
 
-export async function refreshInbox() {
+export async function refreshWorkInbox() {
   const token = await getAccessToken();
   const listed = (await gmail(token, `/messages?q=${encodeURIComponent("in:inbox")}&maxResults=50`)) as {
     messages?: { id: string }[];
@@ -183,41 +186,88 @@ export async function refreshInbox() {
   const listedIds = ids.map((item) => item.id);
   const failedIds = listedIds.filter((id) => !seen.includes(id));
   const kept = failedIds.length
-    ? await prisma.inboxMessage.findMany({ where: { id: { in: failedIds } }, select: { id: true } })
+    ? await prisma.inboxMessage.findMany({ where: { id: { in: failedIds }, accountId: "work" }, select: { id: true } })
     : [];
   const keep = [...seen, ...kept.map((row) => row.id)];
   if (listedIds.length > 0 && seen.length === 0 && kept.length === 0) {
     throw new GmailError("None of the inbox emails could be read.");
   }
-  if (keep.length === 0) await prisma.inboxMessage.deleteMany();
-  else await prisma.inboxMessage.deleteMany({ where: { id: { notIn: keep } } });
+  if (keep.length === 0) await prisma.inboxMessage.deleteMany({ where: { accountId: "work" } });
+  else await prisma.inboxMessage.deleteMany({ where: { accountId: "work", id: { notIn: keep } } });
   return { count: seen.length, failed, truncated: Boolean(listed.nextPageToken) };
+}
+
+export type RefreshProblem = { account: string; error: string };
+
+/**
+ * Refresh every connected inbox. One inbox failing doesn't stop the others;
+ * its problem is reported back. Throws only when nothing at all is connected
+ * or the work inbox needs reconnecting and there are no others.
+ */
+export async function refreshInbox() {
+  const problems: RefreshProblem[] = [];
+  let count = 0;
+  let failed = 0;
+  let truncated = false;
+  const work = await prisma.googleAccount.findUnique({ where: { id: "default" }, select: { refreshTokenEnc: true, email: true } });
+  const extras = await prisma.mailAccount.count();
+  if (!work?.refreshTokenEnc && extras === 0) throw new SetupError("Connect Google or add an inbox to use the inbox.");
+  if (work?.refreshTokenEnc) {
+    try {
+      const result = await refreshWorkInbox();
+      count += result.count;
+      failed += result.failed;
+      truncated ||= result.truncated;
+    } catch (error) {
+      if (extras === 0) throw error;
+      problems.push({ account: work.email || "Work", error: error instanceof Error ? error.message : "Couldn't refresh." });
+    }
+  }
+  const extra = await refreshExtraInboxes();
+  count += extra.count;
+  truncated ||= extra.truncated;
+  problems.push(...extra.problems);
+  return { count, failed, truncated, problems };
 }
 
 export async function archiveMessages(ids: string[]) {
   const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))].slice(0, 50);
   if (unique.length === 0) throw new GmailError("Choose at least one email.");
-  const known = await prisma.inboxMessage.findMany({ where: { id: { in: unique } }, select: { id: true } });
-  const allowed = new Set(known.map((row) => row.id));
-  const token = await getAccessToken();
+  const known = await prisma.inboxMessage.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, accountId: true, remoteId: true },
+  });
+  const byId = new Map(known.map((row) => [row.id, row]));
   const archived: string[] = [];
   const failed: { id: string; error: string }[] = [];
+  const workIds: string[] = [];
+  const extra: { id: string; accountId: string; remoteId: string }[] = [];
   for (const id of unique) {
-    if (!allowed.has(id)) {
-      failed.push({ id, error: "That email is not on the board. Refresh and try again." });
-      continue;
+    const row = byId.get(id);
+    if (!row) failed.push({ id, error: "That email is not on the board. Refresh and try again." });
+    else if (row.accountId === "work") workIds.push(id);
+    else extra.push(row);
+  }
+  if (workIds.length) {
+    const token = await getAccessToken();
+    for (const id of workIds) {
+      try {
+        await gmail(token, `/messages/${id}/modify`, {
+          method: "POST",
+          body: JSON.stringify({ removeLabelIds: ["INBOX"] }),
+        });
+        await prisma.inboxMessage.delete({ where: { id } }).catch(() => undefined);
+        archived.push(id);
+      } catch (error) {
+        if (error instanceof ReconnectError || error instanceof SetupError) throw error;
+        failed.push({ id, error: error instanceof Error ? error.message : "Gmail could not archive that email." });
+      }
     }
-    try {
-      await gmail(token, `/messages/${id}/modify`, {
-        method: "POST",
-        body: JSON.stringify({ removeLabelIds: ["INBOX"] }),
-      });
-      await prisma.inboxMessage.delete({ where: { id } }).catch(() => undefined);
-      archived.push(id);
-    } catch (error) {
-      if (error instanceof ReconnectError || error instanceof SetupError) throw error;
-      failed.push({ id, error: error instanceof Error ? error.message : "Gmail could not archive that email." });
-    }
+  }
+  if (extra.length) {
+    const result = await archiveExtraMessages(extra);
+    archived.push(...result.archived);
+    failed.push(...result.failed);
   }
   return { archived, failed };
 }
@@ -242,6 +292,9 @@ export async function sendInvoiceToFinance(id: string) {
   const saved = await prisma.inboxMessage.findUnique({ where: { id } });
   if (!saved || saved.group !== "INVOICES") {
     throw new GmailError("Send to finance is only for invoice emails.");
+  }
+  if (saved.accountId !== "work") {
+    throw new GmailError("Send to finance works for your work inbox. Forward this one from its own mailbox.");
   }
   const token = await getAccessToken();
   const message = (await gmail(token, `/messages/${id}?format=full`)) as unknown as GmailMessage;

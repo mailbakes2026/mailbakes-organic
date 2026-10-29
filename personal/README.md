@@ -159,3 +159,12 @@ If `PERSONAL_API_TOKEN` is missing, the API responds with setup needed and does 
 ## Grouping
 
 Invoices mention an invoice, receipt, credit note, remittance, or payment due, including in an attachment name. Suppliers mention an order, dispatch, delivery note, or wholesale, or the sender's domain is in `SUPPLIER_DOMAINS`. An invoice from a supplier stays under Invoices, so Send to finance is available. MailBakes is other mail from `@mailbakes.com` or that mentions MailBakes. Everything else is personal.
+
+## Extra inboxes
+
+The Inbox can show more than the work Google login. Open **Inbox → Inboxes**.
+
+- **Personal Gmail**: uses IMAP with a Google *app password* (myaccount.google.com/apppasswords, 2-Step Verification on). The password is encrypted with TOKEN_ENCRYPTION_KEY. No Google Cloud changes needed.
+- **Outlook / Hotmail**: uses Microsoft Graph. Register an app in Azure (Entra) → App registrations, supported account types "personal Microsoft accounts and any organisational directory", web redirect `APP_URL/api/microsoft/callback`, delegated permissions `Mail.ReadWrite`, `User.Read`, `offline_access`. Put the client id and a client secret in `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET`.
+
+Refresh reads every inbox (latest 50 each). Archive moves Gmail mail to All Mail and Outlook mail to Archive. Send to finance stays work-only. Removing an inbox only clears it from the app.
