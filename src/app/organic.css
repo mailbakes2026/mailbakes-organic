@@ -1719,3 +1719,12 @@ details.fold > summary { display: flex; align-items: center; gap: 8px; }
   .channel-layout.phone-board .channel-feed { display: none; }
   .channel-layout.phone-feed .channel-board { display: none; }
 }
+
+/* Content calendar: all seven days always fit. Long titles shorten with "…"
+   instead of stretching a column, and the month view is more compact. */
+.plan-cal .cal-head.cal-head,
+.plan-cal .cal.cal { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.plan-cal .cal-cell { min-width: 0; padding: 4px 5px; }
+.plan-cal .cal:not(.cal-week) .cal-cell { min-height: 76px; }
+.plan-cal .cal:not(.cal-week) .cal-chip { font-size: 10.5px; padding: 1px 4px; line-height: 1.35; }
+.plan-cal .cal-chip .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
