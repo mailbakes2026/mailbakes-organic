@@ -12,6 +12,8 @@ function row(date: string, spendPence: number, revenuePence: number, orders = 1)
     campaignName: "",
     adsetId: "",
     adsetName: "",
+    adId: "",
+    adName: "",
     spendPence,
     revenuePence,
     orders,
@@ -33,6 +35,9 @@ test("a day with no row stays empty instead of becoming zero", () => {
   const missing = view.daily.filter((day) => day.date !== "2026-10-23");
   assert.equal(missing.every((day) => day.totals === null), true);
   assert.equal(view.daily.find((day) => day.date === "2026-10-23")?.totals?.spendPence, 1000);
+  assert.equal(view.meta.windows[0]?.key, "today");
+  assert.equal(view.meta.windows[0]?.spendPence, 1000);
+  assert.equal(view.meta.windows[1]?.spendPence, null);
 });
 
 test("no stored rows leaves the headline unset", () => {

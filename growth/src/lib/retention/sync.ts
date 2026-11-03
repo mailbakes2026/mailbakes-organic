@@ -1,5 +1,5 @@
 import { londonToday } from "@/lib/dates";
-import { klaviyoMissing, shopifyMissing } from "@/lib/env";
+import { envValue, klaviyoMissing, shopifyMissing } from "@/lib/env";
 import { pullKlaviyo } from "@/lib/retention/klaviyo";
 import { pullShopifyOrders } from "@/lib/retention/shopify";
 import { readSync, replaceOrders, replaceSends, upsertLists, writeSync } from "@/lib/retention/store";
@@ -12,7 +12,7 @@ export async function syncKlaviyo(now = new Date()) {
   const missing = klaviyoMissing();
   if (missing.length) return { ok: false as const, error: "Klaviyo is not connected. Set KLAVIYO_PRIVATE_API_KEY." };
   try {
-    const pulled = await pullKlaviyo(process.env.KLAVIYO_PRIVATE_API_KEY!.trim());
+    const pulled = await pullKlaviyo(envValue("KLAVIYO_PRIVATE_API_KEY"));
     await replaceSends("flow", "klaviyo", pulled.flows, ["7d", "30d"]);
     await replaceSends("campaign", "klaviyo", pulled.campaigns, ["7d", "30d"]);
     const capturedOn = londonToday(now);
@@ -46,9 +46,9 @@ export async function syncShopify(now = new Date()) {
   if (missing.length) return { ok: false as const, error: `Shopify is not connected. Set ${missing.join(", ")}.` };
   try {
     const pulled = await pullShopifyOrders({
-      shopDomain: process.env.SHOPIFY_SHOP!.trim(),
-      clientId: process.env.SHOPIFY_CLIENT_ID!.trim(),
-      clientSecret: process.env.SHOPIFY_CLIENT_SECRET!.trim(),
+      shopDomain: envValue("SHOPIFY_SHOP"),
+      clientId: envValue("SHOPIFY_CLIENT_ID"),
+      clientSecret: envValue("SHOPIFY_CLIENT_SECRET"),
       now,
     });
     const guests = pulled.orders.filter((order) => order.guest).length;
@@ -92,7 +92,14 @@ export function syncShopifyLocked() {
 async function stale(id: string, now: Date) {
   const state = await readSync(id);
   if (state?.status === "ok" && state.syncedAt && now.getTime() - state.syncedAt.getTime() < 6 * 60 * 60 * 1000) return false;
+  if (state?.status === "error" && now.getTime() - state.updatedAt.getTime() < 10 * 60 * 1000) return false;
   return true;
+}
+
+export async function syncShopifyIfStale(now = new Date()) {
+  if (shopifyMissing().length) return null;
+  if (!(await stale("retention-shopify", now))) return null;
+  return syncShopifyLocked();
 }
 
 export async function syncRetentionIfStale(now = new Date()) {

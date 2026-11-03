@@ -10,6 +10,8 @@ export type Fact = {
   campaignName: string;
   adsetId: string;
   adsetName: string;
+  adId: string;
+  adName: string;
   spendPence: number;
   revenuePence: number;
   orders: number;

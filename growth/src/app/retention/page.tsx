@@ -1,4 +1,5 @@
 import { ConnectionCard } from "@/components/connection";
+import { RetentionMetaCard } from "@/components/meta-snapshot";
 import { SyncButton } from "@/components/sync-button";
 import { connectionCopy } from "@/lib/connection";
 import { formatCount, formatRate } from "@/lib/format";
@@ -30,7 +31,7 @@ export default async function RetentionOverview() {
       <div className="page-head">
         <div>
           <h1>Retention</h1>
-          <p className="muted">Klaviyo and Shopify. A blank means that figure has not been stored.</p>
+          <p className="muted">Klaviyo and Shopify, with Meta spend beside them. A blank means that figure has not been stored.</p>
         </div>
       </div>
       {!loaded.ok ? <p className="alert warn">We could not read the database. Check the disk and DATABASE_URL.</p> : null}
@@ -53,6 +54,7 @@ export default async function RetentionOverview() {
           <b className={`stat-num${campaignRevenue ? "" : " is-empty"}`}>{campaignRevenue ?? "—"}</b>
           <span className="muted small">{campaigns.length ? `${campaigns.length} campaigns` : "No campaign rows stored."}</span>
         </article>
+        {loaded.ok ? <RetentionMetaCard snapshot={loaded.meta} connected={loaded.metaConnected} /> : null}
         <article className="stat">
           <span className="eyebrow">Repeat purchase</span>
           <b className={`stat-num${repeat ? "" : " is-empty"}`}>{repeat ? formatRate(repeat.rate) : "—"}</b>
