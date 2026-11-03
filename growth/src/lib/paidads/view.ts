@@ -11,6 +11,7 @@ import {
   wowWindows,
   type Fact,
 } from "@/lib/paidads/metrics";
+import { buildMetaSnapshot, type ShopifyOrderFact } from "@/lib/paidads/snapshot";
 
 export type PaidView = ReturnType<typeof buildPaidView>;
 
@@ -31,6 +32,7 @@ export function buildPaidView(input: {
   range: "7d" | "28d";
   metaConnected: boolean;
   googleRows: number;
+  orders?: ShopifyOrderFact[];
 }) {
   const metaRows = input.rows.filter((row) => row.platform === "meta");
   const googleOnly = metaRows.length === 0;
@@ -118,6 +120,7 @@ export function buildPaidView(input: {
     googleRows: input.googleRows,
     hasRows: input.rows.length > 0,
     sources: [...new Set(headlineRows.map((row) => row.source))],
+    meta: buildMetaSnapshot({ rows: input.rows, orders: input.orders ?? [], today: input.today }),
   };
 }
 
