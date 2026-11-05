@@ -1,5 +1,6 @@
 import { londonToday } from "@/lib/dates";
 import { envValue, klaviyoMissing, shopifyMissing } from "@/lib/env";
+import { KLAVIYO_NOT_CONNECTED } from "@/lib/retention/klaviyo-copy";
 import { pullKlaviyo } from "@/lib/retention/klaviyo";
 import { pullShopifyOrders } from "@/lib/retention/shopify";
 import { readSync, replaceOrders, replaceSends, upsertLists, writeSync } from "@/lib/retention/store";
@@ -10,7 +11,7 @@ let shopifyPending: Promise<{ ok: true; detail: string } | { ok: false; error: s
 
 export async function syncKlaviyo(now = new Date()) {
   const missing = klaviyoMissing();
-  if (missing.length) return { ok: false as const, error: "Klaviyo is not connected. Set KLAVIYO_PRIVATE_API_KEY." };
+  if (missing.length) return { ok: false as const, error: KLAVIYO_NOT_CONNECTED };
   try {
     const pulled = await pullKlaviyo(envValue("KLAVIYO_PRIVATE_API_KEY"));
     await replaceSends("flow", "klaviyo", pulled.flows, ["7d", "30d"]);

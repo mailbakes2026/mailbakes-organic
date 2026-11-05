@@ -17,6 +17,7 @@ const NAV: Record<AppId, { href: string; label: string }[]> = {
     { href: "/campaigns", label: "Campaigns" },
     { href: "/customers", label: "Customers" },
     { href: "/plan", label: "Q4 plan" },
+    { href: "/settings", label: "Settings" },
   ],
 };
 
