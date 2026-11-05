@@ -26,10 +26,12 @@ import {
   statusLabel,
   keyKind,
 } from "@/lib/constants";
+import { swipeAxis, swipeStep } from "@/lib/media-preview";
 import { approverMayAct, type BoardId, type ReviewAction } from "@/lib/pipeline";
 import { NoteForm } from "@/components/notes-board";
 import { NotesDates } from "@/components/notes-dates";
-import { MediaCarousel } from "@/components/media-carousel";
+import { CreativePreview } from "@/components/creative-preview";
+import { MediaCarousel, type CarouselSlide } from "@/components/media-carousel";
 import type {
   ContentTypeId,
   IgProfileDTO,
@@ -647,10 +649,13 @@ function PostDetail({
       )}
       <p className="pre">{post.caption}</p>
       {post.creativeNotes ? (
-        <p className="muted pre">
-          <b>Creative link or notes. </b>
-          {post.creativeNotes}
-        </p>
+        <div>
+          <p className="muted pre">
+            <b>Creative link or notes. </b>
+            {post.creativeNotes}
+          </p>
+          <CreativePreview notes={post.creativeNotes} />
+        </div>
       ) : null}
       <section className="post-thread">
         <h3>Comments</h3>
@@ -786,28 +791,69 @@ function StoryStage({
   frame: number;
   onFrame: (next: number) => void;
 }) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
+  const pointerId = useRef<number | null>(null);
+  const horizontal = useRef(false);
   const count = Math.max(post.media.length, 1);
   const safe = Math.min(Math.max(frame, 0), count - 1);
   const media = post.media[safe];
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node) return;
+    const block = (event: TouchEvent) => {
+      if (horizontal.current) event.preventDefault();
+    };
+    node.addEventListener("touchmove", block, { passive: false });
+    return () => node.removeEventListener("touchmove", block);
+  }, []);
   return (
     <div
+      ref={frameRef}
       className="story-frame"
       onPointerDown={(event) => {
-        if ((event.target as HTMLElement).closest("video, button")) return;
+        if ((event.target as HTMLElement).closest("button")) return;
+        horizontal.current = false;
         startX.current = event.clientX;
+        startY.current = event.clientY;
+        pointerId.current = event.pointerId;
+      }}
+      onPointerMove={(event) => {
+        if (pointerId.current !== event.pointerId || startX.current == null || startY.current == null) return;
+        const dx = event.clientX - startX.current;
+        const dy = event.clientY - startY.current;
+        const axis = swipeAxis(dx, dy);
+        if (axis === "vertical") {
+          horizontal.current = false;
+          startX.current = null;
+          pointerId.current = null;
+          return;
+        }
+        if (axis === "horizontal") {
+          horizontal.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }
       }}
       onPointerUp={(event) => {
-        if (startX.current == null) return;
+        if (startX.current == null || pointerId.current !== event.pointerId) return;
         const dx = event.clientX - startX.current;
         startX.current = null;
-        if (dx > 40) onFrame(safe - 1);
-        else if (dx < -40) onFrame(safe + 1);
+        pointerId.current = null;
+        horizontal.current = false;
+        const step = swipeStep(dx);
+        if (step === -1) onFrame(safe - 1);
+        if (step === 1) onFrame(safe + 1);
+      }}
+      onPointerCancel={() => {
+        horizontal.current = false;
+        startX.current = null;
+        pointerId.current = null;
       }}
     >
       {media ? (
         media.mimeType.startsWith("video/") ? (
-          <video key={media.id} src={`/api/media/${media.id}`} autoPlay muted playsInline loop />
+          <video key={media.id} src={`/api/media/${media.id}`} autoPlay muted playsInline loop preload="metadata" />
         ) : (
           <img key={media.id} src={`/api/media/${media.id}`} alt="" />
         )
@@ -921,8 +967,44 @@ function StoryViewer({
 }
 
 
+function mimeForFile(file: File) {
+  if (file.type) return file.type;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "mp4" || ext === "m4v") return "video/mp4";
+  if (ext === "webm") return "video/webm";
+  if (ext === "mov") return "video/quicktime";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/jpeg";
+}
+
+function EditSlides({ slots, title }: { slots: MediaSlot[]; title: string }) {
+  const [local, setLocal] = useState<{ key: string; url: string }[]>([]);
+  useEffect(() => {
+    const created = slots.flatMap((slot) =>
+      slot.kind === "file" ? [{ key: slot.key, url: URL.createObjectURL(slot.file) }] : [],
+    );
+    setLocal(created);
+    return () => {
+      for (const item of created) URL.revokeObjectURL(item.url);
+    };
+  }, [slots]);
+
+  const slides: CarouselSlide[] = slots.flatMap((slot) => {
+    if (slot.kind === "saved") {
+      return [{ key: slot.key, src: `/api/media/${slot.id}`, mimeType: slot.mimeType, label: title || slot.name }];
+    }
+    const url = local.find((item) => item.key === slot.key)?.url;
+    if (!url) return [];
+    return [{ key: slot.key, src: url, mimeType: mimeForFile(slot.file), label: title || slot.file.name }];
+  });
+  if (slides.length === 0) return null;
+  return <MediaCarousel slides={slides} />;
+}
+
 type MediaSlot =
-  | { key: string; kind: "saved"; id: string; name: string }
+  | { key: string; kind: "saved"; id: string; name: string; mimeType: string }
   | { key: string; kind: "file"; file: File };
 
 function PostForm({
@@ -969,7 +1051,13 @@ function PostForm({
   const [caption, setCaption] = useState(initial?.caption ?? "");
   const [notes, setNotes] = useState(initial?.creativeNotes ?? "");
   const [slots, setSlots] = useState<MediaSlot[]>(() =>
-    (initial?.media ?? []).map((media) => ({ key: media.id, kind: "saved" as const, id: media.id, name: media.fileName })),
+    (initial?.media ?? []).map((media) => ({
+      key: media.id,
+      kind: "saved" as const,
+      id: media.id,
+      name: media.fileName,
+      mimeType: media.mimeType,
+    })),
   );
   const slotSeq = useRef(0);
   const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -1153,6 +1241,7 @@ function PostForm({
         Creative link or notes
         <textarea id="notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
       </label>
+      <CreativePreview notes={notes} />
       {contentType === "REEL" ? (
         <div className="field">
           <span>Reel cover</span>
@@ -1201,7 +1290,10 @@ function PostForm({
         {contentType === "REEL" ? (
           <p className="small muted">The clip sits here. The cover above is what the grid shows.</p>
         ) : null}
-        {slots.length > 1 ? <p className="small muted">Use the arrows to set the order.</p> : null}
+        {slots.length > 0 ? <EditSlides slots={slots} title={title} /> : null}
+        {slots.length > 1 ? (
+          <p className="small muted">Swipe the preview to look through the slides. Use the arrows to set the order.</p>
+        ) : null}
         {slots.map((slot, index) => (
           <div key={slot.key} className="file-row">
             <span className="grow">{slot.kind === "saved" ? slot.name : slot.file.name}</span>
