@@ -1,3 +1,4 @@
+import { KlaviyoNotice } from "@/components/klaviyo-notice";
 import { formatCount } from "@/lib/format";
 import { loadRetention } from "@/lib/retention/load";
 
@@ -10,6 +11,7 @@ export default async function CustomersPage() {
   const maxBucket = repeat ? Math.max(...repeat.histogram.map((bucket) => bucket.count), 1) : 1;
   return (
     <>
+      <KlaviyoNotice />
       <div className="page-head">
         <div>
           <h1>Customers</h1>

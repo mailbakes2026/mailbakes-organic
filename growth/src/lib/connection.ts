@@ -5,13 +5,14 @@ export function connectionCopy(input: {
   missing: string[];
   sync: { status: string; detail: string; syncedAt: Date | null } | null;
   parked?: string;
+  missingDetail?: string;
 }) {
   if (input.parked) return { state: "not-connected" as const, label: "Not connected", detail: input.parked };
   if (input.missing.length) {
     return {
       state: "not-connected" as const,
       label: "Not connected",
-      detail: `${input.name} is not connected. Set ${input.missing.join(", ")}.`,
+      detail: input.missingDetail ?? `${input.name} is not connected. Set ${input.missing.join(", ")}.`,
     };
   }
   if (input.sync?.status === "error") {
