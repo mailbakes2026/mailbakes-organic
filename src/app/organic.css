@@ -127,21 +127,40 @@ button.nav-link {
 
 .carousel { position: relative; }
 .carousel-frame {
+  min-height: 180px;
+  background: #111;
+  border-radius: 12px;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+.carousel-track {
+  display: flex;
+  width: 100%;
+  transition: transform 0.28s ease;
+}
+.carousel-track.is-dragging { transition: none; }
+.carousel-slide {
+  flex: 0 0 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 180px;
-  max-height: min(52vh, 480px);
-  background: #111;
-  border-radius: 12px;
-  overflow: hidden;
 }
-.carousel-frame img,
-.carousel-frame video {
+.carousel-slide img,
+.carousel-slide video {
   width: 100%;
   max-height: min(52vh, 480px);
   object-fit: contain;
   display: block;
+  background: #111;
+}
+.carousel-slide img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .carousel-track { transition: none; }
 }
 .carousel-arrow {
   display: none;
@@ -173,8 +192,53 @@ button.nav-link {
   cursor: pointer;
 }
 .carousel-dots button.on { background: var(--mb-pink); }
+@media (max-width: 767px) {
+  .carousel-dots { gap: 0; }
+  .carousel-dots button {
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    display: grid;
+    place-items: center;
+  }
+  .carousel-dots button::after {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #d0d0d0;
+  }
+  .carousel-dots button.on { background: transparent; }
+  .carousel-dots button.on::after { background: var(--mb-pink); }
+}
 @media (min-width: 768px) {
   .carousel-arrow { display: grid; }
+}
+.creative-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.creative-preview video,
+.creative-preview iframe {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: #111;
+  display: block;
+}
+.creative-preview video { max-height: min(52vh, 480px); }
+.creative-preview iframe.wide { aspect-ratio: 16 / 9; }
+.creative-preview iframe.tall { aspect-ratio: 9 / 16; max-height: 70vh; }
+/* Board tiles only show a still. A real video element here takes the tap
+   and phones open the file URL. Playback stays in the post window. */
+.ig-tile video,
+.tt-tile video,
+.preview-frame video,
+.li-media video,
+.story-rail-frame video,
+.cal-peek-media video {
+  pointer-events: none;
 }
 .link-serious { color: var(--serious); font-weight: 700; }
 
@@ -304,6 +368,7 @@ button.nav-link {
   border-radius: 28px;
   background: #111;
   color: #fff;
+  touch-action: manipulation;
 }
 .story-frame img, .story-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .story-empty { width: 100%; height: 100%; background: linear-gradient(to bottom, var(--mb-pink), var(--mb-ink)); }
@@ -538,6 +603,23 @@ button.cal-date {
   width: min(380px, calc(100vw - 32px));
   background: #111;
   color: #fff;
+}
+/* A transformed ancestor makes phone browsers open a video in a new page.
+   Keep the same card, just place it without a transform. */
+@media (max-width: 767px) {
+  .sheet.sheet-post,
+  .sheet.sheet-form,
+  .sheet.story-sheet {
+    top: 0;
+    bottom: 0;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    height: fit-content;
+    margin: auto;
+    transform: none;
+    max-height: calc(100dvh - 32px);
+  }
 }
 .story-sheet .sheet-title { color: #fff; }
 .story-sheet .sheet-desc { color: rgba(255, 255, 255, 0.72); }
