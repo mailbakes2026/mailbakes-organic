@@ -16,6 +16,7 @@ test("a custom host rewrites pages and leaves the API and login alone", () => {
   assert.equal(destinationPath("paidads.mailbakes.com", "/api/v1/ingest"), "/api/v1/ingest");
   assert.equal(destinationPath("paidads.mailbakes.com", "/favicon.ico"), "/paidads/icon");
   assert.equal(destinationPath("retention.mailbakes.com", "/retention/plan"), "/retention/plan");
+  assert.equal(destinationPath("retention.mailbakes.com", "/settings"), "/retention/settings");
 });
 
 test("the onrender host keeps path routing", () => {

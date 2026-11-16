@@ -87,7 +87,7 @@ Set these on the service. Do not commit them. The app does not print them.
 | `RETENTION_API_TOKEN` | Millie | For ingest | Bearer token for Retention rows. At least 16 characters. |
 | `META_ACCESS_TOKEN` | Millie | To sync Meta | Marketing API token with ads read access for the ad account. |
 | `META_AD_ACCOUNT_ID` | Millie | To sync Meta | Ad account id, with or without the `act_` prefix. |
-| `KLAVIYO_PRIVATE_API_KEY` | Millie | To sync Klaviyo | Private API key. |
+| `KLAVIYO_PRIVATE_API_KEY` | Millie | To sync Klaviyo | Private API key. Set it on the Render service `mailbakes-growth`, under Environment, then save, rebuild, and deploy. Retention Settings shows whether it is set, and never shows the value. |
 | `SHOPIFY_SHOP` | Millie | To sync Shopify | Shop host, such as `mailbakes.myshopify.com`. No `https://`. |
 | `SHOPIFY_CLIENT_ID` | Millie | To sync Shopify | Client id for the client-credentials grant. |
 | `SHOPIFY_CLIENT_SECRET` | Millie | To sync Shopify | Client secret for that grant. |
@@ -114,11 +114,27 @@ No request is made. The card stays "Not connected".
 
 ### Klaviyo
 
-`KLAVIYO_PRIVATE_API_KEY` is sent as `Authorization: Klaviyo-API-Key` with revision `2025-04-15`. It is not logged.
+Retention calls Klaviyo with the key on this service. The same pattern as Meta: the key lives in the Render environment, and the page shows Connected or Not connected.
 
-Sync looks up a metric named `Placed Order`. If that metric is missing, sync stops and says so, because the values report will not return revenue without it. It then requests flow and campaign value reports for `last_7_days` and `last_30_days` (opens, clicks, unsubscribes, delivered or recipients, conversion value). Flow and campaign names are loaded when Klaviyo returns them. Lists are snapshotted for the London day, including `profile_count` when Klaviyo returns it. A second snapshot on a later day is what makes list growth visible. One snapshot shows the count and a blank change.
+`KLAVIYO_PRIVATE_API_KEY` is read at runtime and sent as `Authorization: Klaviyo-API-Key` with revision `2025-04-15`. It is not logged, not stored in the database, and not written into the page. Settings only says whether the variable is set.
 
-The key needs read access to metrics, flows, campaigns, lists, and reporting.
+Where to set it:
+
+1. In Klaviyo, create a private API key with read access to accounts, metrics, flows, campaigns and lists.
+2. In Render, open the web service `mailbakes-growth` (the service for `retention.mailbakes.com` and `paidads.mailbakes.com`).
+3. Open Environment.
+4. Set `KLAVIYO_PRIVATE_API_KEY`.
+5. Save, rebuild, and deploy.
+
+If the Retention home card already says Connected, leave the variable as it is. Replace it only when you rotate the key in Klaviyo, then redeploy.
+
+Opening Retention, Flows, Campaigns, Customers or Settings syncs Klaviyo when the last successful sync is more than 6 hours old. A failed sync waits 10 minutes before the next try. Sync Klaviyo on the home page, or on Settings, runs it immediately. Meta uses the same 6-hour cadence.
+
+Sync looks up a metric named `Placed Order`, and prefers the Shopify integration when more than one exists. If that metric is missing, sync stops and says so, because the values report will not return revenue without it. It then requests flow and campaign value reports for `last_7_days` and `last_30_days` (opens, clicks, unsubscribes, delivered or recipients, conversion value). Flow names are loaded when Klaviyo returns them. Campaign names are loaded per channel (`email`, `sms`, and `mobile_push`), because the campaigns list requires a channel filter. Lists are snapshotted for the London day, including `profile_count` when Klaviyo returns it. A second snapshot on a later day is what makes list growth visible. One snapshot shows the count and a blank change.
+
+Conversion value is stored in the account currency when Klaviyo returns `preferred_currency`. Otherwise it is stored as GBP. A blank currency on an older row is shown as GBP.
+
+The key needs read access to accounts, metrics, flows, campaigns and lists. Flow and campaign value reports use the flows and campaigns read scopes.
 
 ### Shopify
 

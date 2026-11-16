@@ -1,3 +1,12 @@
+export function revenueLabel(rows: { revenuePence: number | null; currency: string }[]) {
+  const withMoney = rows.filter((row) => row.revenuePence !== null);
+  if (!withMoney.length) return null;
+  const currencies = [...new Set(withMoney.map((row) => (/^[A-Z]{3}$/.test(row.currency) ? row.currency : "GBP")))];
+  if (currencies.length !== 1) return "Mixed currencies";
+  const total = withMoney.reduce((sum, row) => sum + (row.revenuePence ?? 0), 0);
+  return formatMoney(total, currencies[0] ?? "GBP");
+}
+
 export function formatMoney(pence: number, currency: string) {
   const code = /^[A-Z]{3}$/.test(currency) ? currency : "GBP";
   return new Intl.NumberFormat("en-GB", {

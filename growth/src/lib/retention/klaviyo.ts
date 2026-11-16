@@ -1,31 +1,48 @@
 import {
+  campaignNamePath,
+  choosePlacedOrder,
   klaviyoError,
+  parseAccountCurrency,
   parseLists,
+  parseMetricCatalog,
   parseNamedResources,
-  parsePlacedOrderMetric,
   parseValuesReport,
+  retryWaitMs,
   safeKlaviyoNext,
+  shopifyMetricsPath,
   type SendDraft,
 } from "@/lib/retention/klaviyo-parse";
 import { logSafe, scrub } from "@/lib/scrub";
 
 const REVISION = "2025-04-15";
 const BASE = "https://a.klaviyo.com";
+const CAMPAIGN_CHANNELS = ["email", "sms", "mobile_push"] as const;
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function klaviyo(path: string, key: string, init?: { method?: string; body?: unknown }) {
-  const response = await fetch(`${BASE}${path}`, {
-    method: init?.method ?? "GET",
-    headers: {
-      Authorization: `Klaviyo-API-Key ${key}`,
-      revision: REVISION,
-      accept: "application/vnd.api+json",
-      "content-type": "application/vnd.api+json",
-    },
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-    cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
-  });
-  const text = await response.text();
+  let response: Response | null = null;
+  let text = "";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    response = await fetch(`${BASE}${path}`, {
+      method: init?.method ?? "GET",
+      headers: {
+        Authorization: `Klaviyo-API-Key ${key}`,
+        revision: REVISION,
+        accept: "application/vnd.api+json",
+        "content-type": "application/vnd.api+json",
+      },
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+    text = await response.text();
+    if (response.status !== 429 || attempt === 1) break;
+    await wait(retryWaitMs(response.headers.get("retry-after")));
+  }
+  if (!response) throw new Error("Klaviyo request failed.");
   let body: unknown = null;
   try {
     body = text ? JSON.parse(text) : null;
@@ -33,7 +50,11 @@ async function klaviyo(path: string, key: string, init?: { method?: string; body
     throw new Error(`Klaviyo returned a non-JSON response (HTTP ${response.status}).`);
   }
   if (!response.ok) {
-    throw new Error(scrub(klaviyoError(body) || `Klaviyo request failed (HTTP ${response.status}).`));
+    const detail =
+      response.status === 429
+        ? "Klaviyo asked Retention to slow down. Wait a minute, then sync again."
+        : klaviyoError(body) || `Klaviyo request failed (HTTP ${response.status}).`;
+    throw new Error(scrub(detail));
   }
   return body;
 }
@@ -51,8 +72,7 @@ async function collect(path: string, key: string) {
 }
 
 export async function pullKlaviyo(key: string) {
-  const metricPages = await collect("/api/metrics", key);
-  const metricId = metricPages.map(parsePlacedOrderMetric).find(Boolean) ?? null;
+  const metricId = await placedOrderId(key);
   if (!metricId) {
     throw new Error("Klaviyo is connected, but no metric named Placed Order was found, so flow and campaign revenue cannot be requested.");
   }
@@ -74,8 +94,12 @@ export async function pullKlaviyo(key: string) {
     flows.push(...parseValuesReport(flowBody, window, ["flow_id"]));
     campaigns.push(...parseValuesReport(campaignBody, window, ["campaign_id"]));
   }
+  const currency = (await accountCurrency(key)) ?? "GBP";
+  for (const row of [...flows, ...campaigns]) {
+    if (!/^[A-Z]{3}$/.test(row.currency)) row.currency = currency;
+  }
   const flowNames = await names("/api/flows?fields[flow]=name", key);
-  const campaignNames = await names("/api/campaigns?fields[campaign]=name", key);
+  const campaignNames = await campaignNameMap(key);
   for (const flow of flows) flow.name = flowNames.get(flow.id) ?? flow.id;
   for (const campaign of campaigns) campaign.name = campaignNames.get(campaign.id) ?? campaign.id;
   const listed = await listsFor(key);
@@ -88,6 +112,25 @@ export async function pullKlaviyo(key: string) {
   };
 }
 
+async function placedOrderId(key: string) {
+  try {
+    const id = choosePlacedOrder((await collect(shopifyMetricsPath(), key)).flatMap(parseMetricCatalog));
+    if (id) return id;
+  } catch (error) {
+    logSafe("klaviyo shopify metrics", error);
+  }
+  return choosePlacedOrder((await collect("/api/metrics?fields[metric]=name,integration.name", key)).flatMap(parseMetricCatalog));
+}
+
+async function accountCurrency(key: string) {
+  try {
+    return parseAccountCurrency(await klaviyo("/api/accounts", key));
+  } catch (error) {
+    logSafe("klaviyo account", error);
+    return null;
+  }
+}
+
 async function names(path: string, key: string) {
   try {
     return new Map((await collect(path, key)).flatMap(parseNamedResources).map((item) => [item.id, item.name]));
@@ -95,6 +138,20 @@ async function names(path: string, key: string) {
     logSafe("klaviyo names", error);
     return new Map<string, string>();
   }
+}
+
+async function campaignNameMap(key: string) {
+  const map = new Map<string, string>();
+  for (const channel of CAMPAIGN_CHANNELS) {
+    try {
+      for (const item of (await collect(campaignNamePath(channel), key)).flatMap(parseNamedResources)) {
+        map.set(item.id, item.name);
+      }
+    } catch (error) {
+      logSafe("klaviyo campaign names", error);
+    }
+  }
+  return map;
 }
 
 async function listsFor(key: string) {

@@ -1,3 +1,4 @@
+import { KlaviyoNotice } from "@/components/klaviyo-notice";
 import { SendTable } from "@/components/retention-tables";
 import { loadRetention } from "@/lib/retention/load";
 
@@ -13,6 +14,7 @@ export default async function RetentionCampaignsPage() {
           <p className="muted">Revenue, opens, clicks and unsubscribes for sent campaigns.</p>
         </div>
       </div>
+      <KlaviyoNotice />
       {!loaded.ok ? <p className="alert warn">We could not read the database. Check the disk and DATABASE_URL.</p> : null}
       {loaded.ok ? (
         <>

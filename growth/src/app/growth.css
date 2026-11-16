@@ -111,6 +111,8 @@ table.data td.name { min-width: 160px; }
 }
 .note header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .warn-copy { background: var(--warning-soft); border-radius: 10px; padding: 10px 12px; color: var(--text-primary); }
+.steps { margin: 8px 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 8px; }
+.steps li { color: var(--text-secondary); font-size: 14px; }
 
 @media (max-width: 980px) {
   .stats, .connections, .target-grid, .split, .figure-row, .pair { grid-template-columns: 1fr 1fr; }
