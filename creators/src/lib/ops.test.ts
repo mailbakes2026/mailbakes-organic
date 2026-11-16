@@ -167,7 +167,8 @@ test("a missing orders env does not call the orders app", async () => {
     }) as typeof fetch);
     assert.equal(called, false);
     assert.equal(result.status, "not_configured");
-    assert.match(opsStatusLabel(result.status, result.error), /Not configured/);
+    assert.match(opsStatusLabel(result.status, result.error), /OPS_APP_URL/);
+    assert.match(result.error, /OPS_API_TOKEN/);
   } finally {
     if (previousUrl === undefined) delete process.env.OPS_APP_URL;
     else process.env.OPS_APP_URL = previousUrl;

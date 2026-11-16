@@ -9,17 +9,18 @@ async function defaultRun() {
   await matchTiktokOrders();
 }
 
-/** Every ten minutes. Does not run at startup. Overlapping runs share the in-process match. */
+function runOnce(run: () => Promise<unknown>) {
+  void Promise.resolve(run()).catch(() => {
+    console.error("TikTok order match did not finish.");
+  });
+}
+
+/** Once at startup, then every ten minutes. Overlapping runs share the in-process match. */
 export function startTiktokMatchSchedule(run: () => Promise<unknown> = defaultRun) {
   const scope = globalThis as MatchGlobal;
   if (scope[FLAG]) return;
   scope[FLAG] = true;
-  const timer = setInterval(() => {
-    void Promise.resolve()
-      .then(run)
-      .catch(() => {
-        console.error("TikTok order match did not finish.");
-      });
-  }, MATCH_INTERVAL_MS);
+  runOnce(run);
+  const timer = setInterval(() => runOnce(run), MATCH_INTERVAL_MS);
   if (typeof timer === "object" && timer && "unref" in timer && typeof timer.unref === "function") timer.unref();
 }

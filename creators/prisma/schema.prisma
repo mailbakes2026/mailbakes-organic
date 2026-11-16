@@ -26,6 +26,14 @@ model AppMeta {
   createdAt DateTime @default(now())
 }
 
+// The latest TikTok order pull. One row, replaced each time the sync runs.
+model SyncState {
+  id      String   @id
+  at      DateTime
+  ok      Boolean
+  message String
+}
+
 model Creator {
   id             String     @id @default(cuid())
   name           String

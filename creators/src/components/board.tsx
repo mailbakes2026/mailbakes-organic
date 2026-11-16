@@ -1,20 +1,22 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CreatorCard } from "@/components/creator-card";
 import { Drawer } from "@/components/drawer";
 import { StatsTiles } from "@/components/stats-tiles";
 import { useCreators, type MatchReportView, type ReviewView, type UnclaimedView } from "@/components/use-creators";
 import { useStageDrag } from "@/components/use-drag";
+import { describeSync, type TiktokSync } from "@/lib/sync-status";
 import { PIPELINE, SIDE_LANES, STAGES, type StageSlug } from "@/lib/stages";
 import { needsTiktokMatch } from "@/lib/ops";
 import type { CreatorDTO } from "@/lib/types";
 import { matchesQuery } from "@/lib/search";
 import type { CreatorFields } from "@/lib/types";
 
-export function Board({ creators }: { creators: CreatorDTO[] }) {
+export function Board({ creators, sync: initialSync }: { creators: CreatorDTO[]; sync: TiktokSync | null }) {
   const { rows, error, setError, pending, matching, matchReport, patch, remove, syncOrders, matchOrders, confirmOrder, sendOrder } = useCreators(creators);
+  const [sync, setSync] = useState<TiktokSync | null>(initialSync);
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<StageSlug | "">("");
   const [rushOnly, setRushOnly] = useState(false);
@@ -46,6 +48,30 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
     if (!current || current.stage === stage) return;
     await patch(id, { stage });
   }
+
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/tiktok/sync")
+      .then(async (response) => {
+        const data = (await response.json().catch(() => ({}))) as { sync?: TiktokSync | null };
+        if (!cancel && data.sync) setSync(data.sync);
+      })
+      .catch(() => {
+        /* The banner keeps the last status the page already has. */
+      });
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!matchReport?.syncedAt) return;
+    setSync({
+      at: matchReport.syncedAt,
+      ok: matchReport.state === "ready",
+      message: matchReport.summary,
+    });
+  }, [matchReport]);
 
   const drag = useStageDrag(move);
   const open = rows.find((row) => row.id === openId) ?? null;
@@ -117,8 +143,14 @@ export function Board({ creators }: { creators: CreatorDTO[] }) {
     );
   }
 
+  const syncLine = describeSync(sync);
+
   return (
     <>
+      <p className={`alert ${syncLine.ok ? "ok" : "crit"}`} role={syncLine.ok ? "status" : "alert"}>
+        {matching ? "Syncing TikTok orders…" : syncLine.text}
+      </p>
+      {rows.length === 0 ? <p className="alert warn">No creators are stored yet.</p> : null}
       <StatsTiles creators={rows} />
       {error ? (
         <p className="alert crit" role="alert">

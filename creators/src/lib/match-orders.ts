@@ -1,5 +1,5 @@
 import { matchStatusClass } from "./match-status.ts";
-import { readTiktokOrderId } from "./ops.ts";
+import { OPS_BAD_TOKEN, OPS_SETUP, readTiktokOrderId } from "./ops.ts";
 
 export { matchStatusClass };
 
@@ -76,7 +76,7 @@ export function matchSummary(input: {
   failed?: number;
 }) {
   if (input.state === "not_ready") return NOT_READY;
-  if (input.state === "not_configured") return "Not configured. Set OPS_APP_URL and OPS_API_TOKEN on the server.";
+  if (input.state === "not_configured") return OPS_SETUP;
   if (input.state === "busy") return "Matching orders…";
   if (input.state === "failed") return input.error ? `Failed: ${publicError(input.error)}` : "Failed.";
   const sent = input.sent ? ` Sent ${input.sent}.` : "";
@@ -173,10 +173,7 @@ function readParcel(raw: unknown): { parcel?: TikTokParcel; review?: ReviewItem 
 export function interpretTiktokOrders(status: number, body: string): { state: "ready"; parcels: TikTokParcel[]; review: ReviewItem[] } | { state: "not_ready" } | { state: "failed"; error: string } {
   const clean = body.replace(/bearer\s+\S+/gi, "bearer").replace(/\s+/g, " ").trim();
   if (status === 404 || status === 405 || status === 501) return { state: "not_ready" };
-  if (status === 401) {
-    if (/not signed in/i.test(clean)) return { state: "not_ready" };
-    return { state: "failed", error: "Bad token" };
-  }
+  if (status === 401) return { state: "failed", error: OPS_BAD_TOKEN };
   if (status >= 300 && status < 400) return { state: "failed", error: "The orders app redirected the check." };
   if (status < 200 || status >= 300) return { state: "failed", error: `The orders app returned ${status}.` };
   if (!clean.startsWith("{") && !clean.startsWith("[")) return { state: "not_ready" };
