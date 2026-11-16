@@ -34,6 +34,7 @@ export type MatchReportView = {
   review: ReviewView[];
   unclaimed: UnclaimedView[];
   older: UnclaimedView[];
+  syncedAt?: string;
 };
 
 export type MatchOutcome = { ok: true; report: MatchReportView } | { ok: false; error: string };
@@ -235,7 +236,9 @@ export function useCreators(initial: CreatorDTO[]) {
         return { ok: false, error: "Sign in required." };
       }
       if (!response.ok || !data.summary || !data.lines || !data.review) {
-        return { ok: false, error: data.error || "Match didn't finish." };
+        const message = data.error || "Match didn't finish.";
+        setError(message);
+        return { ok: false, error: message };
       }
       const report: MatchReportView = {
         state: data.state || "failed",

@@ -18,10 +18,16 @@ export function needsTiktokMatch(row: { tiktokOrderId: string; tiktokMessage: st
   return row.tiktokOrderId.trim() === "" || row.tiktokMessage.trim() === "";
 }
 
+export const OPS_SETUP =
+  "TikTok orders are not syncing. In Render, open the mailbakes-creators service, then Environment, and set OPS_APP_URL to https://mailbakes-ops.onrender.com and OPS_API_TOKEN to the orders app machine token.";
+
+export const OPS_BAD_TOKEN =
+  "The orders app rejected OPS_API_TOKEN. In Render, open the mailbakes-creators service, then Environment, and paste the current machine token from the orders app.";
+
 export function opsStatusLabel(status: string, error: string) {
   if (status === "sent") return "Sent to the orders app.";
   if (status === "failed") return error ? `Failed: ${error}` : "Failed.";
-  if (status === "not_configured") return "Not configured. Set OPS_APP_URL and OPS_API_TOKEN on the server.";
+  if (status === "not_configured") return OPS_SETUP;
   return "Not sent yet.";
 }
 
@@ -189,7 +195,7 @@ export async function postTiktokMessage(
   reference = "",
 ): Promise<OpsResult> {
   const target = opsTarget();
-  if (!target) return { status: "not_configured", error: "Set OPS_APP_URL and OPS_API_TOKEN on the server." };
+  if (!target) return { status: "not_configured", error: OPS_SETUP };
   const payload: { message: string; tiktok_order_id?: string; reference?: string } = { message };
   if (tiktokOrderId) payload.tiktok_order_id = tiktokOrderId;
   if (reference) payload.reference = reference;
@@ -222,7 +228,7 @@ export async function postTiktokNoMessage(
   fetchImpl: typeof fetch = fetch,
 ): Promise<OpsResult> {
   const target = opsTarget();
-  if (!target) return { status: "not_configured", error: "Set OPS_APP_URL and OPS_API_TOKEN on the server." };
+  if (!target) return { status: "not_configured", error: OPS_SETUP };
   const payload: { tiktok_order_id?: string; reference?: string } = {};
   if (tiktokOrderId) payload.tiktok_order_id = tiktokOrderId;
   if (reference) payload.reference = reference;

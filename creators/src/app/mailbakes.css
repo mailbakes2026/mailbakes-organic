@@ -195,6 +195,7 @@ textarea { resize: vertical; }
 }
 .alert.crit { background: var(--serious-soft); }
 .alert.warn { background: var(--warning-soft); }
+.alert.ok { background: var(--good-soft); }
 .alert .subtle { margin-left: auto; color: inherit; font-weight: 700; }
 .eyebrow {
   font-size: 10.5px;

@@ -1,9 +1,20 @@
 import { requireSession } from "@/lib/guard";
 import { json } from "@/lib/http";
 import { syncSummary } from "@/lib/ops";
-import { ensureSeeded, getCreator, syncUnsentTiktokMessages } from "@/lib/records";
+import { ensureSeeded, getCreator, latestTiktokSync, syncUnsentTiktokMessages } from "@/lib/records";
 
 export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const denied = await requireSession();
+  if (denied) return denied;
+  try {
+    return json({ sync: await latestTiktokSync() });
+  } catch (error) {
+    console.error(error);
+    return json({ error: "We couldn't read the last TikTok sync." }, 503);
+  }
+}
 
 export async function POST() {
   const denied = await requireSession();

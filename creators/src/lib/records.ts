@@ -346,6 +346,7 @@ export type MatchReport = {
   unclaimed: UnclaimedOrder[];
   older: UnclaimedOrder[];
   creators: CreatorDetail[];
+  syncedAt: string;
 };
 
 let matchInflight: Promise<MatchReport> | null = null;
@@ -362,8 +363,9 @@ function reportFrom(
   creators: CreatorDetail[] = [],
   unclaimed: UnclaimedOrder[] = [],
   older: UnclaimedOrder[] = [],
+  syncedAt = new Date().toISOString(),
 ): MatchReport {
-  return { state, summary, lines, review, unclaimed, older, creators };
+  return { state, summary, lines, review, unclaimed, older, creators, syncedAt };
 }
 
 async function applyTiktokMatch(now: Date): Promise<MatchReport> {
@@ -457,11 +459,43 @@ async function applyTiktokMatch(now: Date): Promise<MatchReport> {
   );
 }
 
+const TIKTOK_SYNC_ID = "tiktok-orders";
+
+export async function recordTiktokSync(ok: boolean, message: string, at = new Date()) {
+  const clean = message.replace(/bearer\s+\S+/gi, "bearer").replace(/\s+/g, " ").trim().slice(0, 500);
+  try {
+    await prisma.syncState.upsert({
+      where: { id: TIKTOK_SYNC_ID },
+      create: { id: TIKTOK_SYNC_ID, at, ok, message: clean },
+      update: { at, ok, message: clean },
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+export async function latestTiktokSync() {
+  const row = await prisma.syncState.findUnique({ where: { id: TIKTOK_SYNC_ID } });
+  if (!row) return null;
+  return { at: row.at.toISOString(), ok: row.ok, message: row.message };
+}
+
 export function matchTiktokOrders(now = new Date()) {
   if (matchInflight) return matchInflight;
-  matchInflight = applyTiktokMatch(now).finally(() => {
-    matchInflight = null;
-  });
+  matchInflight = applyTiktokMatch(now)
+    .then(async (report) => {
+      await recordTiktokSync(report.state === "ready", report.summary, new Date(report.syncedAt));
+      return report;
+    })
+    .catch(async (error) => {
+      console.error(error);
+      const summary = "TikTok orders did not sync. Try Match orders again.";
+      await recordTiktokSync(false, summary, now);
+      return reportFrom("failed", summary);
+    })
+    .finally(() => {
+      matchInflight = null;
+    });
   return matchInflight;
 }
 

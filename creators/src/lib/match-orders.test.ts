@@ -14,6 +14,7 @@ import {
 } from "./match-orders.ts";
 import { opsGet } from "./ops.ts";
 import { MATCH_INTERVAL_MS, startTiktokMatchSchedule } from "./match-schedule.ts";
+import { describeSync } from "./sync-status.ts";
 
 const SECRET = "ops-test-token-do-not-print";
 
@@ -235,14 +236,29 @@ test("the orders list accepts text IDs and treats a missing route as not ready",
   assert.equal(interpretTiktokOrders(404, "not found").state, "not_ready");
   assert.equal(interpretTiktokOrders(405, "").state, "not_ready");
   assert.equal(interpretTiktokOrders(501, "").state, "not_ready");
-  assert.equal(interpretTiktokOrders(401, '{"error":"Not signed in"}').state, "not_ready");
+  const unsigned = interpretTiktokOrders(401, '{"error":"Not signed in"}');
+  assert.equal(unsigned.state, "failed");
+  if (unsigned.state === "failed") assert.match(unsigned.error, /OPS_API_TOKEN/);
   assert.equal(interpretTiktokOrders(200, "<!doctype html><html></html>").state, "not_ready");
   assert.equal(interpretTiktokOrders(200, '{"ok":true}').state, "not_ready");
   assert.equal(interpretTiktokOrders(200, "not json").state, "not_ready");
 
   const denied = interpretTiktokOrders(401, `Bad token bearer ${SECRET}`);
-  assert.deepEqual(denied, { state: "failed", error: "Bad token" });
+  assert.equal(denied.state, "failed");
   assert.equal(JSON.stringify(denied).includes(SECRET), false);
+  if (denied.state === "failed") assert.match(denied.error, /OPS_API_TOKEN/);
+  const missing = describeSync(null);
+  assert.equal(missing.ok, false);
+  assert.match(missing.text, /have not synced yet/);
+  const failedSync = describeSync({ at: "2026-11-16T15:52:00.000Z", ok: false, message: "The orders app rejected OPS_API_TOKEN." });
+  assert.equal(failedSync.ok, false);
+  assert.match(failedSync.text, /OPS_API_TOKEN/);
+  assert.match(failedSync.text, /Last synced/);
+  assert.match(failedSync.text, /16 Nov 2026/);
+  const okSync = describeSync({ at: "2026-11-16T15:52:00.000Z", ok: true, message: "Matched 1. Needs review 0. No order found 7. Orders with no creator 2." });
+  assert.equal(okSync.ok, true);
+  assert.match(okSync.text, /^Last synced /);
+  assert.match(okSync.text, /Matched 1/);
 
   const empty = interpretTiktokOrders(200, '{"orders":[]}');
   assert.equal(empty.state, "ready");
@@ -299,7 +315,7 @@ test("the machine orders route is a bearer GET and the token stays out of the re
   }
 });
 
-test("the match schedule waits ten minutes and does not run at startup", () => {
+test("the match schedule runs at startup and then every ten minutes", () => {
   assert.equal(MATCH_INTERVAL_MS, 600_000);
   const original = globalThis.setInterval;
   const scope = globalThis as typeof globalThis & { __mbTiktokMatch?: boolean };
@@ -322,7 +338,7 @@ test("the match schedule waits ten minutes and does not run at startup", () => {
     });
     assert.equal(registrations, 1);
     assert.equal(delay, 600_000);
-    assert.equal(ran, false);
+    assert.equal(ran, true);
   } finally {
     globalThis.setInterval = original;
     delete scope.__mbTiktokMatch;
