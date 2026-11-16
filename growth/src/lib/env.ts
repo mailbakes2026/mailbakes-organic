@@ -1,21 +1,26 @@
 export function appName() {
-  return process.env.APP_NAME?.trim() || "Millie";
+  return envValue("APP_NAME") || "Millie";
 }
 
 export function appPassword() {
-  const value = process.env.APP_PASSWORD ?? "";
+  const value = envValue("APP_PASSWORD");
   if (value.length < 10) return null;
   return value;
 }
 
 export function sessionSecret() {
-  const value = process.env.SESSION_SECRET ?? "";
+  const value = envValue("SESSION_SECRET");
   if (value.length < 32) return null;
   return value;
 }
 
+export function envValue(name: string) {
+  const value = process.env[name];
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function token(name: string) {
-  const value = (process.env[name] ?? "").trim();
+  const value = envValue(name);
   if (value.length < 16) return null;
   return value;
 }
@@ -29,11 +34,22 @@ export function retentionToken() {
 }
 
 export function missingEnv(names: string[]) {
-  return names.filter((name) => !(process.env[name] ?? "").trim());
+  return names.filter((name) => !envValue(name));
+}
+
+export function metaToken() {
+  return envValue("META_ACCESS_TOKEN");
+}
+
+export function metaAccountId() {
+  return envValue("META_AD_ACCOUNT_ID");
 }
 
 export function metaMissing() {
-  return missingEnv(["META_ACCESS_TOKEN", "META_AD_ACCOUNT_ID"]);
+  const missing = [];
+  if (!metaToken()) missing.push("META_ACCESS_TOKEN");
+  if (!metaAccountId()) missing.push("META_AD_ACCOUNT_ID");
+  return missing;
 }
 
 export function klaviyoMissing() {

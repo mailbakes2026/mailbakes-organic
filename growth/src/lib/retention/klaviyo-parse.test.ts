@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseLists, parsePlacedOrderMetric, parseValuesReport, safeKlaviyoNext } from "./klaviyo-parse.ts";
+import {
+  campaignNamePath,
+  choosePlacedOrder,
+  parseAccountCurrency,
+  parseLists,
+  parseMetricCatalog,
+  parsePlacedOrderMetric,
+  parseValuesReport,
+  retryWaitMs,
+  safeKlaviyoNext,
+  shopifyMetricsPath,
+} from "./klaviyo-parse.ts";
 
 test("flow messages are summed and rates are recomputed", () => {
   const rows = parseValuesReport(
@@ -51,4 +62,24 @@ test("Placed Order is matched by name and list counts can be absent", () => {
   assert.equal(lists[0]?.profiles, null);
   assert.equal(safeKlaviyoNext("https://a.klaviyo.com/api/flows?page[cursor]=abc"), "/api/flows?page[cursor]=abc");
   assert.equal(safeKlaviyoNext("https://evil.example/api/flows"), null);
+});
+
+test("Placed Order prefers the Shopify metric and campaign lists require a channel", () => {
+  const metrics = parseMetricCatalog({
+    data: [
+      { id: "api", attributes: { name: "Placed Order", integration: { name: "API" } } },
+      { id: "shop", attributes: { name: "Placed Order", integration: { name: "Shopify" } } },
+      { id: "other", attributes: { name: "Active on Site", integration: { name: "Shopify" } } },
+    ],
+  });
+  assert.equal(choosePlacedOrder(metrics), "shop");
+  assert.equal(choosePlacedOrder([{ id: "only", name: "placed order", integration: "" }]), "only");
+  assert.match(shopifyMetricsPath(), /integration\.name/);
+  assert.match(decodeURIComponent(campaignNamePath("email")), /equals\(messages\.channel,'email'\)/);
+  assert.match(decodeURIComponent(campaignNamePath("sms")), /messages\.channel,'sms'/);
+  assert.equal(parseAccountCurrency({ data: [{ attributes: { preferred_currency: "GBP" } }] }), "GBP");
+  assert.equal(parseAccountCurrency({ data: [{ attributes: { preferred_currency: "gbp" } }] }), null);
+  assert.equal(retryWaitMs(null), 2_000);
+  assert.equal(retryWaitMs("30"), 15_000);
+  assert.equal(retryWaitMs("1"), 1_000);
 });

@@ -1,5 +1,6 @@
 export function scrub(value: string) {
   return value
+    .replace(/Klaviyo-API-Key\s+\S+/gi, "Klaviyo-API-Key redacted")
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer redacted")
     .replace(/access_token=[^&\s]+/gi, "access_token=redacted")
     .replace(/client_secret=[^&\s]+/gi, "client_secret=redacted")

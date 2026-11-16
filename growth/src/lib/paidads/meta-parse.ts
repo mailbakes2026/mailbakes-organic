@@ -22,7 +22,7 @@ export function purchaseFromInsight(actions: unknown, actionValues: unknown) {
   return { orders: 0, revenue: 0, used: null as string | null };
 }
 
-export type MetaLevel = "account" | "campaign" | "adset";
+export type MetaLevel = "account" | "campaign" | "adset" | "ad";
 
 export type ParsedInsight = {
   platform: "meta";
@@ -32,6 +32,8 @@ export type ParsedInsight = {
   campaignName: string;
   adsetId: string;
   adsetName: string;
+  adId: string;
+  adName: string;
   spendPence: number;
   revenuePence: number;
   orders: number;
@@ -61,6 +63,8 @@ export function parseInsightRow(value: unknown, level: MetaLevel): ParsedInsight
   if (spend === null) return null;
   const currency = text(row.account_currency).toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) return null;
+  const adId = text(row.ad_id);
+  if (level === "ad" && !adId) return null;
   const purchase = purchaseFromInsight(row.actions, row.action_values);
   const revenue = toPence(String(purchase.revenue));
   return {
@@ -71,6 +75,8 @@ export function parseInsightRow(value: unknown, level: MetaLevel): ParsedInsight
     campaignName: text(row.campaign_name).slice(0, 200),
     adsetId: text(row.adset_id),
     adsetName: text(row.adset_name).slice(0, 200),
+    adId,
+    adName: text(row.ad_name).slice(0, 200),
     spendPence: spend,
     revenuePence: revenue ?? 0,
     orders: purchase.orders,
@@ -100,6 +106,8 @@ export function safeGraphNext(value: string | null) {
   try {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.hostname !== "graph.facebook.com") return null;
+    url.searchParams.delete("access_token");
+    url.searchParams.delete("appsecret_proof");
     return url.toString();
   } catch {
     return null;

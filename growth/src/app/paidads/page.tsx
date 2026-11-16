@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { ConnectionCard } from "@/components/connection";
+import { MetaSnapshotCard } from "@/components/meta-snapshot";
 import { DailyTable, PaidFigures, WeekCard, WeekTable } from "@/components/paid-figures";
 import { RangeLinks } from "@/components/range-links";
 import { SyncButton } from "@/components/sync-button";
@@ -31,7 +32,7 @@ export default async function PaidOverview({ searchParams }: { searchParams: Pro
       <div className="page-head">
         <div>
           <h1>Paid Ads</h1>
-          <p className="muted">Meta and Google, in one place. Figures appear only when a row has been stored.</p>
+          <p className="muted">Meta spend, purchases, ROAS and blended MER against Shopify. A blank day has not been stored.</p>
         </div>
         <RangeLinks base={base} range={range} />
       </div>
@@ -46,6 +47,7 @@ export default async function PaidOverview({ searchParams }: { searchParams: Pro
         </p>
       ) : null}
       {metaMissing().length === 0 ? <SyncButton href="/api/paidads/sync" label="Sync Meta" /> : null}
+      {loaded.ok ? <MetaSnapshotCard snapshot={loaded.view.meta} /> : null}
       {loaded.ok ? (
         <>
           <div style={{ height: 12 }} />

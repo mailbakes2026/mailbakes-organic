@@ -71,3 +71,11 @@ export function personalCalendarHints() {
 export function googleRedirectUri() {
   return `${appUrl()}/api/google/callback`;
 }
+
+export function microsoftConfigured() {
+  return Boolean(process.env.MICROSOFT_CLIENT_ID?.trim() && process.env.MICROSOFT_CLIENT_SECRET?.trim());
+}
+
+export function microsoftRedirectUri() {
+  return `${appUrl()}/api/microsoft/callback`;
+}

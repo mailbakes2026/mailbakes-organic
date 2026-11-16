@@ -32,12 +32,12 @@ export function DateGroups<T extends ScheduleItem & { id: string }>({
         );
         if (group.past) {
           return (
-            <details key={group.id} className="date-group past">
+            <details key={group.id} className="date-past">
               <summary className="date-heading">
                 Past
                 <span className="date-count">{group.items.length}</span>
               </summary>
-              {body}
+              <div className="date-group">{body}</div>
             </details>
           );
         }

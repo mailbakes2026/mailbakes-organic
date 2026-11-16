@@ -33,6 +33,25 @@ model GoogleAccount {
   updatedAt       DateTime  @updatedAt
 }
 
+// Extra inboxes: a personal Gmail (IMAP with an app password) or Outlook
+// (Microsoft login). secretEnc is the app password or the Microsoft refresh
+// token, encrypted. The work Google login stays in GoogleAccount.
+model MailAccount {
+  id             String    @id @default(cuid())
+  provider       String
+  email          String
+  label          String    @default("")
+  secretEnc      String
+  accessTokenEnc String    @default("")
+  expiresAt      DateTime?
+  lastError      String    @default("")
+  lastSyncedAt   DateTime?
+  connectedAt    DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([provider, email])
+}
+
 // A snapshot of the inbox, written only when Refresh is pressed.
 model InboxMessage {
   id          String     @id
@@ -48,8 +67,13 @@ model InboxMessage {
   attachments Json       @default("[]")
   gmailUrl    String     @default("")
   fetchedAt   DateTime   @default(now())
+  // "work" is the Google login above. Anything else is a MailAccount id.
+  accountId   String     @default("work")
+  // The message id inside that mailbox (Gmail id, IMAP uid or Outlook id).
+  remoteId    String     @default("")
 
   @@index([group])
+  @@index([accountId])
   @@index([receivedAt])
 }
 
@@ -135,4 +159,126 @@ model PayslipLine {
   detail      String         @default("")
 
   @@index([runId])
+}
+
+// Millie's own appointments, added in the app. Never written to Google Calendar.
+// Days are calendar dates and times are "HH:MM" Europe/London wall-clock, so a
+// 10:00 hair appointment stays at 10:00 whatever the clocks do.
+enum AppointmentType {
+  HAIR
+  AESTHETICS
+  WORK
+  MEETING
+  MEAL
+  PARTY
+  DINNER
+  TRAVEL
+  OTHER
+}
+
+enum AppointmentReminder {
+  NONE
+  MORNING
+  DAY_BEFORE
+  BOTH
+}
+
+model Appointment {
+  id                String              @id @default(cuid())
+  title             String
+  type              AppointmentType     @default(OTHER)
+  startDay          DateTime            @db.Date
+  // Last day it covers. Same as startDay unless it is a multi-day all-day booking.
+  endDay            DateTime            @db.Date
+  allDay            Boolean             @default(false)
+  startTime         String              @default("")
+  endTime           String              @default("")
+  location          String              @default("")
+  notes             String              @default("")
+  reminder          AppointmentReminder @default(NONE)
+  morningSentAt     DateTime?
+  dayBeforeSentAt   DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([startDay])
+  @@index([endDay])
+}
+
+// ---------------------------------------------------------------- diary
+// One page per day: a checklist, free notes, and debriefs sent in by the other apps.
+
+// A checklist line. Unticked lines from earlier days move to today when the diary
+// opens; carriedFrom keeps the day it was first written.
+model DiaryItem {
+  id          String    @id @default(cuid())
+  day         DateTime  @db.Date
+  text        String
+  doneAt      DateTime?
+  carriedFrom DateTime? @db.Date
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([day])
+  @@index([doneAt])
+}
+
+// Free notes for a day. One row per day.
+model DiaryNote {
+  day       DateTime @id @db.Date
+  body      String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+// A short report from another app (Operations, Daily Orders, Finance, Conversion,
+// Organic). One per source, kind and day; a newer copy replaces the older one.
+model Debrief {
+  id         String   @id @default(cuid())
+  day        DateTime @db.Date
+  source     String
+  kind       String   @default("daily")
+  title      String
+  lines      Json     @default("[]")
+  link       String   @default("")
+  receivedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([source, kind, day])
+  @@index([day])
+}
+
+// A phone (or browser) that has turned on notifications.
+model PushDevice {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  label     String   @default("")
+  failures  Int      @default(0)
+  lastOkAt  DateTime?
+  createdAt DateTime @default(now())
+}
+
+// Every notification, from this app or sent in by the other MailBakes apps.
+// The same key twice updates the text but only buzzes the phone once.
+model Notice {
+  id        String    @id @default(cuid())
+  source    String
+  key       String    @unique
+  title     String
+  body      String    @default("")
+  url       String    @default("")
+  pushedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([createdAt])
+}
+
+// Small settings: the push keys and which sources are muted.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

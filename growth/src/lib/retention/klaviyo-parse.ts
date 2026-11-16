@@ -144,6 +144,45 @@ export function klaviyoError(body: unknown) {
   return "";
 }
 
+export function parseMetricCatalog(body: unknown) {
+  const data = body && typeof body === "object" ? (body as { data?: unknown }).data : null;
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as { id?: unknown; attributes?: { name?: unknown; integration?: { name?: unknown } } };
+    if (typeof record.id !== "string" || !record.id || typeof record.attributes?.name !== "string") return [];
+    const integration = record.attributes.integration?.name;
+    return [{ id: record.id, name: record.attributes.name, integration: typeof integration === "string" ? integration : "" }];
+  });
+}
+
+export function choosePlacedOrder(metrics: { id: string; name: string; integration: string }[]) {
+  const placed = metrics.filter((metric) => metric.name.toLowerCase() === "placed order");
+  return placed.find((metric) => metric.integration === "Shopify")?.id ?? placed[0]?.id ?? null;
+}
+
+export function shopifyMetricsPath() {
+  return `/api/metrics?filter=${encodeURIComponent('equals(integration.name,"Shopify")')}&fields[metric]=name,integration.name`;
+}
+
+export function campaignNamePath(channel: "email" | "sms" | "mobile_push") {
+  return `/api/campaigns?fields[campaign]=name&filter=${encodeURIComponent(`equals(messages.channel,'${channel}')`)}`;
+}
+
+export function parseAccountCurrency(body: unknown) {
+  const data = body && typeof body === "object" ? (body as { data?: unknown }).data : null;
+  const first = Array.isArray(data) ? data[0] : null;
+  const currency = first && typeof first === "object" ? (first as { attributes?: { preferred_currency?: unknown } }).attributes?.preferred_currency : null;
+  return typeof currency === "string" && /^[A-Z]{3}$/.test(currency) ? currency : null;
+}
+
+export function retryWaitMs(header: string | null) {
+  if (header === null || !header.trim()) return 2_000;
+  const seconds = Number(header);
+  if (!Number.isFinite(seconds) || seconds < 0) return 2_000;
+  return Math.min(15_000, Math.round(seconds * 1000));
+}
+
 export function safeKlaviyoNext(value: unknown) {
   if (typeof value !== "string" || !value) return null;
   try {

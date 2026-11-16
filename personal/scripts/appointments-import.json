@@ -1,0 +1,23 @@
+{
+  "appointments": [
+    { "title": "Aesthetics, Maryna", "type": "Aesthetics", "startDay": "2026-10-26", "startTime": "14:15" },
+    { "title": "Hair, Ashley", "type": "Hair", "startDay": "2026-10-28", "startTime": "13:30" },
+    { "title": "Baltic Offices", "type": "Work", "startDay": "2026-10-29", "allDay": true },
+    { "title": "Meeting, Jess", "type": "Meeting", "startDay": "2026-10-29", "startTime": "13:00", "location": "Baltic Offices" },
+    { "title": "Mum's birthday", "type": "Meal", "startDay": "2026-10-30", "startTime": "17:30", "location": "Spire" },
+    { "title": "Train Liverpool to Euston (to book)", "type": "Travel", "startDay": "2026-11-06", "allDay": true },
+    { "title": "Sofitel Heathrow", "type": "Travel", "startDay": "2026-11-06", "endDay": "2026-11-07", "allDay": true },
+    { "title": "BA342 to Nice", "type": "Travel", "startDay": "2026-11-07", "startTime": "10:45" },
+    { "title": "Carlton, Cannes", "type": "Travel", "startDay": "2026-11-07", "endDay": "2026-11-12", "allDay": true },
+    { "title": "Paul's marathon", "type": "Other", "startDay": "2026-11-08", "allDay": true },
+    { "title": "easyJet to Manchester", "type": "Travel", "startDay": "2026-11-12", "allDay": true },
+    { "title": "Hair, Megan", "type": "Hair", "startDay": "2026-11-14", "startTime": "11:00" },
+    { "title": "Hair, Megan", "type": "Hair", "startDay": "2026-11-19", "startTime": "11:00" },
+    { "title": "Hair, Megan", "type": "Hair", "startDay": "2026-11-27", "startTime": "12:00" },
+    { "title": "Hair, Lyla", "type": "Hair", "startDay": "2026-12-05", "startTime": "11:15" },
+    { "title": "Rachel's 40th", "type": "Party", "startDay": "2026-12-05", "startTime": "18:30", "location": "San Carlo" },
+    { "title": "Hair, Megan", "type": "Hair", "startDay": "2026-12-11", "startTime": "09:15" },
+    { "title": "Hair, Megan", "type": "Hair", "startDay": "2026-12-18", "startTime": "11:00" },
+    { "title": "Hair, Megan", "type": "Hair", "startDay": "2026-12-23", "startTime": "14:30", "notes": "May move earlier" }
+  ]
+}

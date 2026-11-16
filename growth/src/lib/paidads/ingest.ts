@@ -9,6 +9,8 @@ export type IngestRow = {
   campaignName: string;
   adsetId: string;
   adsetName: string;
+  adId: string;
+  adName: string;
   spendPence: number;
   revenuePence: number;
   orders: number;
@@ -80,6 +82,8 @@ export function parsePaidIngest(value: unknown): { ok: true; rows: IngestRow[] }
       campaignName,
       adsetId,
       adsetName,
+      adId: "",
+      adName: "",
       spendPence,
       revenuePence,
       orders,

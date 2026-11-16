@@ -87,7 +87,7 @@ Set these on the service. Do not commit them. The app does not print them.
 | `RETENTION_API_TOKEN` | Millie | For ingest | Bearer token for Retention rows. At least 16 characters. |
 | `META_ACCESS_TOKEN` | Millie | To sync Meta | Marketing API token with ads read access for the ad account. |
 | `META_AD_ACCOUNT_ID` | Millie | To sync Meta | Ad account id, with or without the `act_` prefix. |
-| `KLAVIYO_PRIVATE_API_KEY` | Millie | To sync Klaviyo | Private API key. |
+| `KLAVIYO_PRIVATE_API_KEY` | Millie | To sync Klaviyo | Private API key. Set it on the Render service `mailbakes-growth`, under Environment, then save, rebuild, and deploy. Retention Settings shows whether it is set, and never shows the value. |
 | `SHOPIFY_SHOP` | Millie | To sync Shopify | Shop host, such as `mailbakes.myshopify.com`. No `https://`. |
 | `SHOPIFY_CLIENT_ID` | Millie | To sync Shopify | Client id for the client-credentials grant. |
 | `SHOPIFY_CLIENT_SECRET` | Millie | To sync Shopify | Client secret for that grant. |
@@ -102,7 +102,9 @@ Generate the two API tokens with `openssl rand -base64 32`.
 
 Both `META_ACCESS_TOKEN` and `META_AD_ACCOUNT_ID` must be set or the card says Meta is not connected.
 
-Sync calls `https://graph.facebook.com/v21.0/{act_id}/insights` for account, campaign, and ad set, one row per day, for the last 35 London days. The token is sent as `Authorization: Bearer` and is not written to the log. Spend, impressions, clicks, and purchase actions are stored. Orders and revenue use the first of `omni_purchase`, `purchase`, and `offsite_conversion.fb_pixel_purchase` that is present, so those types are not added together. Meta omits an action type when it is zero, so a row with spend and no purchase action is stored as zero orders and zero revenue. A row with no spend is dropped. Currency comes from `account_currency`. If that is missing, the row is dropped rather than labelled as GBP.
+Sync calls `https://graph.facebook.com/v25.0/{act_id}/insights` for account, campaign, ad set, and ad, one row per day, for the last 35 London days. The token is read from the environment at runtime and sent as `Authorization: Bearer`. It is not written into the page bundle and it is not written to the log. Paging links from Meta have `access_token` removed before the next request. Results use the ad account's own attribution setting. Spend, impressions, clicks, and purchase actions are stored. Orders and revenue use the first of `omni_purchase`, `purchase`, and `offsite_conversion.fb_pixel_purchase` that is present, so those types are not added together. Meta omits an action type when it is zero, so a row with spend and no purchase action is stored as zero orders and zero revenue. A row with no spend field is dropped. An ad row with no ad id is dropped. Currency comes from `account_currency`. If that is missing, the row is dropped rather than labelled as GBP.
+
+Paid Ads shows today, yesterday, and the last 7 London days: Meta spend, purchases, and ROAS, plus blended MER (Shopify revenue ÷ Meta spend). Ads with at least £50 of spend in those 7 days are ranked into a top five and a bottom five by ROAS. Opening Paid Ads or Retention syncs Meta when the last successful sync is more than 6 hours old. Retention shows the same 7-day spend and MER beside the Klaviyo figures, with Shopify revenue split into new and returning customers.
 
 The token needs permission to read that ad account's insights. Sync does not change budgets.
 
@@ -112,11 +114,27 @@ No request is made. The card stays "Not connected".
 
 ### Klaviyo
 
-`KLAVIYO_PRIVATE_API_KEY` is sent as `Authorization: Klaviyo-API-Key` with revision `2025-04-15`. It is not logged.
+Retention calls Klaviyo with the key on this service. The same pattern as Meta: the key lives in the Render environment, and the page shows Connected or Not connected.
 
-Sync looks up a metric named `Placed Order`. If that metric is missing, sync stops and says so, because the values report will not return revenue without it. It then requests flow and campaign value reports for `last_7_days` and `last_30_days` (opens, clicks, unsubscribes, delivered or recipients, conversion value). Flow and campaign names are loaded when Klaviyo returns them. Lists are snapshotted for the London day, including `profile_count` when Klaviyo returns it. A second snapshot on a later day is what makes list growth visible. One snapshot shows the count and a blank change.
+`KLAVIYO_PRIVATE_API_KEY` is read at runtime and sent as `Authorization: Klaviyo-API-Key` with revision `2025-04-15`. It is not logged, not stored in the database, and not written into the page. Settings only says whether the variable is set.
 
-The key needs read access to metrics, flows, campaigns, lists, and reporting.
+Where to set it:
+
+1. In Klaviyo, create a private API key with read access to accounts, metrics, flows, campaigns and lists.
+2. In Render, open the web service `mailbakes-growth` (the service for `retention.mailbakes.com` and `paidads.mailbakes.com`).
+3. Open Environment.
+4. Set `KLAVIYO_PRIVATE_API_KEY`.
+5. Save, rebuild, and deploy.
+
+If the Retention home card already says Connected, leave the variable as it is. Replace it only when you rotate the key in Klaviyo, then redeploy.
+
+Opening Retention, Flows, Campaigns, Customers or Settings syncs Klaviyo when the last successful sync is more than 6 hours old. A failed sync waits 10 minutes before the next try. Sync Klaviyo on the home page, or on Settings, runs it immediately. Meta uses the same 6-hour cadence.
+
+Sync looks up a metric named `Placed Order`, and prefers the Shopify integration when more than one exists. If that metric is missing, sync stops and says so, because the values report will not return revenue without it. It then requests flow and campaign value reports for `last_7_days` and `last_30_days` (opens, clicks, unsubscribes, delivered or recipients, conversion value). Flow names are loaded when Klaviyo returns them. Campaign names are loaded per channel (`email`, `sms`, and `mobile_push`), because the campaigns list requires a channel filter. Lists are snapshotted for the London day, including `profile_count` when Klaviyo returns it. A second snapshot on a later day is what makes list growth visible. One snapshot shows the count and a blank change.
+
+Conversion value is stored in the account currency when Klaviyo returns `preferred_currency`. Otherwise it is stored as GBP. A blank currency on an older row is shown as GBP.
+
+The key needs read access to accounts, metrics, flows, campaigns and lists. Flow and campaign value reports use the flows and campaigns read scopes.
 
 ### Shopify
 

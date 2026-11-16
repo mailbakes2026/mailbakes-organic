@@ -9,6 +9,8 @@ function fact(partial: Partial<Fact> & Pick<Fact, "date" | "level">): Fact {
     campaignName: "",
     adsetId: "",
     adsetName: "",
+    adId: "",
+    adName: "",
     spendPence: 0,
     revenuePence: 0,
     orders: 0,

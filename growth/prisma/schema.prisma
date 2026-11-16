@@ -17,6 +17,8 @@ model AdRow {
   campaignName String   @default("")
   adsetId      String   @default("")
   adsetName    String   @default("")
+  adId         String   @default("")
+  adName       String   @default("")
   spendPence   Int
   revenuePence Int
   orders       Int
@@ -26,7 +28,7 @@ model AdRow {
   source       String
   updatedAt    DateTime @updatedAt
 
-  @@unique([platform, level, date, campaignId, adsetId])
+  @@unique([platform, level, date, campaignId, adsetId, adId])
   @@index([platform, date])
 }
 

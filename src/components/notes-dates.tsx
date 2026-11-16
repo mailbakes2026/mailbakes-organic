@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { platformLabel } from "@/lib/constants";
+import { keyKind, platformLabel } from "@/lib/constants";
 import type { KeyDateDTO, NoteDTO } from "@/lib/types";
 
 function formatDay(iso: string) {
@@ -74,7 +74,7 @@ export function NotesDates({
                   <b>{note.title}</b>
                   <span className="small muted">
                     {note.date ? formatDay(note.date) : "No date"}
-                    {note.platform ? ` · ${platformLabel(note.platform)}` : ""}
+                    {note.allPlatforms ? " · All platforms" : note.platform ? ` · ${platformLabel(note.platform)}` : ""}
                     {note.doThisWeek ? " · Do this week" : ""}
                   </span>
                 </span>
@@ -94,8 +94,8 @@ export function NotesDates({
           {dates.map((item) => (
             <li key={item.id}>
               <button type="button" className="key-open" onClick={() => onOpenKey(item)}>
-                <span className={item.kind === "LAUNCH" ? "pill hot" : "pill warn"}>
-                  {item.kind === "LAUNCH" ? "Launch" : "Key date"}
+                <span className={keyKind(item.kind).pill}>
+                  {keyKind(item.kind).label}
                 </span>
                 <span>
                   <b>{item.title}</b>

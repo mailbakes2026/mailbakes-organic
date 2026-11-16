@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CHANNELS, channelsFor, statusLabel, type ChannelId } from "@/lib/constants";
+import { CHANNELS, channelsFor, keyKind, statusLabel, type ChannelId } from "@/lib/constants";
 import type { KeyDateDTO, PostDTO, StatusId } from "@/lib/types";
 
 function londonToday() {
@@ -290,13 +290,13 @@ export function CalendarBoard({
                   key={item.id}
                   type="button"
                   data-key={item.id}
-                  className={`cal-marker ${item.kind === "LAUNCH" ? "launch" : "keydate"}`}
+                  className={`cal-marker ${keyKind(item.kind).marker}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenKey(item);
                   }}
                 >
-                  {item.kind === "LAUNCH" ? "Launch" : "Key"} · {item.title}
+                  {keyKind(item.kind).short} · {item.title}
                 </button>
               ))}
               {dayPosts.map((post) => {

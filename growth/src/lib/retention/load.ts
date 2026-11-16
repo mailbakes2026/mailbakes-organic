@@ -1,17 +1,35 @@
+import { londonToday } from "@/lib/dates";
+import { metaMissing } from "@/lib/env";
 import { logSafe } from "@/lib/scrub";
+import { listRecentAdRows } from "@/lib/paidads/store";
+import { buildMetaSnapshot } from "@/lib/paidads/snapshot";
+import { syncMetaIfStale } from "@/lib/paidads/sync";
 import type { SendFact } from "@/lib/retention/metrics";
 import { listOrders, listSends, listSnapshots, readSync } from "@/lib/retention/store";
+import { syncRetentionIfStale } from "@/lib/retention/sync";
 import { buildRetentionView } from "@/lib/retention/view";
 
 export async function loadRetention() {
   try {
-    const [sends, lists, orders, klaviyo, shopify] = await Promise.all([
+    await Promise.all([
+      syncRetentionIfStale().catch((error) => logSafe("retention sync", error)),
+      syncMetaIfStale().catch((error) => logSafe("meta sync", error)),
+    ]);
+    const [sends, lists, orders, adRows, klaviyo, shopify] = await Promise.all([
       listSends(),
       listSnapshots(),
       listOrders(),
+      listRecentAdRows(),
       readSync("retention-klaviyo"),
       readSync("retention-shopify"),
     ]);
+    const orderFacts = orders.map((order) => ({
+      customerId: order.customerId,
+      orderedOn: order.orderedOn,
+      totalPence: order.totalPence,
+      currency: order.currency,
+    }));
+    const meta = buildMetaSnapshot({ rows: adRows, orders: orderFacts, today: londonToday() });
     const view = buildRetentionView({
       orders: orders.map((order) => ({ id: order.id, customerId: order.customerId, orderedOn: order.orderedOn })),
       lists: lists.map((list) => ({
@@ -23,7 +41,7 @@ export async function loadRetention() {
       flows: sends.flows.map(toSend),
       campaigns: sends.campaigns.map(toSend),
     });
-    return { ok: true as const, view, klaviyo, shopify };
+    return { ok: true as const, view, klaviyo, shopify, meta, metaConnected: metaMissing().length === 0 };
   } catch (error) {
     logSafe("retention", error);
     return { ok: false as const };

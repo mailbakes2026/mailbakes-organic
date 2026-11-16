@@ -47,6 +47,7 @@ enum CommentKind {
 enum KeyDateKind {
   LAUNCH
   KEY_DATE
+  EVENT
 }
 
 enum MediaRole {
@@ -198,6 +199,8 @@ model Note {
   description String     @default("")
   links       String[]   @default([])
   platform    Platform?
+  // "All platforms" was chosen. platform stays empty.
+  allPlatforms Boolean   @default(false)
   date        DateTime?  @db.Date
   doThisWeek  Boolean    @default(false)
   status      NoteStatus @default(IDEA)

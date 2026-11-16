@@ -119,7 +119,7 @@ export function NotesBoard({
                     <span className="row">
                       <span className={statusClass(note.status)}>{STATUS_LABEL[note.status]}</span>
                       {note.doThisWeek ? <span className="pill">Do this week</span> : null}
-                      {note.platform ? <span className="pill">{platformLabel(note.platform)}</span> : null}
+                      {note.allPlatforms ? <span className="pill">All platforms</span> : note.platform ? <span className="pill">{platformLabel(note.platform)}</span> : null}
                     </span>
                     <h2>{note.title}</h2>
                     {note.description ? <p className="muted clamp-2">{note.description}</p> : null}
@@ -162,7 +162,7 @@ export function NoteForm({
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [links, setLinks] = useState(initial?.links.join("\n") ?? "");
-  const [platform, setPlatform] = useState<PlatformId | "">(initial?.platform ?? "");
+  const [platform, setPlatform] = useState<PlatformId | "ALL" | "">(initial?.allPlatforms ? "ALL" : (initial?.platform ?? ""));
   const [date, setDate] = useState(initial?.date ?? "");
   const [doThisWeek, setDoThisWeek] = useState(initial?.doThisWeek ?? false);
   const [status, setStatus] = useState<NoteStatusId>(initial?.status ?? "IDEA");
@@ -246,8 +246,9 @@ export function NoteForm({
       <div className="grid">
         <label className="field" htmlFor="note-platform">
           Platform
-          <select id="note-platform" value={platform} onChange={(event) => setPlatform(event.target.value as PlatformId | "")}>
+          <select id="note-platform" value={platform} onChange={(event) => setPlatform(event.target.value as PlatformId | "ALL" | "")}>
             <option value="">No platform</option>
+            <option value="ALL">All platforms</option>
             {PLATFORMS.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.label}

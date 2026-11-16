@@ -86,6 +86,7 @@ export type NoteDTO = {
   description: string;
   links: string[];
   platform: PlatformId | null;
+  allPlatforms: boolean;
   date: string | null;
   doThisWeek: boolean;
   status: NoteStatusId;
@@ -101,7 +102,7 @@ export type KeyDateDTO = {
   id: string;
   title: string;
   date: string;
-  kind: "LAUNCH" | "KEY_DATE";
+  kind: "LAUNCH" | "KEY_DATE" | "EVENT";
   notes: string;
 };
 

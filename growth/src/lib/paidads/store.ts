@@ -16,6 +16,7 @@ function key(row: RowInput) {
     date: row.date,
     campaignId: row.campaignId,
     adsetId: row.adsetId,
+    adId: row.adId,
   };
 }
 
@@ -25,11 +26,12 @@ export async function upsertAdRows(rows: RowInput[]) {
     async (tx) => {
       for (const row of rows) {
         await tx.adRow.upsert({
-          where: { platform_level_date_campaignId_adsetId: key(row) },
+          where: { platform_level_date_campaignId_adsetId_adId: key(row) },
           create: row,
           update: {
             campaignName: row.campaignName,
             adsetName: row.adsetName,
+            adName: row.adName,
             spendPence: row.spendPence,
             revenuePence: row.revenuePence,
             orders: row.orders,
@@ -41,7 +43,7 @@ export async function upsertAdRows(rows: RowInput[]) {
         });
       }
     },
-    { timeout: 60_000 },
+    { timeout: 120_000 },
   );
 }
 

@@ -13,7 +13,15 @@ function key() {
   return new TextEncoder().encode(secret);
 }
 
-export function cookieOptions(maxAge = 60 * 60 * 24 * 14) {
+/**
+ * Millie stays signed in on her own devices, including the home-screen app:
+ * the session lasts a year and is renewed each day she uses the app (see
+ * middleware.ts), so it only runs out after a year without opening it.
+ * Signing out, or changing SESSION_SECRET, still ends every session.
+ */
+export const SESSION_DAYS = 365;
+
+export function cookieOptions(maxAge = 60 * 60 * 24 * SESSION_DAYS) {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
@@ -30,7 +38,7 @@ export async function signSession(user: SessionUser) {
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
-    .setExpirationTime("14d")
+    .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(secret);
 }
 
@@ -83,3 +91,25 @@ export async function verifyGoogleState(token: string) {
 }
 
 export { COOKIE };
+
+/** Short-lived signed state for the Microsoft (Outlook) login. */
+export async function signMicrosoftState() {
+  const secret = key();
+  if (!secret) throw new Error("Set SESSION_SECRET to at least 32 characters.");
+  return new SignJWT({ purpose: "microsoft-connect" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("15m")
+    .sign(secret);
+}
+
+export async function verifyMicrosoftState(token: string) {
+  const secret = key();
+  if (!secret) return false;
+  try {
+    const { payload } = await jwtVerify(token, secret);
+    return payload.purpose === "microsoft-connect";
+  } catch {
+    return false;
+  }
+}
