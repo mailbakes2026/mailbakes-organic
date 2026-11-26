@@ -152,3 +152,111 @@ model PlanItem {
 
   @@index([quarter, sort])
 }
+
+// Email calendar. A seedKey is set only on the built-in Black Friday rows.
+// A later boot inserts missing seed keys and leaves edited rows alone.
+model CalendarCampaign {
+  id                String    @id @default(cuid())
+  seedKey           String?   @unique
+  title             String
+  status            String
+  channel           String
+  sendDate          String
+  sendTime          String    @default("")
+  timeLabel         String    @default("")
+  subject           String    @default("")
+  previewText       String    @default("")
+  audience          String    @default("")
+  audienceSize      Int?
+  smartSending      Boolean?
+  offerCode         String    @default("")
+  klaviyoCampaignId String    @default("")
+  notes             String    @default("")
+  cardNote          String    @default("")
+  sort              Int       @default(0)
+  openRate          Float?
+  clickRate         Float?
+  revenuePence      Int?
+  orders            Int?
+  recipients        Int?
+  delivered         Int?
+  opens             Int?
+  clicks            Int?
+  unsubscribes      Int?
+  unsubscribeRate   Float?
+  bounces           Int?
+  bounceRate        Float?
+  spamComplaints    Int?
+  spamRate          Float?
+  conversionRate    Float?
+  aovPence          Int?
+  currency          String    @default("GBP")
+  attributionModel  String    @default("")
+  attributionDetail String    @default("")
+  resultsSource     String    @default("")
+  resultsSyncedAt   DateTime?
+  resultsError      String    @default("")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  designs           DesignAsset[]
+  reviews           ReviewComment[]
+
+  @@index([sendDate, sort])
+}
+
+model CalendarOffer {
+  id        String   @id @default(cuid())
+  seedKey   String?  @unique
+  label     String
+  startDate String
+  endDate   String
+  tone      String   @default("pink")
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([startDate, endDate])
+}
+
+model CalendarDayTag {
+  id        String   @id @default(cuid())
+  seedKey   String?  @unique
+  date      String
+  label     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([date, label])
+  @@index([date])
+}
+
+model DesignAsset {
+  id         String           @id @default(cuid())
+  campaignId String
+  campaign   CalendarCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  filename   String
+  mimeType   String
+  bytes      Bytes
+  size       Int
+  uploadedBy String
+  createdAt  DateTime         @default(now())
+
+  @@index([campaignId, createdAt])
+}
+
+model CalendarSeedMark {
+  seedKey   String   @id
+  createdAt DateTime @default(now())
+}
+
+model ReviewComment {
+  id         String           @id @default(cuid())
+  campaignId String
+  campaign   CalendarCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  author     String
+  body       String           @default("")
+  verdict    String           @default("comment")
+  createdAt  DateTime         @default(now())
+
+  @@index([campaignId, createdAt])
+}

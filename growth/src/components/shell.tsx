@@ -12,6 +12,7 @@ const NAV: Record<AppId, { href: string; label: string }[]> = {
     { href: "/notes", label: "Notes" },
   ],
   retention: [
+    { href: "/calendar", label: "Calendar" },
     { href: "", label: "Overview" },
     { href: "/flows", label: "Flows" },
     { href: "/campaigns", label: "Campaigns" },

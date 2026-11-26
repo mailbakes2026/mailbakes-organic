@@ -47,6 +47,7 @@ export function requiresSession(pathname: string, destination: string) {
   if (destination === "/" || destination === "/login") return false;
   if (destination === "/api/auth/login" || destination === "/api/health") return false;
   if (destination === "/api/v1/ingest" || destination.endsWith("/api/v1/ingest")) return false;
+  if (destination === "/api/retention/calendar" || destination.startsWith("/api/retention/calendar/")) return false;
   if (destination === "/paidads/icon" || destination === "/retention/icon") return false;
   return true;
 }

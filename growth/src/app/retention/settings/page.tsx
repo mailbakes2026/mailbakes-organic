@@ -58,6 +58,9 @@ export default async function RetentionSettings() {
           Opening Retention, Flows, Campaigns, Customers or Settings syncs Klaviyo when the last successful sync is more than 6 hours old. A failed sync waits 10 minutes before the next attempt. You can also sync now once the key is set.
         </p>
         <p className="muted small">
+          The email calendar uses this same key when a send has a Klaviyo campaign ID. <a href={`${base}/calendar`}>Open the calendar</a>.
+        </p>
+        <p className="muted small">
           <a href={base || "/"}>Back to Retention</a>
         </p>
       </article>

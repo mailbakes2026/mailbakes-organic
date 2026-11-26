@@ -183,6 +183,165 @@ export function retryWaitMs(header: string | null) {
   return Math.min(15_000, Math.round(seconds * 1000));
 }
 
+export type CampaignPerformance = {
+  campaignId: string;
+  recipients: number | null;
+  delivered: number | null;
+  opens: number | null;
+  clicks: number | null;
+  openRate: number | null;
+  clickRate: number | null;
+  revenuePence: number | null;
+  orders: number | null;
+  conversionRate: number | null;
+  aovPence: number | null;
+  unsubscribes: number | null;
+  unsubscribeRate: number | null;
+  bounces: number | null;
+  bounceRate: number | null;
+  spamComplaints: number | null;
+  spamRate: number | null;
+};
+
+type PerformancePiece = {
+  recipients: number | null;
+  delivered: number | null;
+  opens: number | null;
+  opensUnique: number | null;
+  openRate: number | null;
+  clicks: number | null;
+  clicksUnique: number | null;
+  clickRate: number | null;
+  conversionValue: number | null;
+  conversions: number | null;
+  conversionUniques: number | null;
+  conversionRate: number | null;
+  averageOrderValue: number | null;
+  unsubscribes: number | null;
+  unsubscribeRate: number | null;
+  bounced: number | null;
+  bounceRate: number | null;
+  spamComplaints: number | null;
+  spamRate: number | null;
+};
+
+function fraction(value: unknown) {
+  const number = num(value);
+  if (number === null || number < 0) return null;
+  if (number > 1 && number <= 100) return number / 100;
+  if (number > 100) return null;
+  return number;
+}
+
+function pieceFromStats(stats: Record<string, unknown>): PerformancePiece {
+  return {
+    recipients: whole(stats.recipients),
+    delivered: whole(stats.delivered),
+    opens: whole(stats.opens),
+    opensUnique: whole(stats.opens_unique),
+    openRate: fraction(stats.open_rate),
+    clicks: whole(stats.clicks),
+    clicksUnique: whole(stats.clicks_unique),
+    clickRate: fraction(stats.click_rate),
+    conversionValue: num(stats.conversion_value),
+    conversions: whole(stats.conversions),
+    conversionUniques: whole(stats.conversion_uniques),
+    conversionRate: fraction(stats.conversion_rate),
+    averageOrderValue: num(stats.average_order_value),
+    unsubscribes: whole(stats.unsubscribes),
+    unsubscribeRate: fraction(stats.unsubscribe_rate),
+    bounced: whole(stats.bounced),
+    bounceRate: fraction(stats.bounce_rate),
+    spamComplaints: whole(stats.spam_complaints),
+    spamRate: fraction(stats.spam_complaint_rate),
+  };
+}
+
+function sumPieces(rows: PerformancePiece[], key: keyof PerformancePiece) {
+  let total = 0;
+  let saw = false;
+  for (const row of rows) {
+    const value = row[key];
+    if (typeof value !== "number") continue;
+    total += value;
+    saw = true;
+  }
+  return saw ? total : null;
+}
+
+function weightedRate(rows: PerformancePiece[], rate: keyof PerformancePiece, weight: keyof PerformancePiece) {
+  let seen = 0;
+  let acc = 0;
+  for (const row of rows) {
+    const value = row[rate];
+    const basis = row[weight] ?? row.recipients;
+    if (typeof value !== "number" || typeof basis !== "number" || basis <= 0) continue;
+    acc += value * basis;
+    seen += basis;
+  }
+  if (seen <= 0) return null;
+  return acc / seen;
+}
+
+function penceFromMajor(value: number | null) {
+  if (value === null) return null;
+  return toPence(value.toFixed(4));
+}
+
+export function parseCampaignPerformance(body: unknown): CampaignPerformance[] {
+  const data = body && typeof body === "object" ? (body as { data?: { attributes?: { results?: unknown } } }).data : null;
+  const results = data?.attributes?.results;
+  if (!Array.isArray(results)) return [];
+  const grouped = new Map<string, PerformancePiece[]>();
+  for (const result of results) {
+    if (!result || typeof result !== "object") continue;
+    const record = result as { groupings?: unknown; statistics?: Record<string, unknown> };
+    const campaignId = groupingId(record.groupings, ["campaign_id"]);
+    if (!campaignId) continue;
+    const pieces = grouped.get(campaignId) ?? [];
+    pieces.push(pieceFromStats(record.statistics ?? {}));
+    grouped.set(campaignId, pieces);
+  }
+  return [...grouped.entries()].map(([campaignId, pieces]) => {
+    const delivered = sumPieces(pieces, "delivered");
+    const recipients = sumPieces(pieces, "recipients");
+    const uniqueOpens = sumPieces(pieces, "opensUnique");
+    const uniqueClicks = sumPieces(pieces, "clicksUnique");
+    const opens = uniqueOpens ?? sumPieces(pieces, "opens");
+    const clicks = uniqueClicks ?? sumPieces(pieces, "clicks");
+    const conversions = sumPieces(pieces, "conversions");
+    const conversionUniques = sumPieces(pieces, "conversionUniques");
+    const orders = conversions ?? conversionUniques;
+    let revenuePence: number | null = null;
+    if (pieces.some((piece) => piece.conversionValue !== null)) {
+      revenuePence = pieces.reduce((sum, piece) => sum + (penceFromMajor(piece.conversionValue) ?? 0), 0);
+    }
+    const openRate = weightedRate(pieces, "openRate", "delivered") ?? rateFromCounts(opens, delivered);
+    const clickRate = weightedRate(pieces, "clickRate", "delivered") ?? rateFromCounts(clicks, delivered);
+    const aovFromRevenue = revenuePence !== null && orders !== null && orders > 0 ? Math.round(revenuePence / orders) : null;
+    const aovWeighted = weightedRate(pieces, "averageOrderValue", "conversions");
+    return {
+      campaignId,
+      recipients,
+      delivered,
+      opens,
+      clicks,
+      openRate,
+      clickRate,
+      revenuePence,
+      orders,
+      conversionRate: weightedRate(pieces, "conversionRate", "delivered") ?? rateFromCounts(orders, delivered ?? recipients),
+      aovPence: aovFromRevenue ?? (aovWeighted === null ? null : penceFromMajor(aovWeighted)),
+      unsubscribes: sumPieces(pieces, "unsubscribes"),
+      unsubscribeRate: weightedRate(pieces, "unsubscribeRate", "delivered") ?? rateFromCounts(sumPieces(pieces, "unsubscribes"), delivered),
+      bounces: sumPieces(pieces, "bounced"),
+      bounceRate: weightedRate(pieces, "bounceRate", "recipients") ?? rateFromCounts(sumPieces(pieces, "bounced"), recipients),
+      spamComplaints: sumPieces(pieces, "spamComplaints"),
+      spamRate: weightedRate(pieces, "spamRate", "delivered") ?? rateFromCounts(sumPieces(pieces, "spamComplaints"), delivered),
+    };
+  });
+}
+
 export function safeKlaviyoNext(value: unknown) {
   if (typeof value !== "string" || !value) return null;
   try {
