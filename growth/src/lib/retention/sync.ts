@@ -1,5 +1,7 @@
 import { londonToday } from "@/lib/dates";
-import { envValue, klaviyoMissing, shopifyMissing } from "@/lib/env";
+import { isTimeout, KLAVIYO_TIMEOUT, SHOPIFY_TIMEOUT } from "@/lib/deadline";
+import { envValue, klaviyoMissing, klaviyoPrivateKey, shopifyMissing } from "@/lib/env";
+import { invalidateRetentionCache } from "@/lib/retention/cache";
 import { KLAVIYO_NOT_CONNECTED } from "@/lib/retention/klaviyo-copy";
 import { pullKlaviyo } from "@/lib/retention/klaviyo";
 import { pullShopifyOrders } from "@/lib/retention/shopify";
@@ -13,7 +15,7 @@ export async function syncKlaviyo(now = new Date()) {
   const missing = klaviyoMissing();
   if (missing.length) return { ok: false as const, error: KLAVIYO_NOT_CONNECTED };
   try {
-    const pulled = await pullKlaviyo(envValue("KLAVIYO_PRIVATE_API_KEY"));
+    const pulled = await pullKlaviyo(klaviyoPrivateKey());
     await replaceSends("flow", "klaviyo", pulled.flows, ["7d", "30d"]);
     await replaceSends("campaign", "klaviyo", pulled.campaigns, ["7d", "30d"]);
     const capturedOn = londonToday(now);
@@ -26,11 +28,13 @@ export async function syncKlaviyo(now = new Date()) {
     ].filter(Boolean);
     const detail = notes.join(" ");
     await writeSync("retention-klaviyo", "ok", detail);
+    invalidateRetentionCache();
     return { ok: true as const, detail };
   } catch (error) {
     logSafe("klaviyo sync", error);
-    const message = scrub(error instanceof Error ? error.message : "Klaviyo sync failed.");
+    const message = isTimeout(error) ? KLAVIYO_TIMEOUT : scrub(error instanceof Error ? error.message : "Klaviyo sync failed.");
     await writeSync("retention-klaviyo", "error", message).catch((writeError) => logSafe("klaviyo sync state", writeError));
+    invalidateRetentionCache();
     return { ok: false as const, error: message };
   }
 }
@@ -74,11 +78,13 @@ export async function syncShopify(now = new Date()) {
       .filter(Boolean)
       .join(" ");
     await writeSync("retention-shopify", "ok", detail);
+    invalidateRetentionCache();
     return { ok: true as const, detail };
   } catch (error) {
     logSafe("shopify sync", error);
-    const message = scrub(error instanceof Error ? error.message : "Shopify sync failed.");
+    const message = isTimeout(error) ? SHOPIFY_TIMEOUT : scrub(error instanceof Error ? error.message : "Shopify sync failed.");
     await writeSync("retention-shopify", "error", message).catch((writeError) => logSafe("shopify sync state", writeError));
+    invalidateRetentionCache();
     return { ok: false as const, error: message };
   }
 }
@@ -107,5 +113,7 @@ export async function syncRetentionIfStale(now = new Date()) {
   const jobs: Promise<unknown>[] = [];
   if (!klaviyoMissing().length && (await stale("retention-klaviyo", now))) jobs.push(syncKlaviyoLocked());
   if (!shopifyMissing().length && (await stale("retention-shopify", now))) jobs.push(syncShopifyLocked());
-  if (jobs.length) await Promise.all(jobs);
+  if (!jobs.length) return false;
+  await Promise.all(jobs);
+  return true;
 }

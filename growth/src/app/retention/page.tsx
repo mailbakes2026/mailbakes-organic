@@ -1,20 +1,34 @@
-import { headers } from "next/headers";
+import { Suspense } from "react";
 import { ConnectionCard } from "@/components/connection";
+import { DataSkeleton } from "@/components/data-skeleton";
+import { KlaviyoNotice } from "@/components/klaviyo-notice";
 import { RetentionMetaCard } from "@/components/meta-snapshot";
-import { SyncButton } from "@/components/sync-button";
+import { MetricLine, PageHeader, SyncFailure } from "@/components/page-header";
+import { RefreshActions } from "@/components/refresh-actions";
 import { connectionCopy } from "@/lib/connection";
 import { formatCount, formatRate, revenueLabel } from "@/lib/format";
 import { klaviyoMissing, shopifyMissing } from "@/lib/env";
-import { publicBase } from "@/lib/host";
 import { KLAVIYO_NOT_CONNECTED } from "@/lib/retention/klaviyo-copy";
 import { loadRetention } from "@/lib/retention/load";
 
 export const dynamic = "force-dynamic";
 
-export default async function RetentionOverview() {
-  const headerList = await headers();
-  const host = headerList.get("x-forwarded-host") || headerList.get("host");
-  const settingsHref = `${publicBase(host, "retention")}/settings`;
+export default function RetentionOverview() {
+  return (
+    <>
+      <PageHeader
+        title="Overview"
+        lede="Klaviyo and Shopify, with Meta spend beside them. Figures are the last stored sync."
+        actions={<RefreshActions shopify />}
+      />
+      <Suspense fallback={<DataSkeleton />}>
+        <OverviewBody />
+      </Suspense>
+    </>
+  );
+}
+
+async function OverviewBody() {
   const loaded = await loadRetention();
   const klaviyoGap = klaviyoMissing();
   const klaviyo = connectionCopy({
@@ -33,29 +47,25 @@ export default async function RetentionOverview() {
   const campaigns = loaded.ok ? loaded.view.campaigns["30d"] : [];
   const flowRevenue = revenueLabel(flows);
   const campaignRevenue = revenueLabel(campaigns);
+  const listCount = loaded.ok ? loaded.view.lists.length : 0;
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>Retention</h1>
-          <p className="muted">Klaviyo and Shopify, with Meta spend beside them. A blank means that figure has not been stored.</p>
-        </div>
-      </div>
+      <KlaviyoNotice />
+      {loaded.ok ? <SyncFailure sync={loaded.klaviyo} /> : null}
       {!loaded.ok ? <p className="alert warn">We could not read the database. Check the disk and DATABASE_URL.</p> : null}
+      <MetricLine
+        parts={[
+          { value: flowRevenue ?? "", label: "flow revenue, 30 days" },
+          { value: campaignRevenue ?? "", label: "campaign revenue" },
+          { value: repeat ? formatRate(repeat.rate) ?? "" : "", label: "repeat purchase" },
+          { value: listCount ? String(listCount) : "", label: listCount === 1 ? "list" : "lists" },
+        ]}
+      />
       <section className="connections">
         <ConnectionCard title="Klaviyo" label={klaviyo.label} state={klaviyo.state} detail={klaviyo.detail} />
         <ConnectionCard title="Shopify" label={shopify.label} state={shopify.state} detail={shopify.detail} />
       </section>
-      {klaviyoGap.length ? (
-        <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
-          <a href={settingsHref}>Open Settings</a> for the full steps.
-        </p>
-      ) : null}
-      <div className="row" style={{ marginBottom: 16 }}>
-        {klaviyoGap.length === 0 ? <SyncButton href="/api/retention/sync/klaviyo" label="Sync Klaviyo" /> : null}
-        {shopifyMissing().length === 0 ? <SyncButton href="/api/retention/sync/shopify" label="Sync Shopify" /> : null}
-      </div>
       <section className="stats" aria-label="Retention summary">
         <article className="stat">
           <span className="eyebrow">Flow revenue, 30d</span>
@@ -75,8 +85,8 @@ export default async function RetentionOverview() {
         </article>
         <article className="stat">
           <span className="eyebrow">Lists</span>
-          <b className={`stat-num${loaded.ok && loaded.view.lists.length ? "" : " is-empty"}`}>{loaded.ok ? loaded.view.lists.length : "—"}</b>
-          <span className="muted small">{loaded.ok && loaded.view.lists.length ? "Snapshots on the customers page." : "No list snapshots stored."}</span>
+          <b className={`stat-num${listCount ? "" : " is-empty"}`}>{loaded.ok ? listCount : "—"}</b>
+          <span className="muted small">{listCount ? "Snapshots on Customers." : "No list snapshots stored."}</span>
         </article>
       </section>
     </>

@@ -50,6 +50,11 @@ async function seedOnce(seedKey: string, create: (tx: Prisma.TransactionClient) 
   }
 }
 
+export async function countNeedsOk() {
+  await ensureCalendarSeed();
+  return prisma.calendarCampaign.count({ where: { status: "built" } });
+}
+
 export async function ensureCalendarSeed() {
   await prepareDatabase();
   const marks = new Set((await prisma.calendarSeedMark.findMany({ select: { seedKey: true } })).map((row) => row.seedKey));

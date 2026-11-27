@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { Callout } from "@/components/page-header";
 import { klaviyoMissing } from "@/lib/env";
 import { publicBase } from "@/lib/host";
 import { KLAVIYO_NOT_CONNECTED } from "@/lib/retention/klaviyo-copy";
@@ -9,8 +10,8 @@ export async function KlaviyoNotice() {
   const host = headerList.get("x-forwarded-host") || headerList.get("host");
   const href = `${publicBase(host, "retention")}/settings`;
   return (
-    <p className="alert warn">
-      {KLAVIYO_NOT_CONNECTED} <a href={href}>Open Settings</a> for the full steps.
-    </p>
+    <Callout lead="Klaviyo is not connected.">
+      {KLAVIYO_NOT_CONNECTED.replace("Klaviyo is not connected. ", "")} <a href={href}>Open Settings</a>
+    </Callout>
   );
 }

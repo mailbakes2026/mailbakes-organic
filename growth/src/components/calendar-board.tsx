@@ -164,6 +164,7 @@ export function CalendarBoard({ initial, actor, initialCampaign }: { initial: We
   }
 
   const rollup = week.rollup;
+  const needsOk = campaigns.filter((campaign) => campaign.status === "built");
   const rollupBits = [
     rollup.mixedCurrency ? "Mixed currencies" : rollup.revenuePence === null ? null : formatMoneyPence(rollup.revenuePence, rollup.currency),
     rollup.orders === null ? null : `${formatCount(rollup.orders)} orders`,
@@ -173,38 +174,99 @@ export function CalendarBoard({ initial, actor, initialCampaign }: { initial: We
 
   return (
     <>
-      <div className="cal-toolbar">
-        <div className="row">
-          <a className="btn ghost sm" href={`?week=${previous}`}>
-            Previous
-          </a>
-          <a className="btn ghost sm" href={`?week=${next}`}>
-            Next
-          </a>
-          {mondayOf(week.today) !== week.from ? (
-            <a className="btn ghost sm" href={`?week=${week.today}`}>
-              This week
-            </a>
-          ) : null}
-          {week.from !== "2026-11-23" ? (
-            <a className="btn ghost sm" href="?week=2026-11-23">
-              Black Friday week
-            </a>
-          ) : null}
+      <div className="page-head">
+        <div className="page-head-copy">
+          <h1>Calendar</h1>
+          <p className="lede">Every send from the Secret Slice letter through Christmas. Planned days stay proposals until you OK them.</p>
+          <p className="metric-line">
+            <b>{campaigns.length}</b> {campaigns.length === 1 ? "send" : "sends"} this week
+            <span className="metric-sep"> · </span>
+            {needsOk.length ? (
+              <>
+                <b className="is-alert">{needsOk.length}</b> need your OK
+              </>
+            ) : (
+              <b className="is-good">All done</b>
+            )}
+            {rollup.counted ? (
+              <>
+                <span className="metric-sep"> · </span>
+                {rollupBits.join(" · ")}
+                <span className="muted"> · {rollup.counted} with results</span>
+              </>
+            ) : null}
+          </p>
         </div>
+        <div className="head-actions">
+          <button className="btn" type="button" onClick={syncWeek} disabled={pending === "sync" || !week.klaviyoConnected}>
+            {pending === "sync" ? "Refreshing…" : "Refresh results"}
+          </button>
+          <button className="btn ghost" type="button" onClick={() => setPanel({ campaign: null, date: week.today >= week.from && week.today <= week.to ? week.today : week.from })}>
+            Add send
+          </button>
+          <div className="stepper">
+            <a className="stepper-btn" href={`?week=${previous}`} aria-label="Previous week">
+              ←
+            </a>
+            <span className="stepper-label">{week.rangeLabel}</span>
+            <a className="stepper-btn" href={`?week=${next}`} aria-label="Next week">
+              →
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {needsOk.length ? (
+        <p className="callout">
+          <b>{needsOk.length === 1 ? "1 send needs Millie's OK" : `${needsOk.length} sends need Millie's OK`}</b>
+          {" — "}
+          {needsOk
+            .slice(0, 4)
+            .map((campaign) => campaign.title)
+            .join(", ")}
+          {needsOk.length > 4 ? ` and ${needsOk.length - 4} more` : ""}. Review the built emails before they go out.
+        </p>
+      ) : null}
+      {week.klaviyoConnected ? null : (
+        <p className="callout">
+          <b>Klaviyo is not connected.</b> Results stay on the stored snapshot until KLAVIYO_PRIVATE_API_KEY or KLAVIYO_PRIVATE_KEY is set.
+        </p>
+      )}
+      {error ? <p className="error">{error}</p> : null}
+      {notice ? <p className="muted">{notice}</p> : null}
+
+      <div className="cal-jump">
+        {mondayOf(week.today) !== week.from ? (
+          <a className="btn ghost sm" href={`?week=${week.today}`}>
+            This week
+          </a>
+        ) : null}
+        {week.from !== "2026-11-23" ? (
+          <a className="btn ghost sm" href="?week=2026-11-23">
+            Black Friday week
+          </a>
+        ) : null}
         <form
-          className="row"
+          className="jump-week"
           onSubmit={(event) => {
             event.preventDefault();
             const value = new FormData(event.currentTarget).get("jump");
             if (typeof value === "string" && value) window.location.href = `?week=${value}`;
           }}
         >
-          <input type="date" name="jump" defaultValue={week.from} aria-label="Jump to a week" />
-          <button className="btn ghost sm" type="submit">
-            Go
-          </button>
+          <input
+            type="date"
+            name="jump"
+            defaultValue={week.from}
+            aria-label="Jump to a week"
+            onChange={(event) => {
+              if (event.target.value) window.location.href = `?week=${event.target.value}`;
+            }}
+          />
         </form>
+        <button className="btn ghost sm" type="button" onClick={() => setOffer({ label: "", startDate: week.from, endDate: week.to, tone: "pink" })}>
+          Add offer
+        </button>
       </div>
 
       <ul className="cal-legend">
@@ -216,59 +278,59 @@ export function CalendarBoard({ initial, actor, initialCampaign }: { initial: We
         ))}
       </ul>
 
+      <section className="summary-grid" aria-label="This week">
+        <article className="stat">
+          <span className="eyebrow">Sends</span>
+          <b className="stat-num">{campaigns.length}</b>
+          <span className="muted small">{week.title}</span>
+        </article>
+        <article className="stat">
+          <span className="eyebrow">Needs OK</span>
+          <b className={`stat-num${needsOk.length ? "" : " is-done"}`}>{needsOk.length ? needsOk.length : "All done"}</b>
+          <span className="muted small">{needsOk.length ? "Built, waiting on Millie" : "Nothing waiting"}</span>
+        </article>
+        <article className="stat">
+          <span className="eyebrow">With results</span>
+          <b className={`stat-num${rollup.counted ? "" : " is-empty"}`}>{rollup.counted || "—"}</b>
+          <span className="muted small">{rollup.counted ? "Klaviyo or a stored snapshot" : "No results stored yet"}</span>
+        </article>
+        <article className="stat">
+          <span className="eyebrow">Revenue</span>
+          <b className={`stat-num${rollup.revenuePence === null || rollup.mixedCurrency ? " is-empty" : ""}`}>
+            {rollup.mixedCurrency ? "Mixed" : rollup.revenuePence === null ? "—" : formatMoneyPence(rollup.revenuePence, rollup.currency)}
+          </b>
+          <span className="muted small">{rollup.orders === null ? "Orders not stored" : `${formatCount(rollup.orders)} orders`}</span>
+        </article>
+      </section>
+
       <section className="cal-week" aria-label={week.title}>
-        <header className="cal-week-head">
-          <h2>{week.title}</h2>
-          <span>{week.rangeLabel}</span>
-        </header>
-        <p className="cal-rollup">
-          {rollup.counted ? (
-            <>
-              This week · {rollupBits.join(" · ")}
-              <span className="muted"> · {rollup.counted} with results</span>
-            </>
-          ) : (
-            <span className="muted">No results stored for this week yet.</span>
-          )}
-        </p>
-        <div className="cal-span" aria-hidden="true">
-          {week.days.map((day) => (
-            <span key={day.date} className={day.date === week.today ? "is-today" : ""}>
-              {day.weekday} {day.day}
-            </span>
-          ))}
+        <div className="cal-week-scroll">
+          <div className="cal-span" aria-hidden="true">
+            {week.days.map((day) => (
+              <span key={day.date} className={day.date === week.today ? "is-today" : ""}>
+                {day.weekday} {day.day}
+              </span>
+            ))}
+          </div>
+          <div className="cal-offers">
+            {week.offers.map((item) => {
+              const span = offerSpan(item, week.from, week.to);
+              if (!span) return null;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`cal-offer is-${item.tone}`}
+                  style={{ gridColumn: `${span.startIndex + 1} / span ${span.span}` }}
+                  title={`${item.label}, ${item.startDate} to ${item.endDate}`}
+                  onClick={() => setOffer({ id: item.id, label: item.label, startDate: item.startDate, endDate: item.endDate, tone: item.tone })}
+                >
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="cal-offers">
-          {week.offers.map((item) => {
-            const span = offerSpan(item, week.from, week.to);
-            if (!span) return null;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`cal-offer is-${item.tone}`}
-                style={{ gridColumn: `${span.startIndex + 1} / span ${span.span}` }}
-                title={`${item.label}, ${item.startDate} to ${item.endDate}`}
-                onClick={() => setOffer({ id: item.id, label: item.label, startDate: item.startDate, endDate: item.endDate, tone: item.tone })}
-              >
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="row">
-          <button className="btn sm" type="button" onClick={() => setPanel({ campaign: null, date: week.today >= week.from && week.today <= week.to ? week.today : week.from })}>
-            Add send
-          </button>
-          <button className="btn ghost sm" type="button" onClick={() => setOffer({ label: "", startDate: week.from, endDate: week.to, tone: "pink" })}>
-            Add offer
-          </button>
-          <button className="btn ghost sm" type="button" onClick={syncWeek} disabled={pending === "sync"}>
-            {pending === "sync" ? "Syncing…" : "Sync Klaviyo results"}
-          </button>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-        {notice ? <p className="muted">{notice}</p> : null}
 
         {offer ? (
           <form className="card cal-offer-form" onSubmit={saveOffer}>

@@ -737,7 +737,7 @@ export function CampaignPanel({
               <button className="btn ghost sm" type="button" disabled={pending === "review"} onClick={() => review("comment")}>
                 Comment
               </button>
-              <button className="btn ghost sm" type="button" disabled={pending === "review"} onClick={() => review("changes_requested", "built")}>
+              <button className="btn soft sm" type="button" disabled={pending === "review"} onClick={() => review("changes_requested", "built")}>
                 Request changes
               </button>
               <button className="btn sm" type="button" disabled={pending === "review"} onClick={() => review("approved", "scheduled")}>

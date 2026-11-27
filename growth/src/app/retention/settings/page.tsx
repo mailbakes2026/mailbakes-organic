@@ -1,6 +1,9 @@
+import { Suspense } from "react";
 import { headers } from "next/headers";
 import { ConnectionCard } from "@/components/connection";
-import { SyncButton } from "@/components/sync-button";
+import { DataSkeleton } from "@/components/data-skeleton";
+import { Callout, PageHeader, SyncFailure } from "@/components/page-header";
+import { RefreshActions } from "@/components/refresh-actions";
 import { connectionCopy } from "@/lib/connection";
 import { klaviyoMissing } from "@/lib/env";
 import { publicBase } from "@/lib/host";
@@ -9,7 +12,22 @@ import { loadRetention } from "@/lib/retention/load";
 
 export const dynamic = "force-dynamic";
 
-export default async function RetentionSettings() {
+export default function RetentionSettings() {
+  return (
+    <>
+      <PageHeader
+        title="Settings"
+        lede="The private API key stays on the server. Retention never shows the value."
+        actions={<RefreshActions />}
+      />
+      <Suspense fallback={<DataSkeleton />}>
+        <SettingsBody />
+      </Suspense>
+    </>
+  );
+}
+
+async function SettingsBody() {
   const headerList = await headers();
   const host = headerList.get("x-forwarded-host") || headerList.get("host");
   const base = publicBase(host, "retention");
@@ -25,23 +43,23 @@ export default async function RetentionSettings() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>Settings</h1>
-          <p className="muted">Klaviyo is synced by this Retention app. The private API key stays on the server and is not shown here.</p>
-        </div>
-      </div>
       {!loaded.ok ? <p className="alert warn">We could not read the database. Check the disk and DATABASE_URL.</p> : null}
+      {loaded.ok ? <SyncFailure sync={loaded.klaviyo} /> : null}
+      {keySet ? null : (
+        <Callout lead="Klaviyo is not connected.">
+          Set KLAVIYO_PRIVATE_API_KEY or KLAVIYO_PRIVATE_KEY on the Render service mailbakes-growth, then save, rebuild, and deploy.
+        </Callout>
+      )}
       <section className="connections">
         <ConnectionCard title="Klaviyo" label={klaviyo.label} state={klaviyo.state} detail={klaviyo.detail} />
       </section>
       <article className="card">
         <h2>Private API key</h2>
         <p>
-          <b>{keySet ? "Set on this service." : "Not set on this service."}</b>
+          <b className={keySet ? "is-good" : undefined}>{keySet ? "Set on this service." : "Not set on this service."}</b>
         </p>
         <p className="muted">
-          Retention reads <code>KLAVIYO_PRIVATE_API_KEY</code> from the environment of the Render service <code>mailbakes-growth</code>. The value is not stored in the database and is not written into this page.
+          Retention reads <code>KLAVIYO_PRIVATE_API_KEY</code>, and falls back to <code>KLAVIYO_PRIVATE_KEY</code> when that is the name already set. The value is not stored in the database and is not written into this page.
         </p>
         {keySet ? (
           <p>To rotate the key, create a new private API key in Klaviyo, replace the same variable on that service, then save, rebuild, and deploy.</p>
@@ -49,22 +67,18 @@ export default async function RetentionSettings() {
           <ol className="steps">
             <li>In Klaviyo, create a private API key with read access to accounts, metrics, flows, campaigns and lists.</li>
             <li>In Render, open the web service mailbakes-growth. That service serves retention.mailbakes.com.</li>
-            <li>Open Environment and set KLAVIYO_PRIVATE_API_KEY to the key.</li>
+            <li>Open Environment and set KLAVIYO_PRIVATE_API_KEY, or KLAVIYO_PRIVATE_KEY, to the key.</li>
             <li>Save, rebuild, and deploy.</li>
-            <li>Come back here. The card should say Connected. Flow and campaign figures appear after the sync.</li>
+            <li>Come back here. The card should say Connected. Flow and campaign figures appear after Refresh.</li>
           </ol>
         )}
         <p className="muted small">
-          Opening Retention, Flows, Campaigns, Customers or Settings syncs Klaviyo when the last successful sync is more than 6 hours old. A failed sync waits 10 minutes before the next attempt. You can also sync now once the key is set.
+          Opening Overview, Flows, Campaigns, Customers or Settings reads the figures already stored. If the last successful sync is more than 6 hours old, a new sync starts in the background and does not hold the page. A failed sync waits 10 minutes before the next attempt. Refresh runs a sync now, and gives up if Klaviyo or Shopify takes too long.
         </p>
         <p className="muted small">
           The email calendar uses this same key when a send has a Klaviyo campaign ID. <a href={`${base}/calendar`}>Open the calendar</a>.
         </p>
-        <p className="muted small">
-          <a href={base || "/"}>Back to Retention</a>
-        </p>
       </article>
-      {keySet ? <SyncButton href="/api/retention/sync/klaviyo" label="Sync Klaviyo" /> : null}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { envValue } from "@/lib/env";
+import { klaviyoPrivateKey } from "@/lib/env";
 import { KLAVIYO_ATTRIBUTION_DETAIL, reportWindow } from "@/lib/retention/calendar/model";
 import { campaignsForSync, saveKlaviyoResults, saveResultsError } from "@/lib/retention/calendar/store";
 import { pullCampaignPerformance } from "@/lib/retention/klaviyo";
@@ -13,9 +13,9 @@ function hasSignal(row: CampaignPerformance) {
 }
 
 export async function syncCalendarResults(filter: { campaignId?: string; from?: string; to?: string }) {
-  const key = envValue("KLAVIYO_PRIVATE_API_KEY");
+  const key = klaviyoPrivateKey();
   if (!key) {
-    return { ok: false as const, status: 503, error: "Klaviyo is not connected. Set KLAVIYO_PRIVATE_API_KEY. Stored snapshots are unchanged." };
+    return { ok: false as const, status: 503, error: "Klaviyo is not connected. Set KLAVIYO_PRIVATE_API_KEY or KLAVIYO_PRIVATE_KEY. Stored snapshots are unchanged." };
   }
   const campaigns = await campaignsForSync(filter);
   if (filter.campaignId && !campaigns.length) return { ok: false as const, status: 404, error: "That campaign was not found." };

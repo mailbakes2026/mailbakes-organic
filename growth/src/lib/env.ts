@@ -52,8 +52,13 @@ export function metaMissing() {
   return missing;
 }
 
+/** Prefer the documented name. `KLAVIYO_PRIVATE_KEY` is accepted so an older Render var still connects. */
+export function klaviyoPrivateKey() {
+  return envValue("KLAVIYO_PRIVATE_API_KEY") || envValue("KLAVIYO_PRIVATE_KEY");
+}
+
 export function klaviyoMissing() {
-  return missingEnv(["KLAVIYO_PRIVATE_API_KEY"]);
+  return klaviyoPrivateKey() ? [] : ["KLAVIYO_PRIVATE_API_KEY"];
 }
 
 export function shopifyMissing() {
