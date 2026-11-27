@@ -51,6 +51,22 @@ export function londonWeekStart(now = new Date()) {
   return addDays(today, -index);
 }
 
+export function londonStamp(day: string, end: boolean) {
+  if (!parseDateOnly(day)) return null;
+  const probe = new Date(`${day}T12:00:00Z`);
+  const name =
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/London",
+      timeZoneName: "shortOffset",
+      hour: "2-digit",
+    })
+      .formatToParts(probe)
+      .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  const match = /^GMT(?:([+-])(\d{1,2}))?$/.exec(name);
+  const offset = match?.[1] ? `${match[1]}${match[2].padStart(2, "0")}:00` : "+00:00";
+  return `${day}T${end ? "23:59:59" : "00:00:00"}${offset}`;
+}
+
 export function mondayOf(day: string) {
   const parsed = parseDateOnly(day);
   if (!parsed) return day;

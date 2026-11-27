@@ -42,10 +42,12 @@ export function buildRetentionView(input: {
     flows: {
       "7d": preferLatest(input.flows.filter((row) => row.window === "7d")),
       "30d": preferLatest(input.flows.filter((row) => row.window === "30d")),
+      prev: preferLatest(input.flows.filter((row) => row.window === "prev7d")),
     },
     campaigns: {
       "7d": preferLatest(input.campaigns.filter((row) => row.window === "7d")),
       "30d": preferLatest(input.campaigns.filter((row) => row.window === "30d")),
+      prev: preferLatest(input.campaigns.filter((row) => row.window === "prev7d")),
     },
   };
 }

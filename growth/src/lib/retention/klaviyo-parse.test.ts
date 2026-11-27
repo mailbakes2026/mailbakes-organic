@@ -4,8 +4,11 @@ import {
   campaignNamePath,
   choosePlacedOrder,
   parseAccountCurrency,
+  parseCampaignMessage,
   parseCampaignPerformance,
+  parseFlowList,
   parseLists,
+  parseTemplateHtml,
   parseMetricCatalog,
   parsePlacedOrderMetric,
   parseValuesReport,
@@ -138,4 +141,22 @@ test("a campaign values report sums messages and keeps Klaviyo's rates", () => {
   assert.equal(rows[0]?.aovPence, Math.round(2500 / 3));
   assert.equal(rows[0]?.bounces, 5);
   assert.equal(rows[0]?.spamComplaints, 1);
+});
+
+test("campaign messages point at the email template", () => {
+  const message = parseCampaignMessage({
+    data: [
+      { id: "sms", attributes: { channel: "sms" }, relationships: {} },
+      {
+        id: "email",
+        attributes: { channel: "email", content: { subject: "Friday bake" } },
+        relationships: { template: { data: { type: "template", id: "Tmpl01" } } },
+      },
+    ],
+  });
+  assert.equal(message?.templateId, "Tmpl01");
+  assert.equal(message?.subject, "Friday bake");
+  assert.equal(parseTemplateHtml({ data: { attributes: { html: "<p>Hello</p>" } } }), "<p>Hello</p>");
+  const flows = parseFlowList({ data: [{ id: "F1", attributes: { name: "Welcome", status: "live" } }] });
+  assert.equal(flows[0]?.status, "live");
 });

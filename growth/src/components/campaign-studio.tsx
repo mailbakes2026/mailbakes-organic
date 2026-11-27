@@ -3,7 +3,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RateBar } from "@/components/rate-bar";
+import { WeekDelta } from "@/components/week-delta";
 import { formatCount, formatMoney, formatRate } from "@/lib/format";
+import { benchmarkNote, campaignCallouts, klaviyoCampaignUrl } from "@/lib/retention/attention";
 
 export type CampaignRow = {
   id: string;
@@ -22,6 +24,10 @@ export type CampaignRow = {
   audience: string;
   subject: string;
   design: { id: string; mimeType: string; filename: string } | null;
+  previewHtml: string;
+  weekRevenuePence: number | null;
+  previousRevenuePence: number | null;
+  weekOpenRate: number | null;
 };
 
 type Averages = { openRate: number | null; clickRate: number | null };
@@ -45,6 +51,7 @@ export function CampaignStudio({
   monthAverage,
   weekAverage,
   today,
+  author,
 }: {
   spotlight: CampaignRow[];
   spotlightLabel: string;
@@ -53,21 +60,40 @@ export function CampaignStudio({
   monthAverage: Averages;
   weekAverage: Averages;
   today: string;
+  author: "Millie" | "Kyle";
 }) {
   const router = useRouter();
-  const [selected, setSelected] = useState<CampaignRow | null>(null);
+  const [selected, setSelected] = useState<{ row: CampaignRow; note: boolean } | null>(null);
   const rows = [...month, ...week];
+  const callouts = campaignCallouts(
+    uniqueRows(week.length ? week : month).map((row) => ({
+      id: row.id,
+      name: row.name,
+      weekRevenuePence: row.weekRevenuePence,
+      previousRevenuePence: row.previousRevenuePence,
+      currency: row.currency,
+      weekOpenRate: row.weekOpenRate,
+      averageOpenRate: week.length ? weekAverage.openRate : monthAverage.openRate,
+      hasVisual: Boolean(row.previewHtml || row.design),
+    })),
+  );
 
   useEffect(() => {
     if (!selected) return;
-    const next = rows.find((row) => row.id === selected.id && row.window === selected.window);
-    if (next && (next.design?.id !== selected.design?.id || next.calendarId !== selected.calendarId)) setSelected(next);
+    const next = rows.find((row) => row.id === selected.row.id && row.window === selected.row.window);
+    if (next && (next.design?.id !== selected.row.design?.id || next.calendarId !== selected.row.calendarId || next.previewHtml !== selected.row.previewHtml)) {
+      setSelected({ row: next, note: selected.note });
+    }
     // Refresh the open row when stored designs change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, week]);
 
   return (
     <>
+      <section className="attention" aria-label="Needs attention">
+        <h2>Needs attention</h2>
+        {callouts.length ? callouts.map((note) => <p key={note}>{note}</p>) : <p>Nothing needs attention this week.</p>}
+      </section>
       <section className="stack-section" aria-label="What's working well">
         <h2 className="section-title">What&apos;s working well</h2>
         <p className="muted small">Top campaigns by revenue, {spotlightLabel}.</p>
@@ -78,31 +104,34 @@ export function CampaignStudio({
         ) : (
           <div className="spotlight">
             {spotlight.map((row, index) => (
-              <button key={`${row.window}:${row.id}`} className="spotlight-card" type="button" onClick={() => setSelected(row)}>
+              <article key={`${row.window}:${row.id}`} className="spotlight-card">
                 <span className={`rank is-${index + 1}`}>{index + 1}</span>
                 <Thumb row={row} />
-                <span className="spotlight-copy">
+                <button className="spotlight-copy" type="button" onClick={() => setSelected({ row, note: false })}>
                   <b>{row.name}</b>
-                  <strong>{row.revenuePence === null ? "—" : formatMoney(row.revenuePence, row.currency || "GBP")}</strong>
+                  <strong>{row.revenuePence === null ? "Not stored" : formatMoney(row.revenuePence, row.currency || "GBP")}</strong>
+                  <WeekDelta current={row.weekRevenuePence} previous={row.previousRevenuePence} currency={row.currency || "GBP"} />
                   <span className="muted small">
-                    Open {formatRate(row.openRate) ?? "—"} · Click {formatRate(row.clickRate) ?? "—"}
+                    Open {formatRate(row.openRate) ?? "Not stored"} · Click {formatRate(row.clickRate) ?? "Not stored"}
                   </span>
-                </span>
-              </button>
+                </button>
+              </article>
             ))}
           </div>
         )}
       </section>
-      <CampaignList title="Last 30 days" rows={month} onOpen={setSelected} />
-      <CampaignList title="Last 7 days" rows={week} onOpen={setSelected} />
+      <CampaignList title="Last 30 days" rows={month} average={monthAverage} onOpen={(row, note) => setSelected({ row, note })} />
+      <CampaignList title="Last 7 days" rows={week} average={weekAverage} onOpen={(row, note) => setSelected({ row, note })} />
       {selected ? (
         <CampaignDrawer
-          row={selected}
-          average={selected.window === "7d" ? weekAverage : monthAverage}
+          row={selected.row}
+          average={selected.row.window === "7d" ? weekAverage : monthAverage}
           today={today}
+          author={author}
+          startNote={selected.note}
           onClose={() => setSelected(null)}
           onUpdated={(next) => {
-            setSelected(next);
+            setSelected({ row: next, note: selected.note });
             router.refresh();
           }}
         />
@@ -111,7 +140,21 @@ export function CampaignStudio({
   );
 }
 
-function CampaignList({ title, rows, onOpen }: { title: string; rows: CampaignRow[]; onOpen: (row: CampaignRow) => void }) {
+function uniqueRows(rows: CampaignRow[]) {
+  return rows.filter((row, index, all) => all.findIndex((item) => item.id === row.id) === index);
+}
+
+function CampaignList({
+  title,
+  rows,
+  average,
+  onOpen,
+}: {
+  title: string;
+  rows: CampaignRow[];
+  average: Averages;
+  onOpen: (row: CampaignRow, note: boolean) => void;
+}) {
   const maxRevenue = Math.max(1, ...rows.map((row) => row.revenuePence ?? 0));
   return (
     <section className="stack-section" aria-label={title}>
@@ -123,19 +166,26 @@ function CampaignList({ title, rows, onOpen }: { title: string; rows: CampaignRo
       ) : (
         <div className="camp-list">
           {rows.map((row) => (
-            <button key={`${row.window}:${row.id}`} className="camp-row" type="button" onClick={() => onOpen(row)}>
-              <Thumb row={row} />
-              <span className="camp-copy">
-                <b>{row.name}</b>
-                <strong>{row.revenuePence === null ? "—" : formatMoney(row.revenuePence, row.currency || "GBP")}</strong>
-              </span>
-              <span className="camp-rates">
-                <RateBar label="Revenue" value={row.revenuePence === null ? "—" : formatMoney(row.revenuePence, row.currency || "GBP")} width={row.revenuePence === null ? 0 : (row.revenuePence / maxRevenue) * 100} />
-                <RateBar label="Open" value={formatRate(row.openRate) ?? "—"} width={(row.openRate ?? 0) * 100} />
-                <RateBar label="Click" value={formatRate(row.clickRate) ?? "—"} width={(row.clickRate ?? 0) * 100} />
-                <RateBar label="Placed order" value="Not stored" width={0} />
-              </span>
-            </button>
+            <article key={`${row.window}:${row.id}`} className="camp-row">
+              <div className="camp-main">
+                <Thumb row={row} />
+                <button className="camp-open" type="button" onClick={() => onOpen(row, false)}>
+                  <span className="camp-copy">
+                    <b>{row.name}</b>
+                    <strong>{row.revenuePence === null ? "Not stored" : formatMoney(row.revenuePence, row.currency || "GBP")}</strong>
+                    <WeekDelta current={row.weekRevenuePence} previous={row.previousRevenuePence} currency={row.currency || "GBP"} />
+                    <span className="muted small">{benchmarkNote(row.window === "7d" ? row.weekOpenRate : row.openRate, average.openRate) ?? "No account average yet."}</span>
+                  </span>
+                  <span className="camp-rates">
+                    <RateBar label="Revenue" value={row.revenuePence === null ? "Not stored" : formatMoney(row.revenuePence, row.currency || "GBP")} width={row.revenuePence === null ? 0 : (row.revenuePence / maxRevenue) * 100} />
+                    <RateBar label="Open" value={formatRate(row.openRate) ?? "Not stored"} width={(row.openRate ?? 0) * 100} />
+                    <RateBar label="Click" value={formatRate(row.clickRate) ?? "Not stored"} width={(row.clickRate ?? 0) * 100} />
+                    <RateBar label="Placed order" value="Not stored" width={0} />
+                  </span>
+                </button>
+              </div>
+              <CampaignActions row={row} onNote={() => onOpen(row, true)} />
+            </article>
           ))}
         </div>
       )}
@@ -143,7 +193,30 @@ function CampaignList({ title, rows, onOpen }: { title: string; rows: CampaignRo
   );
 }
 
+function CampaignActions({ row, onNote }: { row: CampaignRow; onNote: () => void }) {
+  const href = klaviyoCampaignUrl(row.id);
+  return (
+    <span className="camp-actions">
+      {href ? (
+        <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">
+          Open in Klaviyo
+        </a>
+      ) : null}
+      <button className="btn ghost sm" type="button" onClick={onNote}>
+        Log note / test
+      </button>
+    </span>
+  );
+}
+
 function Thumb({ row }: { row: CampaignRow }) {
+  if (row.previewHtml) {
+    return (
+      <span className="email-thumb">
+        <iframe sandbox="" tabIndex={-1} srcDoc={row.previewHtml} title={`${row.name} preview`} />
+      </span>
+    );
+  }
   if (row.design?.mimeType.startsWith("image/")) {
     return <img className="camp-thumb" src={`/api/retention/calendar/designs/${row.design.id}`} alt="" />;
   }
@@ -164,12 +237,16 @@ function CampaignDrawer({
   row,
   average,
   today,
+  author,
+  startNote,
   onClose,
   onUpdated,
 }: {
   row: CampaignRow;
   average: Averages;
   today: string;
+  author: "Millie" | "Kyle";
+  startNote: boolean;
   onClose: () => void;
   onUpdated: (row: CampaignRow) => void;
 }) {
@@ -181,13 +258,19 @@ function CampaignDrawer({
   const [sendDate, setSendDate] = useState(row.sendDate || today);
   const [html, setHtml] = useState("");
   const [lightbox, setLightbox] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(startNote);
+  const [note, setNote] = useState("");
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setSendDate(row.sendDate || today);
     setError(null);
     setHtml("");
     setLightbox(false);
-  }, [row, today]);
+    setNoteOpen(startNote);
+    setNote("");
+    setSaved(false);
+  }, [row, today, startNote]);
 
   useEffect(() => {
     if (row.design?.mimeType !== "text/html") return;
@@ -253,7 +336,25 @@ function CampaignDrawer({
     }
   }
 
+  async function saveNote(event: React.FormEvent) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await sendJson("/api/retention/notes", "POST", { author, body: `${row.name}\n${note.trim()}` });
+      setNote("");
+      setSaved(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That note was not saved.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   const windowLabel = row.window === "7d" ? "Last 7 days" : "Last 30 days";
+  const klaviyo = klaviyoCampaignUrl(row.id);
+  const context = benchmarkNote(row.openRate, average.openRate);
   return (
     <div className="cal-drawer">
       <button className="cal-scrim" type="button" aria-label="Close campaign" onClick={onClose} />
@@ -262,6 +363,7 @@ function CampaignDrawer({
           <div>
             <p className="eyebrow">{windowLabel}</p>
             <h2 id={titleId}>{row.name}</h2>
+            <WeekDelta current={row.weekRevenuePence} previous={row.previousRevenuePence} currency={row.currency || "GBP"} />
           </div>
           <button className="btn ghost sm" type="button" onClick={onClose}>
             Close
@@ -281,7 +383,29 @@ function CampaignDrawer({
           <RateBar label="Open" value={formatRate(row.openRate) ?? "—"} width={(row.openRate ?? 0) * 100} marker={average.openRate === null ? null : average.openRate * 100} note={gapNote(row.openRate, average.openRate)} />
           <RateBar label="Click" value={formatRate(row.clickRate) ?? "—"} width={(row.clickRate ?? 0) * 100} marker={average.clickRate === null ? null : average.clickRate * 100} note={gapNote(row.clickRate, average.clickRate)} />
           <RateBar label="Placed order" value="Not stored" width={0} note="Orders and placed order rate are not on the stored campaign row." />
-          <p className="muted small">Revenue is the stored Klaviyo total for this window. The mark on each bar is the account average.</p>
+          <p className="muted small">{context ?? "No account average yet."} Revenue is the stored Klaviyo total for this window.</p>
+          <div className="row">
+            {klaviyo ? (
+              <a className="btn ghost sm" href={klaviyo} target="_blank" rel="noreferrer">
+                Open in Klaviyo
+              </a>
+            ) : null}
+            <button className="btn ghost sm" type="button" onClick={() => setNoteOpen((open) => !open)}>
+              Log note / test
+            </button>
+          </div>
+          {noteOpen ? (
+            <form className="test-form" onSubmit={saveNote}>
+              <label className="field">
+                Note
+                <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} maxLength={2000} placeholder="What you changed, or the test to run" required />
+              </label>
+              <button className="btn sm" type="submit" disabled={pending}>
+                {pending ? "Saving…" : "Save note"}
+              </button>
+              {saved ? <p className="muted small">Saved. It is with the review notes in Settings.</p> : null}
+            </form>
+          ) : null}
         </section>
         <section className="cal-section">
           <h3>Send</h3>
@@ -301,8 +425,12 @@ function CampaignDrawer({
           </dl>
         </section>
         <section className="cal-section">
-          <h3>Design</h3>
-          {row.design ? (
+          <h3>Email</h3>
+          {row.previewHtml ? (
+            <div className="email-scroll">
+              <iframe sandbox="" srcDoc={row.previewHtml} title={`${row.name} email`} />
+            </div>
+          ) : row.design ? (
             <div className="design-open">
               {row.design.mimeType.startsWith("image/") ? (
                 <button type="button" onClick={() => setLightbox(true)}>
@@ -318,7 +446,7 @@ function CampaignDrawer({
               </button>
             </div>
           ) : (
-            <p className="muted">No design is linked yet. Upload a PNG, JPG, WebP, or HTML file.</p>
+            <p className="muted">No email visual is stored yet. The next Klaviyo sync will pull it, or you can upload a PNG, JPG, WebP, or HTML file.</p>
           )}
           {row.calendarId ? null : (
             <label className="field">

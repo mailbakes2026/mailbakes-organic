@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EXPERIMENT_LABEL, EXPERIMENT_STATUSES, type ExperimentJson, type ExperimentStatus } from "@/lib/retention/experiments";
 
@@ -88,12 +88,16 @@ export function FlowTests({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const opened = useRef<string | null>(null);
 
   useEffect(() => {
-    if (window.location.hash === "#ab-tests") {
-      document.getElementById("ab-tests")?.scrollIntoView({ block: "start" });
-    }
-  }, [focusId]);
+    if (!focusId || opened.current === focusId) return;
+    const flow = flows.find((item) => item.id === focusId);
+    if (!flow) return;
+    opened.current = focusId;
+    setDraft({ ...EMPTY, flowId: flow.id, flowName: flow.name, status: "running" });
+    window.setTimeout(() => document.getElementById("ab-form")?.scrollIntoView({ block: "start" }), 0);
+  }, [focusId, flows]);
 
   function setField<K extends keyof Draft>(key: K, value: Draft[K]) {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
@@ -204,7 +208,7 @@ export function FlowTests({
         ))}
       </div>
       {draft ? (
-        <form className="card test-form" onSubmit={save}>
+        <form className="card test-form" id="ab-form" onSubmit={save}>
           <h3>{draft.id ? "Edit test" : "New test"}</h3>
           <label className="field">
             Flow

@@ -1,12 +1,13 @@
 import { Suspense } from "react";
 import { headers } from "next/headers";
 import { DataSkeleton } from "@/components/data-skeleton";
+import { FlowGrid } from "@/components/flow-grid";
 import { FlowTests } from "@/components/flow-tests";
 import { KlaviyoNotice } from "@/components/klaviyo-notice";
 import { PageHeader, SyncFailure } from "@/components/page-header";
-import { PerformanceList } from "@/components/performance-list";
 import { RefreshActions } from "@/components/refresh-actions";
 import { publicBase } from "@/lib/host";
+import { flowCallouts, flowCards } from "@/lib/retention/attention";
 import { listExperiments } from "@/lib/retention/experiment-store";
 import { experimentJson } from "@/lib/retention/experiments";
 import { loadRetention } from "@/lib/retention/load";
@@ -19,7 +20,7 @@ export default function FlowsPage({ searchParams }: { searchParams: Promise<{ fl
     <>
       <PageHeader
         title="Flows"
-        lede="Revenue, recipients and rates, plus the A/B tests running inside them."
+        lede="Every flow on one screen, with this week against last week."
         actions={<RefreshActions />}
       />
       <Suspense fallback={<DataSkeleton />}>
@@ -44,24 +45,23 @@ async function FlowsBody({ searchParams }: { searchParams: Promise<{ flow?: stri
   if (!loaded.ok) return <p className="alert warn">We could not read the database. Check the disk and DATABASE_URL.</p>;
   const month = loaded.view.flows["30d"];
   const week = loaded.view.flows["7d"];
-  const flows = [...month, ...week].filter((row, index, all) => all.findIndex((item) => item.id === row.id) === index);
+  const cards = flowCards({ week, month, previous: loaded.view.flows.prev });
+  const callouts = flowCallouts(cards, experiments);
+  const flows = cards.map((row) => ({ id: row.id, name: row.name }));
   return (
     <>
       <KlaviyoNotice />
       <SyncFailure sync={loaded.klaviyo} />
-      <PerformanceList
-        title="Last 30 days"
-        rows={month}
-        empty="Nothing is stored for the last 30 days. Sync Klaviyo, or push rows to POST /api/v1/ingest."
-        flowHref={(row) => `${base}/flows?flow=${encodeURIComponent(row.id)}#ab-tests`}
-      />
-      <PerformanceList
-        title="Last 7 days"
-        rows={week}
-        empty="Nothing is stored for the last 7 days."
-        flowHref={(row) => `${base}/flows?flow=${encodeURIComponent(row.id)}#ab-tests`}
-      />
-      <FlowTests experiments={experiments} flows={flows.map((row) => ({ id: row.id, name: row.name }))} focusId={query.flow} allHref={`${base}/flows`} />
+      <section className="attention" aria-label="Needs attention this week">
+        <h2>Needs attention this week</h2>
+        {callouts.length ? (
+          callouts.map((note) => <p key={note}>{note}</p>)
+        ) : (
+          <p>Nothing needs attention this week.</p>
+        )}
+      </section>
+      <FlowGrid cards={cards} base={base} />
+      <FlowTests experiments={experiments} flows={flows} focusId={query.flow} allHref={`${base}/flows`} />
     </>
   );
 }

@@ -83,6 +83,7 @@ model FlowStat {
   openRate     Float?
   clickRate    Float?
   currency     String   @default("")
+  status       String   @default("")
   source       String
   updatedAt    DateTime @updatedAt
 
@@ -274,6 +275,15 @@ model RetentionPulse {
   customers            Int?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+}
+
+// Sanitised Klaviyo template HTML for a campaign, so the page can paint without calling Klaviyo.
+model CampaignPreview {
+  campaignId String   @id
+  html       String
+  subject    String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model FlowExperiment {

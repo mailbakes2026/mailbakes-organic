@@ -1,11 +1,12 @@
 import { londonToday } from "@/lib/dates";
 import { isTimeout, KLAVIYO_TIMEOUT, SHOPIFY_TIMEOUT } from "@/lib/deadline";
 import { envValue, klaviyoMissing, klaviyoPrivateKey, shopifyMissing } from "@/lib/env";
+import { backfillKlaviyoHistory, backfillRepeatFromStore } from "@/lib/retention/backfill";
 import { invalidateRetentionCache } from "@/lib/retention/cache";
 import { KLAVIYO_NOT_CONNECTED } from "@/lib/retention/klaviyo-copy";
 import { pullKlaviyo } from "@/lib/retention/klaviyo";
 import { pullShopifyOrders } from "@/lib/retention/shopify";
-import { readSync, replaceOrders, replaceSends, upsertLists, writeSync } from "@/lib/retention/store";
+import { listOrders, readSync, replaceOrders, replaceSends, upsertLists, writeSync } from "@/lib/retention/store";
 import { logSafe, scrub } from "@/lib/scrub";
 
 let klaviyoPending: Promise<{ ok: true; detail: string } | { ok: false; error: string }> | null = null;
@@ -20,8 +21,19 @@ export async function syncKlaviyo(now = new Date()) {
     await replaceSends("campaign", "klaviyo", pulled.campaigns, ["7d", "30d"]);
     const capturedOn = londonToday(now);
     await upsertLists(pulled.lists.map((list) => ({ ...list, capturedOn, source: "klaviyo" })));
+    const orders = await listOrders();
+    const rankedCampaigns = [...pulled.campaigns].sort((a, b) => (b.revenuePence ?? 0) - (a.revenuePence ?? 0) || a.name.localeCompare(b.name));
+    const history = await backfillKlaviyoHistory({
+      today: capturedOn,
+      orders: orders.map((order) => ({ customerId: order.customerId, orderedOn: order.orderedOn })),
+      flowNames: new Map(pulled.flows.map((row) => [row.id, row.name])),
+      campaignNames: new Map(pulled.campaigns.map((row) => [row.id, row.name])),
+      campaignIds: rankedCampaigns.map((row) => row.id),
+    });
     const notes = [
       `Stored ${pulled.flows.length} flow rows and ${pulled.campaigns.length} campaign rows.`,
+      history.weeks ? `Stored ${history.weeks} earlier weeks.` : "Earlier weeks were not stored this time.",
+      history.previews ? `Stored ${history.previews} campaign email previews.` : "",
       pulled.lists.length ? `Recorded ${pulled.lists.length} lists for ${capturedOn}.` : "Klaviyo returned no lists.",
       pulled.countsMissing ? "Klaviyo did not return a profile count." : "",
       pulled.namesMissing ? "Some flow or campaign names were not returned, so the id is shown." : "",
@@ -78,6 +90,7 @@ export async function syncShopify(now = new Date()) {
       .filter(Boolean)
       .join(" ");
     await writeSync("retention-shopify", "ok", detail);
+    await backfillRepeatFromStore(londonToday(now)).catch((error) => logSafe("repeat history", error));
     invalidateRetentionCache();
     return { ok: true as const, detail };
   } catch (error) {

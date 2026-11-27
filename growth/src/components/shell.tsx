@@ -13,18 +13,13 @@ const PAID: Link[] = [
   { href: "/notes", label: "Notes" },
 ];
 
-const RETENTION: { group: string; links: { href: string; label: string; count?: boolean }[] }[] = [
-  {
-    group: "Lifecycle",
-    links: [
-      { href: "/calendar", label: "Calendar", count: true },
-      { href: "", label: "Overview" },
-      { href: "/flows", label: "Flows" },
-      { href: "/campaigns", label: "Campaigns" },
-      { href: "/customers", label: "Customers" },
-    ],
-  },
-  { group: "Settings", links: [{ href: "/settings", label: "Settings" }] },
+const RETENTION: { href: string; label: string; count?: boolean }[] = [
+  { href: "", label: "Overview" },
+  { href: "/calendar", label: "Calendar", count: true },
+  { href: "/flows", label: "Flows" },
+  { href: "/campaigns", label: "Campaigns" },
+  { href: "/customers", label: "Customers" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function Shell({
@@ -83,12 +78,7 @@ export function Shell({
           )}
         </div>
         {retention ? (
-          RETENTION.map((section) => (
-            <div key={section.group}>
-              <div className="nav-group">{section.group}</div>
-              {section.links.map((link) => item({ href: link.href, label: link.label, badge: link.count && needsOk > 0 ? needsOk : undefined }))}
-            </div>
-          ))
+          RETENTION.map((link) => item({ href: link.href, label: link.label, badge: link.count && needsOk > 0 ? needsOk : undefined }))
         ) : (
           <>
             <div className="nav-group">Ads</div>
