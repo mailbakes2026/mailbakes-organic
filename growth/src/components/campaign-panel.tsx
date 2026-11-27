@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { formatLondon } from "@/lib/dates";
+import { RateBar } from "@/components/rate-bar";
+import { formatDay, formatLondon } from "@/lib/dates";
 import { formatCount } from "@/lib/format";
 import {
   CHANNEL_LABEL,
@@ -186,9 +187,12 @@ export function CampaignPanel({
   const [pending, setPending] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [html, setHtml] = useState<Record<string, string>>({});
+  const [lightbox, setLightbox] = useState<{ id: string; filename: string; mimeType: string } | null>(null);
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const lightboxRef = useRef(lightbox);
+  lightboxRef.current = lightbox;
 
   useEffect(() => {
     setDraft(campaign ? draftFrom(campaign) : { ...EMPTY_DRAFT, sendDate: defaultDate });
@@ -197,6 +201,7 @@ export function CampaignPanel({
     setConfirmDelete(false);
     setComment("");
     setHtml({});
+    setLightbox(null);
   }, [campaign, defaultDate]);
 
   useEffect(() => {
@@ -204,7 +209,9 @@ export function CampaignPanel({
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onCloseRef.current();
+      if (event.key !== "Escape") return;
+      if (lightboxRef.current) setLightbox(null);
+      else onCloseRef.current();
     }
     window.addEventListener("keydown", onKey);
     return () => {
@@ -347,6 +354,25 @@ export function CampaignPanel({
     }
   }
 
+  async function replaceDesign(id: string, file: File) {
+    if (!campaign) return;
+    setPending("upload");
+    setError(null);
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const response = await fetch(`/api/retention/calendar/campaigns/${campaign.id}/designs`, { method: "POST", body });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "That design was not saved.");
+      await sendJson(`/api/retention/calendar/designs/${id}`, "DELETE");
+      await onChange(campaign.id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That design was not replaced.");
+    } finally {
+      setPending("");
+    }
+  }
+
   async function removeDesign(id: string) {
     if (!campaign) return;
     setPending("design");
@@ -433,6 +459,8 @@ export function CampaignPanel({
         ) : null}
         {error ? <p className="error">{error}</p> : null}
 
+        {campaign ? <Designs campaign={campaign} html={html} pending={pending} onUpload={upload} onReplace={replaceDesign} onRemove={removeDesign} onOpen={setLightbox} /> : null}
+
         {campaign ? (
           <section className="cal-section">
             <h3>How it&apos;s set up</h3>
@@ -444,7 +472,7 @@ export function CampaignPanel({
               <div>
                 <dt>Send</dt>
                 <dd>
-                  {campaign.sendDate} · {clock}
+                  {formatDay(campaign.sendDate)} · {clock}
                   {campaign.sendTime ? ` (${campaign.sendTime})` : ""} · Europe/London
                 </dd>
               </div>
@@ -600,24 +628,32 @@ export function CampaignPanel({
                 : "Add a Klaviyo campaign ID to pull live results. Until then, the snapshot below is what the calendar shows."}
             </p>
             {campaign.results.error ? <p className="warn-copy">{campaign.results.error}</p> : null}
-            <div className="cal-metrics">
+            <div className="kpi-grid">
               <Metric label="Revenue" value={campaign.results.revenuePence === null ? null : formatMoneyPence(campaign.results.revenuePence, campaign.results.currency)} />
               <Metric label="Orders" value={formatCount(campaign.results.orders)} />
-              <Metric label="Average order" value={campaign.results.aovPence === null ? null : formatMoneyPence(campaign.results.aovPence, campaign.results.currency)} />
               <Metric label="Open rate" value={formatCalendarRate(campaign.results.openRate)} />
-              <Metric label="Opens" value={formatCount(campaign.results.opens)} />
               <Metric label="Click rate" value={formatCalendarRate(campaign.results.clickRate)} />
-              <Metric label="Clicks" value={formatCount(campaign.results.clicks)} />
-              <Metric label="Recipients" value={formatCount(campaign.results.recipients)} />
-              <Metric label="Delivered" value={formatCount(campaign.results.delivered)} />
-              <Metric label="Conversion" value={formatCalendarRate(campaign.results.conversionRate)} />
-              <Metric label="Unsubscribe rate" value={formatCalendarRate(campaign.results.unsubscribeRate)} />
-              <Metric label="Unsubscribes" value={formatCount(campaign.results.unsubscribes)} />
-              <Metric label="Bounce rate" value={formatCalendarRate(campaign.results.bounceRate)} />
-              <Metric label="Bounces" value={formatCount(campaign.results.bounces)} />
-              <Metric label="Spam rate" value={formatCalendarRate(campaign.results.spamRate)} />
-              <Metric label="Spam complaints" value={formatCount(campaign.results.spamComplaints)} />
+              <Metric label="Placed order rate" value={formatCalendarRate(campaign.results.conversionRate)} />
+              <Metric label="AOV" value={campaign.results.aovPence === null ? null : formatMoneyPence(campaign.results.aovPence, campaign.results.currency)} />
             </div>
+            <RateBar label="Open rate" value={formatCalendarRate(campaign.results.openRate) ?? "—"} width={(campaign.results.openRate ?? 0) * 100} />
+            <RateBar label="Click rate" value={formatCalendarRate(campaign.results.clickRate) ?? "—"} width={(campaign.results.clickRate ?? 0) * 100} />
+            <RateBar label="Placed order rate" value={formatCalendarRate(campaign.results.conversionRate) ?? "—"} width={(campaign.results.conversionRate ?? 0) * 100} />
+            <details className="more-figures">
+              <summary>More figures</summary>
+              <div className="cal-metrics">
+                <Metric label="Opens" value={formatCount(campaign.results.opens)} />
+                <Metric label="Clicks" value={formatCount(campaign.results.clicks)} />
+                <Metric label="Recipients" value={formatCount(campaign.results.recipients)} />
+                <Metric label="Delivered" value={formatCount(campaign.results.delivered)} />
+                <Metric label="Unsubscribe rate" value={formatCalendarRate(campaign.results.unsubscribeRate)} />
+                <Metric label="Unsubscribes" value={formatCount(campaign.results.unsubscribes)} />
+                <Metric label="Bounce rate" value={formatCalendarRate(campaign.results.bounceRate)} />
+                <Metric label="Bounces" value={formatCount(campaign.results.bounces)} />
+                <Metric label="Spam rate" value={formatCalendarRate(campaign.results.spamRate)} />
+                <Metric label="Spam complaints" value={formatCount(campaign.results.spamComplaints)} />
+              </div>
+            </details>
             <p className="cal-notes">
               {campaign.results.attributionModel ? <b>{campaign.results.attributionModel}. </b> : null}
               {campaign.results.attributionDetail || (campaign.klaviyoCampaignId ? KLAVIYO_ATTRIBUTION_DETAIL : "")}
@@ -665,46 +701,6 @@ export function CampaignPanel({
 
         {campaign ? (
           <section className="cal-section">
-            <h3>Designs</h3>
-            {campaign.designs.length ? (
-              <div className="cal-designs">
-                {campaign.designs.map((design) => (
-                  <figure key={design.id}>
-                    {design.mimeType.startsWith("image/") ? (
-                      <img src={`/api/retention/calendar/designs/${design.id}`} alt={design.filename} />
-                    ) : html[design.id] ? (
-                      <iframe title={design.filename} sandbox="" srcDoc={html[design.id]} />
-                    ) : (
-                      <p className="muted">Loading preview…</p>
-                    )}
-                    <figcaption>
-                      <span>
-                        {design.filename} · {design.uploadedBy} · {formatLondon(new Date(design.createdAt))}
-                      </span>
-                      <button className="subtle" type="button" onClick={() => removeDesign(design.id)}>
-                        Remove
-                      </button>
-                    </figcaption>
-                  </figure>
-                ))}
-              </div>
-            ) : (
-              <p className="muted">No design uploaded yet.</p>
-            )}
-            <form onSubmit={upload}>
-              <label className="field">
-                Upload a PNG, JPG, WebP, or HTML file
-                <input name="file" type="file" accept="image/png,image/jpeg,image/webp,text/html,.html,.htm,.png,.jpg,.jpeg,.webp" />
-              </label>
-              <button className="btn" type="submit" disabled={pending === "upload"}>
-                {pending === "upload" ? "Uploading…" : "Upload design"}
-              </button>
-            </form>
-          </section>
-        ) : null}
-
-        {campaign ? (
-          <section className="cal-section">
             <h3>Team review</h3>
             {campaign.reviews.length ? (
               <ul className="cal-reviews">
@@ -744,7 +740,7 @@ export function CampaignPanel({
                 Approve and schedule
               </button>
             </div>
-            <p className="muted small">Request changes sets the status to Built, needs your OK. Approve and schedule sets it to Scheduled.</p>
+            <p className="muted small">Request changes sets the status to Needs OK. Approve and schedule sets it to Scheduled.</p>
           </section>
         ) : null}
 
@@ -757,7 +753,102 @@ export function CampaignPanel({
           </section>
         ) : null}
       </div>
+      {lightbox ? (
+        <div className="design-lightbox" role="dialog" aria-modal="true" aria-label="Email design">
+          <button className="cal-scrim" type="button" aria-label="Close preview" onClick={() => setLightbox(null)} />
+          <div className="design-lightbox-frame">
+            {lightbox.mimeType.startsWith("image/") ? (
+              <img src={`/api/retention/calendar/designs/${lightbox.id}`} alt={lightbox.filename} />
+            ) : (
+              <iframe title={lightbox.filename} sandbox="" srcDoc={html[lightbox.id] ?? ""} />
+            )}
+            <button className="btn" type="button" onClick={() => setLightbox(null)}>
+              Close preview
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function Designs({
+  campaign,
+  html,
+  pending,
+  onUpload,
+  onReplace,
+  onRemove,
+  onOpen,
+}: {
+  campaign: CampaignJson;
+  html: Record<string, string>;
+  pending: string;
+  onUpload: (event: React.FormEvent<HTMLFormElement>) => void;
+  onReplace: (id: string, file: File) => void;
+  onRemove: (id: string) => void;
+  onOpen: (design: { id: string; filename: string; mimeType: string }) => void;
+}) {
+  return (
+    <section className="cal-section">
+      <h3>Design</h3>
+      {campaign.designs.length ? (
+        <div className="cal-designs">
+          {campaign.designs.map((design) => (
+            <figure key={design.id}>
+              <div className="design-open">
+                {design.mimeType.startsWith("image/") ? (
+                  <button type="button" onClick={() => onOpen({ id: design.id, filename: design.filename, mimeType: design.mimeType })}>
+                    <img src={`/api/retention/calendar/designs/${design.id}`} alt={design.filename} />
+                  </button>
+                ) : html[design.id] ? (
+                  <iframe title={design.filename} sandbox="" srcDoc={html[design.id]} />
+                ) : (
+                  <p className="muted">Loading preview…</p>
+                )}
+                <button type="button" onClick={() => onOpen({ id: design.id, filename: design.filename, mimeType: design.mimeType })}>
+                  View full size
+                </button>
+              </div>
+              <figcaption>
+                <span>
+                  {design.filename} · {design.uploadedBy} · {formatLondon(new Date(design.createdAt))}
+                </span>
+                <span className="row">
+                  <label className="btn ghost sm">
+                    Replace
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/png,image/jpeg,image/webp,text/html,.html,.htm,.png,.jpg,.jpeg,.webp"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (file) onReplace(design.id, file);
+                      }}
+                    />
+                  </label>
+                  <button className="subtle" type="button" onClick={() => onRemove(design.id)}>
+                    Remove
+                  </button>
+                </span>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      ) : (
+        <p className="design-empty">No design yet. Upload a PNG, JPG, WebP, or HTML file to preview the email here.</p>
+      )}
+      <form onSubmit={onUpload}>
+        <label className="field">
+          Upload a PNG, JPG, WebP, or HTML file
+          <input name="file" type="file" accept="image/png,image/jpeg,image/webp,text/html,.html,.htm,.png,.jpg,.jpeg,.webp" />
+        </label>
+        <button className="btn" type="submit" disabled={pending === "upload"}>
+          {pending === "upload" ? "Uploading…" : campaign.designs.length ? "Add another design" : "Upload design"}
+        </button>
+      </form>
+    </section>
   );
 }
 

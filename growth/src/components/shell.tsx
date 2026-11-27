@@ -21,10 +21,9 @@ const RETENTION: { group: string; links: { href: string; label: string; count?: 
       { href: "", label: "Overview" },
       { href: "/flows", label: "Flows" },
       { href: "/campaigns", label: "Campaigns" },
+      { href: "/customers", label: "Customers" },
     ],
   },
-  { group: "Planning", links: [{ href: "/plan", label: "Q4 plan" }] },
-  { group: "Analytics", links: [{ href: "/customers", label: "Customers" }] },
   { group: "Settings", links: [{ href: "/settings", label: "Settings" }] },
 ];
 

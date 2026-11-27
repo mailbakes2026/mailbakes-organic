@@ -1,4 +1,5 @@
-import { addMonths, monthKey } from "@/lib/dates";
+import { addMonths, monthKey, parseDateOnly } from "@/lib/dates";
+import { sumMoney } from "@/lib/retention/weeks";
 
 export type OrderFact = {
   id: string;
@@ -134,4 +135,141 @@ export function preferLatest(rows: SendFact[]) {
 export function rateFromCounts(part: number | null, whole: number | null) {
   if (part === null || whole === null || whole <= 0) return null;
   return part / whole;
+}
+
+export type PricedOrder = OrderFact & { totalPence?: number | null; currency?: string };
+
+export type CustomerSegment = {
+  customers: number;
+  share: number;
+  orders: number;
+  avgOrders: number | null;
+  avgSpendPence: number | null;
+  currency: string;
+  mixed: boolean;
+};
+
+export type CustomerPicture = {
+  customers: number;
+  newCustomers: number;
+  returningCustomers: number;
+  newRevenuePence: number | null;
+  returningRevenuePence: number | null;
+  currency: string;
+  mixed: boolean;
+  avgDaysToSecond: number | null;
+  secondOrderCustomers: number;
+  guestOrders: number;
+  first: string;
+  last: string;
+  vips: CustomerSegment;
+  due: CustomerSegment;
+  lapsed: CustomerSegment;
+};
+
+function daySpan(from: string, to: string) {
+  const start = parseDateOnly(from);
+  const end = parseDateOnly(to);
+  if (!start || !end) return null;
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000);
+}
+
+function orderMoney(orders: PricedOrder[]) {
+  if (!orders.length) return { pence: 0, currency: "GBP", mixed: false };
+  if (orders.some((order) => typeof order.totalPence !== "number")) return { pence: null as number | null, currency: "GBP", mixed: false };
+  return sumMoney(orders.map((order) => ({ revenuePence: order.totalPence ?? null, currency: order.currency || "GBP" })));
+}
+
+function segmentOf(ids: string[], byCustomer: Map<string, PricedOrder[]>, base: number): CustomerSegment {
+  const orders = ids.flatMap((id) => byCustomer.get(id) ?? []);
+  const money = orderMoney(orders);
+  return {
+    customers: ids.length,
+    share: base === 0 ? 0 : ids.length / base,
+    orders: orders.length,
+    avgOrders: ids.length ? orders.length / ids.length : null,
+    avgSpendPence: money.pence === null || !ids.length ? null : Math.round(money.pence / ids.length),
+    currency: money.currency,
+    mixed: money.mixed,
+  };
+}
+
+export function customerPicture(orders: PricedOrder[], today: string): CustomerPicture | null {
+  if (!parseDateOnly(today)) return null;
+  const guestOrders = orders.filter((order) => !order.customerId).length;
+  const withCustomer = orders.filter((order) => order.customerId && parseDateOnly(order.orderedOn));
+  if (!withCustomer.length) return null;
+  const byCustomer = new Map<string, PricedOrder[]>();
+  for (const order of withCustomer) {
+    const list = byCustomer.get(order.customerId) ?? [];
+    list.push(order);
+    byCustomer.set(order.customerId, list);
+  }
+  let newCustomers = 0;
+  let returningCustomers = 0;
+  const newOrders: PricedOrder[] = [];
+  const returningOrders: PricedOrder[] = [];
+  const gaps: number[] = [];
+  const vips: string[] = [];
+  const due: string[] = [];
+  const lapsed: string[] = [];
+  let first = "9999-99-99";
+  let last = "0000-00-00";
+  for (const [id, list] of byCustomer) {
+    const ordered = [...list].sort((a, b) => a.orderedOn.localeCompare(b.orderedOn) || a.id.localeCompare(b.id));
+    const earliest = ordered[0]?.orderedOn ?? "";
+    const latest = ordered[ordered.length - 1]?.orderedOn ?? "";
+    if (earliest && earliest < first) first = earliest;
+    if (latest && latest > last) last = latest;
+    if (list.length >= 2) {
+      returningCustomers += 1;
+      returningOrders.push(...list);
+      const gap = daySpan(ordered[0]!.orderedOn, ordered[1]!.orderedOn);
+      if (gap !== null && gap >= 0) gaps.push(gap);
+    } else {
+      newCustomers += 1;
+      newOrders.push(...list);
+    }
+    if (list.length >= 3) vips.push(id);
+    const since = latest ? daySpan(latest, today) : null;
+    if (since !== null && since >= 30 && since <= 60) due.push(id);
+    if (since !== null && since >= 90) lapsed.push(id);
+  }
+  const base = byCustomer.size;
+  const newMoney = orderMoney(newOrders);
+  const returnMoney = orderMoney(returningOrders);
+  const mixed =
+    newMoney.mixed ||
+    returnMoney.mixed ||
+    (newMoney.pence !== null && returnMoney.pence !== null && newMoney.currency !== returnMoney.currency);
+  const currency = !newMoney.mixed && newMoney.pence !== null ? newMoney.currency : !returnMoney.mixed && returnMoney.pence !== null ? returnMoney.currency : "GBP";
+  const avgDaysToSecond = gaps.length ? Math.round((gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length) * 10) / 10 : null;
+  return {
+    customers: base,
+    newCustomers,
+    returningCustomers,
+    newRevenuePence: newMoney.mixed ? null : newMoney.pence,
+    returningRevenuePence: returnMoney.mixed ? null : returnMoney.pence,
+    currency,
+    mixed,
+    avgDaysToSecond,
+    secondOrderCustomers: gaps.length,
+    guestOrders,
+    first,
+    last,
+    vips: segmentOf(vips, byCustomer, base),
+    due: segmentOf(due, byCustomer, base),
+    lapsed: segmentOf(lapsed, byCustomer, base),
+  };
+}
+
+export function listSummary(rows: { latest: { profiles: number | null }; delta: number | null }[]) {
+  const known = rows.filter((row) => row.latest.profiles !== null);
+  const deltas = rows.map((row) => row.delta).filter((delta): delta is number => delta !== null);
+  return {
+    lists: rows.length,
+    total: known.length ? known.reduce((sum, row) => sum + (row.latest.profiles ?? 0), 0) : null,
+    net: deltas.length ? deltas.reduce((sum, delta) => sum + delta, 0) : null,
+    missingProfiles: rows.length - known.length,
+  };
 }
