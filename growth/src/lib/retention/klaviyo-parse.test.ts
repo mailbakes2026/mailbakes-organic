@@ -4,6 +4,7 @@ import {
   campaignNamePath,
   choosePlacedOrder,
   parseAccountCurrency,
+  parseCampaignPerformance,
   parseLists,
   parseMetricCatalog,
   parsePlacedOrderMetric,
@@ -82,4 +83,59 @@ test("Placed Order prefers the Shopify metric and campaign lists require a chann
   assert.equal(retryWaitMs(null), 2_000);
   assert.equal(retryWaitMs("30"), 15_000);
   assert.equal(retryWaitMs("1"), 1_000);
+});
+
+test("a campaign values report sums messages and keeps Klaviyo's rates", () => {
+  const rows = parseCampaignPerformance({
+    data: {
+      attributes: {
+        results: [
+          {
+            groupings: { campaign_id: "01ABC", campaign_message_id: "M1", send_channel: "email" },
+            statistics: {
+              recipients: 100,
+              delivered: 90,
+              opens_unique: 50,
+              open_rate: 0.5,
+              clicks_unique: 5,
+              click_rate: 0.05,
+              conversion_value: 20.5,
+              conversions: 2,
+              conversion_rate: 0.02,
+              unsubscribes: 1,
+              bounced: 4,
+              spam_complaints: 0,
+            },
+          },
+          {
+            groupings: { campaign_id: "01ABC", campaign_message_id: "M2", send_channel: "email" },
+            statistics: {
+              recipients: 50,
+              delivered: 10,
+              opens_unique: 10,
+              open_rate: 1,
+              clicks_unique: 0,
+              click_rate: 0,
+              conversion_value: 4.5,
+              conversions: 1,
+              conversion_rate: 0.1,
+              unsubscribes: 0,
+              bounced: 1,
+              spam_complaints: 1,
+            },
+          },
+        ],
+      },
+    },
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.opens, 60);
+  assert.equal(rows[0]?.clicks, 5);
+  assert.equal(rows[0]?.delivered, 100);
+  assert.equal(rows[0]?.orders, 3);
+  assert.equal(rows[0]?.revenuePence, 2500);
+  assert.equal(rows[0]?.openRate, (0.5 * 90 + 1 * 10) / 100);
+  assert.equal(rows[0]?.aovPence, Math.round(2500 / 3));
+  assert.equal(rows[0]?.bounces, 5);
+  assert.equal(rows[0]?.spamComplaints, 1);
 });

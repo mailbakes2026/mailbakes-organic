@@ -23,6 +23,8 @@ Google Ads is parked. The page says it is not connected. The app does not read `
 
 Retention holds Klaviyo flows and campaigns (revenue, open, click, unsubscribes), list snapshots, Shopify repeat-purchase rate, customers by order count, and cohort retention. Kyle (`kyle@flowsha.com`, lifecycle freelancer) has the Q4 2026 plan. Decisions start blank. Retention Reviews have their own prep notes.
 
+The email calendar is the first Retention tab. It is a week-by-week plan from Black Friday through Christmas: offer bars, colour-coded sends, a detail view, design uploads, and team review. The Black Friday week is seeded once. Later edits, including deletes, are kept. A send with a Klaviyo campaign ID can sync attributed Placed Order results. Until then, the stored snapshot is what the page shows.
+
 The app does not invent a number. A missing row stays blank and the page says what is missing: an env var, a sync, or an ingest.
 
 ## Local
@@ -84,7 +86,7 @@ Set these on the service. Do not commit them. The app does not print them.
 | `DATABASE_URL` | Blueprint | Yes | SQLite file. On Render: `file:/var/data/growth.db`. |
 | `NODE_VERSION` | Blueprint | Yes | `22`. |
 | `PAIDADS_API_TOKEN` | Millie | For ingest | Bearer token for Paid Ads rows. At least 16 characters. Must differ from the retention token. |
-| `RETENTION_API_TOKEN` | Millie | For ingest | Bearer token for Retention rows. At least 16 characters. |
+| `RETENTION_API_TOKEN` | Millie | For ingest and the email calendar API | Bearer token for Retention rows and for Claude to read and edit the email calendar. At least 16 characters. No separate calendar token. |
 | `META_ACCESS_TOKEN` | Millie | To sync Meta | Marketing API token with ads read access for the ad account. |
 | `META_AD_ACCOUNT_ID` | Millie | To sync Meta | Ad account id, with or without the `act_` prefix. |
 | `KLAVIYO_PRIVATE_API_KEY` | Millie | To sync Klaviyo | Private API key. Set it on the Render service `mailbakes-growth`, under Environment, then save, rebuild, and deploy. Retention Settings shows whether it is set, and never shows the value. |
@@ -173,3 +175,64 @@ curl -s https://retention.mailbakes.com/api/v1/ingest \
 ```
 
 If a token is missing, the API says setup is needed and does not guess. If the two tokens are the same string, ingest refuses both.
+
+## Email calendar API
+
+The calendar page has the same examples under API / Claude handoff. Base URL `https://retention.mailbakes.com`. A signed-in browser session works without a header. Claude sends:
+
+```bash
+Authorization: Bearer $RETENTION_API_TOKEN
+X-MailBakes-Actor: Claude
+```
+
+`X-MailBakes-Actor` is the name stored on a design upload or, if the JSON does not include `author`, on a review comment. It is optional. Without it, the name is `API`.
+
+Rates are fractions. `0.58` is 58%, and `0.0059` is 0.59%. Send times are 24-hour `HH:MM` in Europe/London. Leave `sendTime` blank and set `timeLabel` to `Daytime` when there is no clock time.
+
+```bash
+curl -s "https://retention.mailbakes.com/api/retention/calendar?week=2026-11-23" \
+  -H "Authorization: Bearer $RETENTION_API_TOKEN"
+
+curl -s https://retention.mailbakes.com/api/retention/calendar/campaigns \
+  -H "Authorization: Bearer $RETENTION_API_TOKEN" \
+  -H "X-MailBakes-Actor: Claude" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Plain letter from you","status":"planned","channel":"email","sendDate":"2026-11-29","timeLabel":"Daytime"}'
+
+curl -s -X POST "https://retention.mailbakes.com/api/retention/calendar/campaigns/CAMPAIGN_ID/designs" \
+  -H "Authorization: Bearer $RETENTION_API_TOKEN" \
+  -H "X-MailBakes-Actor: Claude" \
+  -F "file=@design.png"
+
+curl -s -X POST "https://retention.mailbakes.com/api/retention/calendar/campaigns/CAMPAIGN_ID/reviews" \
+  -H "Authorization: Bearer $RETENTION_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"author":"Millie","body":"Headline is good.","verdict":"approved","status":"scheduled"}'
+
+curl -s -X POST https://retention.mailbakes.com/api/retention/calendar/sync \
+  -H "Authorization: Bearer $RETENTION_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"week":"2026-11-23"}'
+```
+
+| Method and path | What it does |
+| --- | --- |
+| `GET /api/retention/calendar?week=YYYY-MM-DD` | One Monday-Sunday week. A date in the middle of the week is fine. |
+| `GET /api/retention/calendar?from=&to=` | Up to 120 days. |
+| `POST /api/retention/calendar/campaigns` | Create a send. `title` and `sendDate` are required. Status defaults to `planned`, channel to `email`. |
+| `GET /api/retention/calendar/campaigns/:id` | One send, including designs and reviews. |
+| `PATCH /api/retention/calendar/campaigns/:id` | Update setup fields, or a `results` object to save a manual snapshot. |
+| `DELETE /api/retention/calendar/campaigns/:id` | Delete the send, its designs, and its reviews. |
+| `POST /api/retention/calendar/offers` | Create an offer bar. `label`, `startDate`, `endDate`. `tone` is `pink` or `plum`. |
+| `PATCH` or `DELETE /api/retention/calendar/offers/:id` | Edit or remove an offer bar. |
+| `POST /api/retention/calendar/tags` | Body `{"date":"2026-11-27","label":"Black Friday"}`. |
+| `DELETE /api/retention/calendar/tags/:id` | Remove a day tag. |
+| `POST /api/retention/calendar/campaigns/:id/designs` | Multipart field `file`. PNG, JPG, WebP, or HTML, under 6 MB. |
+| `GET` or `DELETE /api/retention/calendar/designs/:id` | Download or remove a design. |
+| `POST /api/retention/calendar/campaigns/:id/reviews` | `verdict` is `comment`, `approved`, or `changes_requested`. Optional `status` updates the send in the same step. |
+| `DELETE /api/retention/calendar/reviews/:id` | Remove a comment. |
+| `POST /api/retention/calendar/sync` | Body `{"week":"2026-11-23"}`, `{"from","to"}`, or `{"campaignId"}`. An empty body syncs the current London week. |
+
+Status is `sent`, `scheduled`, `built` (Built, needs your OK), `planned`, `skipped`, or `task`. Channel is `email`, `sms`, or `task`.
+
+Klaviyo order and revenue figures are attributed Placed Order results. Klaviyo does not return the attribution model on the API. The account default is last-touch. Record the windows you use in the attribution model field if you want them on the send. A sync does not clear that note. If Klaviyo is not connected, the campaign ID is blank, or Klaviyo returns nothing, the stored snapshot stays as it is.

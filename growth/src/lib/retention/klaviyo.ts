@@ -3,6 +3,7 @@ import {
   choosePlacedOrder,
   klaviyoError,
   parseAccountCurrency,
+  parseCampaignPerformance,
   parseLists,
   parseMetricCatalog,
   parseNamedResources,
@@ -163,6 +164,69 @@ async function listsFor(key: string) {
     const lists = (await collect("/api/lists?fields[list]=name", key)).flatMap(parseLists);
     return { lists, countsMissing: true };
   }
+}
+
+const CAMPAIGN_STATS = [
+  "recipients",
+  "delivered",
+  "opens",
+  "opens_unique",
+  "open_rate",
+  "clicks",
+  "clicks_unique",
+  "click_rate",
+  "conversion_value",
+  "conversions",
+  "conversion_uniques",
+  "conversion_rate",
+  "average_order_value",
+  "unsubscribes",
+  "unsubscribe_rate",
+  "bounced",
+  "bounce_rate",
+  "spam_complaints",
+  "spam_complaint_rate",
+];
+
+const CAMPAIGN_STATS_SAFE = ["opens", "clicks", "unsubscribes", "delivered", "recipients", "conversion_value"];
+
+export type CampaignTimeframe = { key: "last_12_months" } | { start: string; end: string };
+
+export async function pullCampaignPerformance(key: string, campaignIds: string[], timeframe: CampaignTimeframe) {
+  const ids = [...new Set(campaignIds.filter((id) => /^[A-Za-z0-9]{6,32}$/.test(id)))];
+  if (!ids.length) return { currency: "GBP", rows: [] };
+  const metricId = await placedOrderId(key);
+  if (!metricId) {
+    throw new Error("Klaviyo is connected, but no metric named Placed Order was found, so campaign revenue cannot be requested.");
+  }
+  const filter = ids.length === 1 ? `equals(campaign_id,"${ids[0]}")` : `contains-any(campaign_id,[${ids.map((id) => `"${id}"`).join(",")}])`;
+  let body: unknown;
+  try {
+    body = await campaignReport(key, CAMPAIGN_STATS, timeframe, metricId, filter);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/statistic/i.test(message)) throw error;
+    body = await campaignReport(key, CAMPAIGN_STATS_SAFE, timeframe, metricId, filter);
+  }
+  const currency = (await accountCurrency(key)) ?? "GBP";
+  return { currency, rows: parseCampaignPerformance(body) };
+}
+
+async function campaignReport(key: string, statistics: string[], timeframe: CampaignTimeframe, conversionMetricId: string, filter: string) {
+  return klaviyo("/api/campaign-values-reports", key, {
+    method: "POST",
+    body: {
+      data: {
+        type: "campaign-values-report",
+        attributes: {
+          statistics,
+          timeframe,
+          conversion_metric_id: conversionMetricId,
+          filter,
+        },
+      },
+    },
+  });
 }
 
 function reportBody(type: string, timeframe: string, conversionMetricId: string) {

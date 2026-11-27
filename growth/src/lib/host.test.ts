@@ -31,6 +31,9 @@ test("session is required for an app page and not for ingest, login, or the choo
   assert.equal(requiresSession("/", "/"), false);
   assert.equal(requiresSession("/login", "/login"), false);
   assert.equal(requiresSession("/api/v1/ingest", "/api/v1/ingest"), false);
+  assert.equal(requiresSession("/api/retention/calendar", "/api/retention/calendar"), false);
+  assert.equal(requiresSession("/api/retention/calendar/campaigns/abc", "/api/retention/calendar/campaigns/abc"), false);
+  assert.equal(requiresSession("/api/retention/plan", "/api/retention/plan"), true);
   assert.equal(requiresSession("/paidads/api/v1/ingest", "/paidads/api/v1/ingest"), false);
   assert.equal(requiresSession("/favicon.ico", "/paidads/icon"), false);
 });
