@@ -1,3 +1,4 @@
+import { isTimeout, KLAVIYO_TIMEOUT } from "@/lib/deadline";
 import { json } from "@/lib/http";
 import { calendarAction } from "@/lib/retention/calendar/http";
 import { calendarRange, readSync } from "@/lib/retention/calendar/model";
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
       return json(result);
     } catch (error) {
       logSafe("calendar sync", error);
-      const message = error instanceof Error && error.message ? error.message : "Klaviyo did not return campaign results.";
+      const message = isTimeout(error) ? KLAVIYO_TIMEOUT : error instanceof Error && error.message ? error.message : "Klaviyo did not return campaign results.";
       return json({ error: message }, 502);
     }
   });

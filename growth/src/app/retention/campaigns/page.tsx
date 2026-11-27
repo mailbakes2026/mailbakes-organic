@@ -1,25 +1,49 @@
+import { Suspense } from "react";
+import { DataSkeleton } from "@/components/data-skeleton";
 import { KlaviyoNotice } from "@/components/klaviyo-notice";
+import { MetricLine, PageHeader, SyncFailure } from "@/components/page-header";
+import { RefreshActions } from "@/components/refresh-actions";
 import { SendTable } from "@/components/retention-tables";
+import { revenueLabel } from "@/lib/format";
 import { loadRetention } from "@/lib/retention/load";
 
 export const dynamic = "force-dynamic";
 
-export default async function RetentionCampaignsPage() {
-  const loaded = await loadRetention();
+export default function RetentionCampaignsPage() {
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>Campaigns</h1>
-          <p className="muted">Revenue, opens, clicks and unsubscribes for sent campaigns.</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Campaigns"
+        lede="Revenue, opens, clicks and unsubscribes for sent campaigns."
+        actions={<RefreshActions />}
+      />
+      <Suspense fallback={<DataSkeleton />}>
+        <CampaignsBody />
+      </Suspense>
+    </>
+  );
+}
+
+async function CampaignsBody() {
+  const loaded = await loadRetention();
+  const week = loaded.ok ? loaded.view.campaigns["7d"] : [];
+  const month = loaded.ok ? loaded.view.campaigns["30d"] : [];
+  return (
+    <>
       <KlaviyoNotice />
+      {loaded.ok ? <SyncFailure sync={loaded.klaviyo} /> : null}
       {!loaded.ok ? <p className="alert warn">We could not read the database. Check the disk and DATABASE_URL.</p> : null}
+      <MetricLine
+        parts={[
+          { value: month.length ? String(month.length) : "", label: month.length === 1 ? "campaign, 30 days" : "campaigns, 30 days" },
+          { value: revenueLabel(month) ?? "", label: "revenue" },
+          { value: week.length ? String(week.length) : "", label: "in the last 7 days" },
+        ]}
+      />
       {loaded.ok ? (
         <>
-          <SendTable title="Last 7 days" hint="Klaviyo timeframe last_7_days, or an ingest row with window 7d." rows={loaded.view.campaigns["7d"]} />
-          <SendTable title="Last 30 days" hint="Klaviyo timeframe last_30_days, or an ingest row with window 30d." rows={loaded.view.campaigns["30d"]} />
+          <SendTable title="Last 7 days" hint="Klaviyo timeframe last_7_days, or an ingest row with window 7d." rows={week} />
+          <SendTable title="Last 30 days" hint="Klaviyo timeframe last_30_days, or an ingest row with window 30d." rows={month} />
         </>
       ) : null}
     </>

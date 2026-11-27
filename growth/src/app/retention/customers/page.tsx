@@ -1,10 +1,29 @@
+import { Suspense } from "react";
+import { DataSkeleton } from "@/components/data-skeleton";
 import { KlaviyoNotice } from "@/components/klaviyo-notice";
+import { MetricLine, PageHeader, SyncFailure } from "@/components/page-header";
+import { RefreshActions } from "@/components/refresh-actions";
 import { formatCount } from "@/lib/format";
 import { loadRetention } from "@/lib/retention/load";
 
 export const dynamic = "force-dynamic";
 
-export default async function CustomersPage() {
+export default function CustomersPage() {
+  return (
+    <>
+      <PageHeader
+        title="Customers"
+        lede="Repeat purchase, order counts, cohorts and list growth. Guest checkouts stay out of the rates."
+        actions={<RefreshActions shopify />}
+      />
+      <Suspense fallback={<DataSkeleton />}>
+        <CustomersBody />
+      </Suspense>
+    </>
+  );
+}
+
+async function CustomersBody() {
   const loaded = await loadRetention();
   if (!loaded.ok) return <p className="alert warn">We could not read the database. Check the disk and DATABASE_URL.</p>;
   const { repeat, cohorts, lists } = loaded.view;
@@ -12,12 +31,14 @@ export default async function CustomersPage() {
   return (
     <>
       <KlaviyoNotice />
-      <div className="page-head">
-        <div>
-          <h1>Customers</h1>
-          <p className="muted">Repeat purchase, order counts, cohorts and list growth. Guest checkouts are excluded from the rates.</p>
-        </div>
-      </div>
+      <SyncFailure sync={loaded.klaviyo} />
+      <MetricLine
+        parts={[
+          { value: repeat?.rateLabel ?? "", label: "repeat purchase" },
+          { value: repeat ? formatCount(repeat.customers) ?? "" : "", label: "customers" },
+          { value: lists.length ? String(lists.length) : "", label: lists.length === 1 ? "list" : "lists" },
+        ]}
+      />
       <article className="card">
         <h2>Repeat purchase</h2>
         {repeat ? (

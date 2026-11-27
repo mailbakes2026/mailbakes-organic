@@ -1,9 +1,12 @@
 import { addDays, londonToday } from "@/lib/dates";
+import { mergeSignals } from "@/lib/deadline";
 import { parseShopifyOrders, shopHost, type ParsedOrder } from "@/lib/retention/shopify-parse";
 import { scrub } from "@/lib/scrub";
 
 const VERSION = "2025-10";
 const PAGE_CAP = 30;
+const REQUEST_MS = 8_000;
+const PULL_MS = 40_000;
 
 const QUERY = `query Orders($cursor: String, $search: String!) {
   orders(first: 100, after: $cursor, query: $search, sortKey: CREATED_AT, reverse: true) {
@@ -20,7 +23,7 @@ const QUERY = `query Orders($cursor: String, $search: String!) {
 
 let cache: { shop: string; token: string; expiresAt: number } | null = null;
 
-export async function shopifyToken(shop: string, clientId: string, clientSecret: string) {
+export async function shopifyToken(shop: string, clientId: string, clientSecret: string, signal?: AbortSignal) {
   if (cache && cache.shop === shop && cache.expiresAt > Date.now() + 60_000) return cache.token;
   const body = new URLSearchParams({
     grant_type: "client_credentials",
@@ -32,7 +35,7 @@ export async function shopifyToken(shop: string, clientId: string, clientSecret:
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body,
     cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
+    signal: mergeSignals(signal, REQUEST_MS),
   });
   const text = await response.text();
   if (!response.ok) {
@@ -56,8 +59,9 @@ export async function shopifyToken(shop: string, clientId: string, clientSecret:
 }
 
 export async function pullShopifyOrders(input: { shopDomain: string; clientId: string; clientSecret: string; now?: Date }) {
+  const deadline = AbortSignal.timeout(PULL_MS);
   const shop = shopHost(input.shopDomain);
-  const token = await shopifyToken(shop, input.clientId, input.clientSecret);
+  const token = await shopifyToken(shop, input.clientId, input.clientSecret, deadline);
   const since = addDays(londonToday(input.now ?? new Date()), -540);
   const search = `created_at:>=${since} status:any`;
   const orders: ParsedOrder[] = [];
@@ -65,6 +69,7 @@ export async function pullShopifyOrders(input: { shopDomain: string; clientId: s
   let skipped = 0;
   let truncated = false;
   for (let page = 0; page < PAGE_CAP; page += 1) {
+    if (deadline.aborted) throw new Error("Shopify took too long. Stored orders were left as they are.");
     const response = await fetch(`https://${shop}/admin/api/${VERSION}/graphql.json`, {
       method: "POST",
       headers: {
@@ -73,7 +78,7 @@ export async function pullShopifyOrders(input: { shopDomain: string; clientId: s
       },
       body: JSON.stringify({ query: QUERY, variables: { cursor, search } }),
       cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+      signal: mergeSignals(deadline, REQUEST_MS),
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`Shopify orders failed (HTTP ${response.status}).`);

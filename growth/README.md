@@ -89,7 +89,7 @@ Set these on the service. Do not commit them. The app does not print them.
 | `RETENTION_API_TOKEN` | Millie | For ingest and the email calendar API | Bearer token for Retention rows and for Claude to read and edit the email calendar. At least 16 characters. No separate calendar token. |
 | `META_ACCESS_TOKEN` | Millie | To sync Meta | Marketing API token with ads read access for the ad account. |
 | `META_AD_ACCOUNT_ID` | Millie | To sync Meta | Ad account id, with or without the `act_` prefix. |
-| `KLAVIYO_PRIVATE_API_KEY` | Millie | To sync Klaviyo | Private API key. Set it on the Render service `mailbakes-growth`, under Environment, then save, rebuild, and deploy. Retention Settings shows whether it is set, and never shows the value. |
+| `KLAVIYO_PRIVATE_API_KEY` | Millie | To sync Klaviyo | Private API key. Set it on the Render service `mailbakes-growth`, under Environment, then save, rebuild, and deploy. `KLAVIYO_PRIVATE_KEY` is read if the first name is empty. Retention Settings shows whether a key is set, and never shows the value. |
 | `SHOPIFY_SHOP` | Millie | To sync Shopify | Shop host, such as `mailbakes.myshopify.com`. No `https://`. |
 | `SHOPIFY_CLIENT_ID` | Millie | To sync Shopify | Client id for the client-credentials grant. |
 | `SHOPIFY_CLIENT_SECRET` | Millie | To sync Shopify | Client secret for that grant. |
@@ -118,19 +118,19 @@ No request is made. The card stays "Not connected".
 
 Retention calls Klaviyo with the key on this service. The same pattern as Meta: the key lives in the Render environment, and the page shows Connected or Not connected.
 
-`KLAVIYO_PRIVATE_API_KEY` is read at runtime and sent as `Authorization: Klaviyo-API-Key` with revision `2025-04-15`. It is not logged, not stored in the database, and not written into the page. Settings only says whether the variable is set.
+`KLAVIYO_PRIVATE_API_KEY` is read at runtime, with `KLAVIYO_PRIVATE_KEY` as a fallback, and sent as `Authorization: Klaviyo-API-Key` with revision `2025-04-15`. It is not logged, not stored in the database, and not written into the page. Settings only says whether a key is set.
 
 Where to set it:
 
 1. In Klaviyo, create a private API key with read access to accounts, metrics, flows, campaigns and lists.
 2. In Render, open the web service `mailbakes-growth` (the service for `retention.mailbakes.com` and `paidads.mailbakes.com`).
 3. Open Environment.
-4. Set `KLAVIYO_PRIVATE_API_KEY`.
+4. Set `KLAVIYO_PRIVATE_API_KEY`. `KLAVIYO_PRIVATE_KEY` works too, if that name is already on the service.
 5. Save, rebuild, and deploy.
 
 If the Retention home card already says Connected, leave the variable as it is. Replace it only when you rotate the key in Klaviyo, then redeploy.
 
-Opening Retention, Flows, Campaigns, Customers or Settings syncs Klaviyo when the last successful sync is more than 6 hours old. A failed sync waits 10 minutes before the next try. Sync Klaviyo on the home page, or on Settings, runs it immediately. Meta uses the same 6-hour cadence.
+Opening Overview, Flows, Campaigns, Customers or Settings reads the rows already stored. It does not wait on Klaviyo, Shopify, or Meta. If the last successful sync is more than 6 hours old, a new sync starts in the background. A failed sync waits 10 minutes before the next try. Refresh on the page runs a sync now. Each Klaviyo request gives up after 8 seconds, and a whole Klaviyo pull gives up after 18 seconds, so a slow call cannot hold the page. The figures from the last good sync stay put. Meta uses the same 6-hour cadence, also in the background on Retention. The built view is kept in memory for 20 seconds so moving between those tabs does not rebuild it.
 
 Sync looks up a metric named `Placed Order`, and prefers the Shopify integration when more than one exists. If that metric is missing, sync stops and says so, because the values report will not return revenue without it. It then requests flow and campaign value reports for `last_7_days` and `last_30_days` (opens, clicks, unsubscribes, delivered or recipients, conversion value). Flow names are loaded when Klaviyo returns them. Campaign names are loaded per channel (`email`, `sms`, and `mobile_push`), because the campaigns list requires a channel filter. Lists are snapshotted for the London day, including `profile_count` when Klaviyo returns it. A second snapshot on a later day is what makes list growth visible. One snapshot shows the count and a blank change.
 

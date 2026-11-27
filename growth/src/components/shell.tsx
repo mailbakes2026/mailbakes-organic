@@ -4,23 +4,29 @@ import { usePathname } from "next/navigation";
 import { Mark } from "@/components/icons";
 import type { AppId } from "@/lib/host";
 
-const NAV: Record<AppId, { href: string; label: string }[]> = {
-  paidads: [
-    { href: "", label: "Overview" },
-    { href: "/campaigns", label: "Campaigns" },
-    { href: "/changes", label: "What changed" },
-    { href: "/notes", label: "Notes" },
-  ],
-  retention: [
-    { href: "/calendar", label: "Calendar" },
-    { href: "", label: "Overview" },
-    { href: "/flows", label: "Flows" },
-    { href: "/campaigns", label: "Campaigns" },
-    { href: "/customers", label: "Customers" },
-    { href: "/plan", label: "Q4 plan" },
-    { href: "/settings", label: "Settings" },
-  ],
-};
+type Link = { href: string; label: string; badge?: number };
+
+const PAID: Link[] = [
+  { href: "", label: "Overview" },
+  { href: "/campaigns", label: "Campaigns" },
+  { href: "/changes", label: "What changed" },
+  { href: "/notes", label: "Notes" },
+];
+
+const RETENTION: { group: string; links: { href: string; label: string; count?: boolean }[] }[] = [
+  {
+    group: "Lifecycle",
+    links: [
+      { href: "/calendar", label: "Calendar", count: true },
+      { href: "", label: "Overview" },
+      { href: "/flows", label: "Flows" },
+      { href: "/campaigns", label: "Campaigns" },
+    ],
+  },
+  { group: "Planning", links: [{ href: "/plan", label: "Q4 plan" }] },
+  { group: "Analytics", links: [{ href: "/customers", label: "Customers" }] },
+  { group: "Settings", links: [{ href: "/settings", label: "Settings" }] },
+];
 
 export function Shell({
   app,
@@ -28,6 +34,8 @@ export function Shell({
   otherHref,
   otherLabel,
   user,
+  needsOk = 0,
+  klaviyoConnected = false,
   children,
 }: {
   app: AppId;
@@ -35,43 +43,70 @@ export function Shell({
   otherHref: string;
   otherLabel: string;
   user: { name: string };
+  needsOk?: number;
+  klaviyoConnected?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const home = base || "/";
+  const retention = app === "retention";
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
   }
 
+  function item(link: Link) {
+    const href = `${base}${link.href}` || "/";
+    const active = link.href === "" ? pathname === home || pathname === `${home}/` : pathname === href || pathname.startsWith(`${href}/`);
+    return (
+      <a key={link.href || "home"} href={href} className={`nav-link${active ? " active" : ""}`} aria-current={active ? "page" : undefined}>
+        <span>{link.label}</span>
+        {link.badge ? <span className="nav-badge">{link.badge}</span> : null}
+      </a>
+    );
+  }
+
   return (
-    <div className="shell">
+    <div className={`shell${retention ? " app-retention" : ""}`}>
       <nav className="sidebar">
         <div className="brand">
           <img src="/mailbakes-logo.svg" alt="MailBakes" className="brand-logo" />
-          <span className="brand-row">
-            <span className="mark">
-              <Mark kind={app === "paidads" ? "megaphone" : "repeat"} size={14} />
+          {retention ? (
+            <div className="signed-in">Signed in as {user.name}</div>
+          ) : (
+            <span className="brand-row">
+              <span className="mark">
+                <Mark kind="megaphone" size={14} />
+              </span>
+              <i>Paid Ads</i>
             </span>
-            <i>{app === "paidads" ? "Paid Ads" : "Retention"}</i>
-          </span>
+          )}
         </div>
-        <div className="nav-group">{app === "paidads" ? "Ads" : "Lifecycle"}</div>
-        {NAV[app].map((link) => {
-          const href = `${base}${link.href}` || "/";
-          const active = link.href === "" ? pathname === home || pathname === `${home}/` : pathname === href;
-          return (
-            <a key={link.href} href={href} className={`nav-link${active ? " active" : ""}`} aria-current={active ? "page" : undefined}>
-              <span>{link.label}</span>
-            </a>
-          );
-        })}
+        {retention ? (
+          RETENTION.map((section) => (
+            <div key={section.group}>
+              <div className="nav-group">{section.group}</div>
+              {section.links.map((link) => item({ href: link.href, label: link.label, badge: link.count && needsOk > 0 ? needsOk : undefined }))}
+            </div>
+          ))
+        ) : (
+          <>
+            <div className="nav-group">Ads</div>
+            {PAID.map((link) => item(link))}
+          </>
+        )}
         <div className="sidebar-footer">
+          {retention ? (
+            <span className={`live-pill${klaviyoConnected ? "" : " is-off"}`}>
+              <i />
+              {klaviyoConnected ? "Live" : "Klaviyo off"}
+            </span>
+          ) : null}
           <a className="subtle small" href={otherHref}>
             {otherLabel}
           </a>
-          <div className="signed-in">Signed in as {user.name}</div>
+          {retention ? null : <div className="signed-in">Signed in as {user.name}</div>}
           <button className="subtle" type="button" onClick={signOut}>
             Sign out
           </button>

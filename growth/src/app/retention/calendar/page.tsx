@@ -23,14 +23,6 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     });
     return (
       <div className="cal">
-        <div className="page-head">
-          <div>
-            <h1 className="cal-title">Black Friday to Christmas: email calendar</h1>
-            <p className="muted">
-              Every MailBakes send from the Secret Slice letter through Christmas. Results come from Klaviyo when a campaign is linked, and from the stored snapshot until then. Planned days are proposals until you OK them.
-            </p>
-          </div>
-        </div>
         {requested.ok ? null : <p className="alert warn">{requested.error}</p>}
         <CalendarBoard key={`${week.from}:${query.campaign ?? ""}`} initial={week} actor={user?.name ?? "Millie"} initialCampaign={query.campaign} />
         <CalendarHandoff tokenConfigured={week.tokenConfigured} />

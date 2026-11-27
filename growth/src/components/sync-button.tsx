@@ -20,9 +20,9 @@ export function SyncButton({ href, label }: { href: string; label: string }) {
   }
 
   return (
-    <div className="row">
+    <div className="sync-action">
       <button className="btn" type="button" onClick={run} disabled={pending}>
-        {pending ? "Syncing…" : label}
+        {pending ? "Refreshing…" : label}
       </button>
       {error ? <p className="error">{error}</p> : null}
     </div>
