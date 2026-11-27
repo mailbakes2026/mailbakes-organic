@@ -33,6 +33,7 @@ export async function replaceSends(
             openRate: row.openRate,
             clickRate: row.clickRate,
             currency: row.currency,
+            status: "status" in row && typeof row.status === "string" ? row.status.slice(0, 40) : "",
             source,
           },
         });

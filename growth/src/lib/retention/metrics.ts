@@ -119,6 +119,7 @@ export type SendFact = {
   clickRate: number | null;
   currency: string;
   source: string;
+  status?: string;
   updatedAt: string;
 };
 

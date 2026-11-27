@@ -158,6 +158,7 @@ function toSend(row: {
   clickRate: number | null;
   currency: string;
   source: string;
+  status?: string;
   updatedAt: Date;
 }): SendFact {
   return {
@@ -173,6 +174,7 @@ function toSend(row: {
     clickRate: row.clickRate,
     currency: row.currency,
     source: row.source,
+    status: row.status ?? "",
     updatedAt: row.updatedAt.toISOString(),
   };
 }

@@ -4,7 +4,8 @@ import { rateFromCounts } from "@/lib/retention/metrics";
 export type SendDraft = {
   id: string;
   name: string;
-  window: "7d" | "30d";
+  window: string;
+  status?: string;
   revenuePence: number | null;
   opens: number | null;
   clicks: number | null;
@@ -44,7 +45,7 @@ function groupingId(groupings: unknown, keys: string[]): string {
   return "";
 }
 
-export function parseValuesReport(body: unknown, window: "7d" | "30d", idKeys: string[]) {
+export function parseValuesReport(body: unknown, window: string, idKeys: string[]) {
   const data = body && typeof body === "object" ? (body as { data?: { attributes?: { results?: unknown } } }).data : null;
   const results = data?.attributes?.results;
   if (!Array.isArray(results)) return [];
@@ -91,6 +92,50 @@ export function parseValuesReport(body: unknown, window: "7d" | "30d", idKeys: s
     openRate: rateFromCounts(row.opens, row.delivered),
     clickRate: rateFromCounts(row.clicks, row.delivered),
   }));
+}
+
+export function parseFlowList(body: unknown) {
+  const data = body && typeof body === "object" ? (body as { data?: unknown }).data : null;
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as { id?: unknown; attributes?: { name?: unknown; status?: unknown } };
+    if (typeof record.id !== "string" || !record.id) return [];
+    const name = typeof record.attributes?.name === "string" && record.attributes.name ? record.attributes.name : record.id;
+    const status = typeof record.attributes?.status === "string" ? record.attributes.status : "";
+    return [{ id: record.id, name, status }];
+  });
+}
+
+export function parseCampaignMessage(body: unknown) {
+  const root = body && typeof body === "object" ? (body as { data?: unknown; included?: unknown }) : null;
+  const data = Array.isArray(root?.data) ? root.data : root?.data ? [root.data] : [];
+  for (const item of data) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as {
+      attributes?: { channel?: unknown; content?: { subject?: unknown } };
+      relationships?: { template?: { data?: { id?: unknown } | { id?: unknown }[] } };
+    };
+    const channel = record.attributes?.channel;
+    if (typeof channel === "string" && channel !== "email") continue;
+    const template = record.relationships?.template?.data;
+    const templateId = template && !Array.isArray(template) && typeof template.id === "string" ? template.id : "";
+    if (!templateId) continue;
+    const subject = typeof record.attributes?.content?.subject === "string" ? record.attributes.content.subject : "";
+    return { templateId, subject };
+  }
+  const included = Array.isArray(root?.included) ? root.included : [];
+  for (const item of included) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as { type?: unknown; id?: unknown };
+    if (record.type === "template" && typeof record.id === "string" && record.id) return { templateId: record.id, subject: "" };
+  }
+  return null;
+}
+
+export function parseTemplateHtml(body: unknown) {
+  const data = body && typeof body === "object" ? (body as { data?: { attributes?: { html?: unknown } } }).data : null;
+  return typeof data?.attributes?.html === "string" ? data.attributes.html : "";
 }
 
 export function parseNamedResources(body: unknown) {

@@ -3,16 +3,20 @@ import {
   choosePlacedOrder,
   klaviyoError,
   parseAccountCurrency,
+  parseCampaignMessage,
   parseCampaignPerformance,
+  parseFlowList,
   parseLists,
   parseMetricCatalog,
   parseNamedResources,
+  parseTemplateHtml,
   parseValuesReport,
   retryWaitMs,
   safeKlaviyoNext,
   shopifyMetricsPath,
 } from "@/lib/retention/klaviyo-parse";
 import { mergeSignals } from "@/lib/deadline";
+import { sanitizeEmailHtml } from "@/lib/retention/html";
 import { logSafe, scrub } from "@/lib/scrub";
 
 const REVISION = "2025-04-15";
@@ -99,7 +103,7 @@ export async function pullKlaviyo(key: string) {
     klaviyo("/api/flow-values-reports", key, { method: "POST", body: reportBody("flow-values-report", "last_30_days", metricId), signal }),
     klaviyo("/api/campaign-values-reports", key, { method: "POST", body: reportBody("campaign-values-report", "last_30_days", metricId), signal }),
     accountCurrency(key, signal),
-    names("/api/flows?fields[flow]=name", key, signal),
+    flowCatalog(key, signal),
     campaignNameMap(key, signal),
     listsFor(key, signal),
   ]);
@@ -109,7 +113,11 @@ export async function pullKlaviyo(key: string) {
   for (const row of [...flows, ...campaigns]) {
     if (!/^[A-Z]{3}$/.test(row.currency)) row.currency = currency;
   }
-  for (const flow of flows) flow.name = flowNames.get(flow.id) ?? flow.id;
+  for (const flow of flows) {
+    const meta = flowNames.get(flow.id);
+    flow.name = meta?.name ?? flow.id;
+    flow.status = meta?.status ?? "";
+  }
   for (const campaign of campaigns) campaign.name = campaignNames.get(campaign.id) ?? campaign.id;
   return {
     flows,
@@ -147,12 +155,14 @@ async function accountCurrency(key: string, signal?: AbortSignal) {
   }
 }
 
-async function names(path: string, key: string, signal?: AbortSignal) {
+async function flowCatalog(key: string, signal?: AbortSignal) {
   try {
-    return new Map((await collect(path, key, signal)).flatMap(parseNamedResources).map((item) => [item.id, item.name]));
+    const rows = (await collect("/api/flows?fields[flow]=name,status", key, signal)).flatMap(parseFlowList);
+    return new Map(rows.map((item) => [item.id, item]));
   } catch (error) {
-    logSafe("klaviyo names", error);
-    return new Map<string, string>();
+    logSafe("klaviyo flow status", error);
+    const rows = (await collect("/api/flows?fields[flow]=name", key, signal)).flatMap(parseFlowList);
+    return new Map(rows.map((item) => [item.id, item]));
   }
 }
 
@@ -254,15 +264,66 @@ async function campaignReport(
   });
 }
 
-function reportBody(type: string, timeframe: string, conversionMetricId: string) {
+function reportBody(
+  type: string,
+  timeframe: string | { start: string; end: string },
+  conversionMetricId: string,
+  statistics = ["opens", "clicks", "unsubscribes", "delivered", "recipients", "conversion_value"],
+) {
   return {
     data: {
       type,
       attributes: {
-        statistics: ["opens", "clicks", "unsubscribes", "delivered", "recipients", "conversion_value"],
-        timeframe: { key: timeframe },
+        statistics,
+        timeframe: typeof timeframe === "string" ? { key: timeframe } : timeframe,
         conversion_metric_id: conversionMetricId,
       },
     },
   };
+}
+
+export async function klaviyoReportContext(key: string) {
+  const signal = AbortSignal.timeout(12_000);
+  const metricId = await placedOrderId(key, signal);
+  if (!metricId) {
+    throw new Error("Klaviyo is connected, but no metric named Placed Order was found, so weekly revenue cannot be requested.");
+  }
+  const currency = (await accountCurrency(key, signal)) ?? "GBP";
+  return { metricId, currency };
+}
+
+export async function pullWindowValues(
+  key: string,
+  metricId: string,
+  window: { start: string; end: string },
+  signal: AbortSignal,
+) {
+  const timeframe = { start: window.start, end: window.end };
+  const [flowBody, campaignBody] = await Promise.all([
+    klaviyo("/api/flow-values-reports", key, {
+      method: "POST",
+      body: reportBody("flow-values-report", timeframe, metricId, ["conversion_value"]),
+      signal,
+    }),
+    klaviyo("/api/campaign-values-reports", key, {
+      method: "POST",
+      body: reportBody("campaign-values-report", timeframe, metricId, ["conversion_value"]),
+      signal,
+    }),
+  ]);
+  return {
+    flows: parseValuesReport(flowBody, "prev7d", ["flow_id"]),
+    campaigns: parseValuesReport(campaignBody, "prev7d", ["campaign_id"]),
+  };
+}
+
+export async function pullCampaignPreview(key: string, campaignId: string, signal: AbortSignal) {
+  if (!/^[A-Za-z0-9]{6,32}$/.test(campaignId)) return null;
+  const messages = await klaviyo(`/api/campaigns/${campaignId}/campaign-messages`, key, { signal });
+  const message = parseCampaignMessage(messages);
+  if (!message?.templateId) return null;
+  const template = await klaviyo(`/api/templates/${message.templateId}`, key, { signal });
+  const html = sanitizeEmailHtml(parseTemplateHtml(template));
+  if (!html) return null;
+  return { html, subject: message.subject };
 }

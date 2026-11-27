@@ -3,15 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, addMonths, mondayOf } from "@/lib/dates";
-import { formatCount } from "@/lib/format";
 import { CampaignPanel } from "@/components/campaign-panel";
 import {
   STATUS_LABEL,
   formatClock,
   formatMoneyPence,
-  offerSpan,
   resultsLine,
   type CampaignJson,
+  type DayJson,
+  type OfferJson,
   type Status,
   type Tone,
   type WeekJson,
@@ -109,6 +109,9 @@ export function CalendarBoard({
     task: focused.filter((campaign) => campaign.status === "task").length,
   };
   const extraFilters = (["skipped", "task"] as const).filter((id) => counts[id] > 0).map((id) => ({ id, label: STATUS_LABEL[id] }));
+  const monthStart = `${month}-01`;
+  const monthEnd = addDays(`${addMonths(month, 1)}-01`, -1);
+  const weekAnchor = week.today >= monthStart && week.today <= monthEnd ? week.today : monthStart;
   const previous = view === "month" ? monthHref(addMonths(month, -1)) : weekHref(addDays(week.from, -7));
   const next = view === "month" ? monthHref(addMonths(month, 1)) : weekHref(addDays(week.from, 7));
   const rangeLabel = view === "month" ? monthLabel : week.rangeLabel;
@@ -223,11 +226,10 @@ export function CalendarBoard({
   const weeks = chunk(week.days, 7);
 
   return (
-    <>
+    <div className="cal-board">
       <div className="page-head">
         <div className="page-head-copy">
           <h1>Calendar</h1>
-          <p className="lede">Every planned email and offer, for the month or the week. Planned days stay proposals until you OK them.</p>
           <p className="metric-line">
             <b>{focused.length}</b> {focused.length === 1 ? "send" : "sends"}
             <span className="metric-sep"> · </span>
@@ -238,6 +240,8 @@ export function CalendarBoard({
             ) : (
               <b className="is-good">All done</b>
             )}
+            <span className="metric-sep"> · </span>
+            <b>{rollup.mixedCurrency ? "Mixed" : rollup.revenuePence === null ? "Not stored" : formatMoneyPence(rollup.revenuePence, rollup.currency)}</b>
           </p>
         </div>
         <div className="head-actions">
@@ -245,7 +249,7 @@ export function CalendarBoard({
             <a className={view === "month" ? "active" : ""} href={monthHref(month)} aria-current={view === "month" ? "page" : undefined}>
               Month
             </a>
-            <a className={view === "week" ? "active" : ""} href={weekHref(week.from)} aria-current={view === "week" ? "page" : undefined}>
+            <a className={view === "week" ? "active" : ""} href={weekHref(weekAnchor)} aria-current={view === "week" ? "page" : undefined}>
               Week
             </a>
           </div>
@@ -340,18 +344,6 @@ export function CalendarBoard({
         ))}
       </div>
 
-      <section className="summary-grid" aria-label={view === "month" ? monthLabel : "This week"}>
-        <Summary label="Sends" value={String(focused.length)} hint={rangeLabel} />
-        <Summary label="Needs OK" value={needsOk.length ? String(needsOk.length) : "All done"} hint={needsOk.length ? "Built, waiting on Millie" : "Nothing waiting"} done={!needsOk.length} />
-        <Summary label="Built" value={String(counts.built)} hint="Have a design" />
-        <Summary
-          label="Revenue"
-          value={rollup.mixedCurrency ? "Mixed" : rollup.revenuePence === null ? "—" : formatMoneyPence(rollup.revenuePence, rollup.currency)}
-          hint={rollup.orders === null ? "Orders not stored" : `${formatCount(rollup.orders)} orders`}
-          empty={rollup.revenuePence === null || rollup.mixedCurrency}
-        />
-      </section>
-
       {offer ? (
         <form className="card cal-offer-form" onSubmit={saveOffer}>
           <h3>{offer.id ? "Edit offer" : "New offer"}</h3>
@@ -392,6 +384,7 @@ export function CalendarBoard({
         </form>
       ) : null}
 
+      <PromoStrip offers={week.offers} onEdit={(item) => setOffer({ id: item.id, label: item.label, startDate: item.startDate, endDate: item.endDate, tone: item.tone })} />
       {view === "month" ? (
         <div className="cal-month-scroll">
           <div className="cal-month">
@@ -401,126 +394,51 @@ export function CalendarBoard({
               ))}
             </div>
             {weeks.map((days) => (
-              <div className="cal-month-block" key={days[0]?.date}>
-                <div className="cal-offers">
-                  {week.offers.map((item) => {
-                    const span = offerSpan(item, days[0]?.date ?? week.from, days[days.length - 1]?.date ?? week.to);
-                    if (!span) return null;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={`cal-offer is-${item.tone}`}
-                        style={{ gridColumn: `${span.startIndex + 1} / span ${span.span}` }}
-                        title={`${item.label}, ${item.startDate} to ${item.endDate}`}
-                        onClick={() => setOffer({ id: item.id, label: item.label, startDate: item.startDate, endDate: item.endDate, tone: item.tone })}
-                      >
-                        <span>{item.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="cal-month-week">
-                  {days.map((day) => (
-                    <section key={day.date} className={`cal-cell${day.date === week.today ? " is-today" : ""}${day.date.startsWith(month) ? "" : " is-outside"}`}>
-                      <header>
-                        <button className="cal-date" type="button" onClick={() => setPanel({ campaign: null, date: day.date })}>
-                          <b>{day.day}</b>
-                          <span>{day.month}</span>
-                        </button>
-                        {day.tags.map((tag) => (
-                          <span key={tag.id} className="cal-tag">
-                            {tag.label}
-                            <button type="button" aria-label={`Remove ${tag.label}`} onClick={() => removeTag(tag.id)}>
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                      </header>
-                      {day.campaigns.filter((campaign) => matches(campaign, filter)).map((campaign) => (
-                        <SendButton key={campaign.id} campaign={campaign} compact onOpen={() => openCampaign(campaign)} />
-                      ))}
-                      <button className="subtle cal-add" type="button" onClick={() => setPanel({ campaign: null, date: day.date })}>
-                        Add
-                      </button>
-                    </section>
-                  ))}
-                </div>
+              <div className="cal-month-week" key={days[0]?.date}>
+                {days.map((day) => (
+                  <DayCell
+                    key={day.date}
+                    day={day}
+                    today={week.today}
+                    outside={!day.date.startsWith(month)}
+                    filter={filter}
+                    onOpenDay={() => setPanel({ campaign: null, date: day.date })}
+                    onOpenCampaign={openCampaign}
+                    onRemoveTag={removeTag}
+                  />
+                ))}
               </div>
             ))}
           </div>
         </div>
       ) : (
         <section className="cal-week" aria-label={week.title}>
-          <div className="cal-week-scroll">
-            <div className="cal-span" aria-hidden="true">
-              {week.days.map((day) => (
-                <span key={day.date} className={day.date === week.today ? "is-today" : ""}>
-                  {day.weekday} {day.day}
-                </span>
-              ))}
-            </div>
-            <div className="cal-offers">
-              {week.offers.map((item) => {
-                const span = offerSpan(item, week.from, week.to);
-                if (!span) return null;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`cal-offer is-${item.tone}`}
-                    style={{ gridColumn: `${span.startIndex + 1} / span ${span.span}` }}
-                    title={`${item.label}, ${item.startDate} to ${item.endDate}`}
-                    onClick={() => setOffer({ id: item.id, label: item.label, startDate: item.startDate, endDate: item.endDate, tone: item.tone })}
-                  >
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="cal-days">
-            {week.days.map((day) => (
-              <section key={day.date} className={`cal-day${day.date === week.today ? " is-today" : ""}`}>
-                <header>
-                  <div>
-                    <b>{day.day}</b>
-                    <span>
-                      {day.weekday} {day.month}
-                    </span>
-                  </div>
-                  <div className="cal-day-marks">
-                    {day.date === week.today ? <span className="cal-today">Today</span> : null}
-                    {day.tags.map((tag) => (
-                      <span key={tag.id} className="cal-tag">
-                        {tag.label}
-                        <button type="button" aria-label={`Remove ${tag.label}`} onClick={() => removeTag(tag.id)}>
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                    {tagFor === day.date ? (
-                      <form onSubmit={(event) => addTag(event, day.date)}>
-                        <input name="label" aria-label={`Tag for ${day.date}`} maxLength={40} placeholder="Christmas" required />
-                        <button className="btn sm" type="submit">
-                          Add
-                        </button>
-                      </form>
-                    ) : (
-                      <button className="subtle" type="button" onClick={() => setTagFor(day.date)}>
-                        Add tag
-                      </button>
-                    )}
-                  </div>
-                </header>
-                {day.campaigns.filter((campaign) => matches(campaign, filter)).map((campaign) => (
-                  <SendButton key={campaign.id} campaign={campaign} onOpen={() => openCampaign(campaign)} />
+          <div className="cal-month-scroll">
+            <div className="cal-month">
+              <div className="cal-span" aria-hidden="true">
+                {week.days.map((day) => (
+                  <span key={day.date} className={day.date === week.today ? "is-today" : ""}>
+                    {day.weekday}
+                  </span>
                 ))}
-                <button className="subtle cal-add" type="button" onClick={() => setPanel({ campaign: null, date: day.date })}>
-                  Add on this day
-                </button>
-              </section>
-            ))}
+              </div>
+              <div className="cal-month-week">
+                {week.days.map((day) => (
+                  <DayCell
+                    key={day.date}
+                    day={day}
+                    today={week.today}
+                    filter={filter}
+                    tagging={tagFor === day.date}
+                    onOpenDay={() => setPanel({ campaign: null, date: day.date })}
+                    onOpenCampaign={openCampaign}
+                    onRemoveTag={removeTag}
+                    onStartTag={() => setTagFor(day.date)}
+                    onAddTag={(event) => addTag(event, day.date)}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </section>
       )}
@@ -534,17 +452,86 @@ export function CalendarBoard({
           onChange={refresh}
         />
       ) : null}
-    </>
+    </div>
   );
 }
 
-function Summary({ label, value, hint, done, empty }: { label: string; value: string; hint: string; done?: boolean; empty?: boolean }) {
+function PromoStrip({ offers, onEdit }: { offers: OfferJson[]; onEdit: (offer: OfferJson) => void }) {
+  if (!offers.length) return null;
   return (
-    <article className="stat">
-      <span className="eyebrow">{label}</span>
-      <b className={`stat-num${done ? " is-done" : ""}${empty ? " is-empty" : ""}`}>{value}</b>
-      <span className="muted small">{hint}</span>
-    </article>
+    <div className="promo-strip" aria-label="Offers">
+      {offers.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={`promo-pill is-${item.tone}`}
+          title={`${item.label}, ${item.startDate} to ${item.endDate}`}
+          onClick={() => onEdit(item)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DayCell({
+  day,
+  today,
+  outside,
+  filter,
+  tagging,
+  onOpenDay,
+  onOpenCampaign,
+  onRemoveTag,
+  onStartTag,
+  onAddTag,
+}: {
+  day: DayJson;
+  today: string;
+  outside?: boolean;
+  filter: FilterId;
+  tagging?: boolean;
+  onOpenDay: () => void;
+  onOpenCampaign: (campaign: CampaignJson) => void;
+  onRemoveTag: (id: string) => void;
+  onStartTag?: () => void;
+  onAddTag?: (event: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <section className={`cal-cell${day.date === today ? " is-today" : ""}${outside ? " is-outside" : ""}`}>
+      <header>
+        <button className="cal-date" type="button" onClick={onOpenDay}>
+          <b>{day.day}</b>
+          <span>{day.month}</span>
+        </button>
+        {day.tags.map((tag) => (
+          <span key={tag.id} className="cal-tag">
+            {tag.label}
+            <button type="button" aria-label={`Remove ${tag.label}`} onClick={() => onRemoveTag(tag.id)}>
+              ×
+            </button>
+          </span>
+        ))}
+        {onStartTag && onAddTag ? (
+          tagging ? (
+            <form onSubmit={onAddTag}>
+              <input name="label" aria-label={`Tag for ${day.date}`} maxLength={40} placeholder="Tag" required />
+            </form>
+          ) : (
+            <button className="subtle" type="button" onClick={onStartTag}>
+              Tag
+            </button>
+          )
+        ) : null}
+      </header>
+      {day.campaigns.filter((campaign) => matches(campaign, filter)).map((campaign) => (
+        <SendButton key={campaign.id} campaign={campaign} compact onOpen={() => onOpenCampaign(campaign)} />
+      ))}
+      <button className="subtle cal-add" type="button" onClick={onOpenDay}>
+        Add
+      </button>
+    </section>
   );
 }
 

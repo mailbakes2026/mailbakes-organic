@@ -108,6 +108,71 @@ export function priorPulse<T extends { capturedOn: string }>(pulses: T[], today:
   return [...inWeek].sort((a, b) => daysApart(a.capturedOn, target) - daysApart(b.capturedOn, target) || b.capturedOn.localeCompare(a.capturedOn))[0] ?? null;
 }
 
+export type HistoryWeek = {
+  start: string;
+  end: string;
+  capturedOn: string;
+  partial: boolean;
+};
+
+export type HistoryTarget = {
+  start: string;
+  end: string;
+  capturedOn: string[];
+  storeSends: boolean;
+};
+
+export function historyWeeks(today: string, count = 8): HistoryWeek[] {
+  if (!parseDateOnly(today) || count < 1) return [];
+  const thisMonday = mondayOf(today);
+  const weeks: HistoryWeek[] = [];
+  for (let index = count - 1; index >= 0; index -= 1) {
+    const start = addDays(thisMonday, -7 * index);
+    const sunday = addDays(start, 6);
+    const end = sunday > today ? today : sunday;
+    weeks.push({ start, end, capturedOn: end, partial: end !== sunday });
+  }
+  return weeks;
+}
+
+export function historyTargets(today: string, count = 8): HistoryTarget[] {
+  if (!parseDateOnly(today)) return [];
+  const priorEnd = addDays(today, -7);
+  const priorStart = addDays(priorEnd, -6);
+  const map = new Map<string, HistoryTarget>();
+  function add(start: string, end: string, capturedOn: string, storeSends: boolean) {
+    const key = `${start}:${end}`;
+    const existing = map.get(key);
+    if (existing) {
+      if (!existing.capturedOn.includes(capturedOn)) existing.capturedOn.push(capturedOn);
+      existing.storeSends = existing.storeSends || storeSends;
+      return;
+    }
+    map.set(key, { start, end, capturedOn: [capturedOn], storeSends });
+  }
+  add(priorStart, priorEnd, priorEnd, true);
+  for (const week of historyWeeks(today, count)) {
+    if (week.capturedOn === today) continue;
+    add(week.start, week.end, week.capturedOn, false);
+  }
+  return [...map.values()].sort((left, right) => Number(right.storeSends) - Number(left.storeSends) || right.end.localeCompare(left.end));
+}
+
+export function windowRepeat(orders: { customerId: string; orderedOn: string }[], start: string, end: string) {
+  if (!parseDateOnly(start) || !parseDateOnly(end) || start > end) return null;
+  const before = new Set<string>();
+  const inWindow = new Set<string>();
+  for (const order of orders) {
+    if (!order.customerId || !parseDateOnly(order.orderedOn)) continue;
+    if (order.orderedOn < start) before.add(order.customerId);
+    else if (order.orderedOn <= end) inWindow.add(order.customerId);
+  }
+  if (!inWindow.size) return null;
+  let repeatCustomers = 0;
+  for (const id of inWindow) if (before.has(id)) repeatCustomers += 1;
+  return { customers: inWindow.size, repeatCustomers, rate: repeatCustomers / inWindow.size };
+}
+
 export function recentWeekStarts(today: string, count = 8) {
   const start = mondayOf(today);
   const weeks: string[] = [];
@@ -239,7 +304,7 @@ export function weekStory(input: {
     note: compared
       ? "Change is against the 7-day figures stored a week earlier."
       : "Up and down badges appear once a sync from the previous week is stored.",
-    chartNote: "Each pair is one week. Flow revenue is a stored sync. Campaign revenue uses that sync, or calendar results when no sync is stored.",
+    chartNote: "Each pair is one London week. Earlier weeks fill in from a background sync. Campaign bars can also use calendar results.",
   };
 }
 

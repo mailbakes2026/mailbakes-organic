@@ -1,6 +1,23 @@
 import { prisma, prepareDatabase } from "@/lib/prisma";
 import type { PulsePoint } from "@/lib/retention/weeks";
 
+export async function savePulseRepeat(
+  capturedOn: string,
+  repeat: { rate: number; repeatCustomers: number; customers: number } | null,
+) {
+  await prepareDatabase();
+  const data = {
+    repeatRate: repeat?.rate ?? null,
+    repeatCustomers: repeat?.repeatCustomers ?? null,
+    customers: repeat?.customers ?? null,
+  };
+  await prisma.retentionPulse.upsert({
+    where: { capturedOn },
+    create: { capturedOn, ...data },
+    update: data,
+  });
+}
+
 export async function savePulse(pulse: PulsePoint) {
   await prepareDatabase();
   const data = {

@@ -769,7 +769,142 @@ table.data td.name { min-width: 160px; }
 label.btn { display: inline-flex; align-items: center; width: fit-content; cursor: pointer; }
 
 @media (max-width: 880px) {
-  .app-retention .camp-row { grid-template-columns: 72px minmax(0, 1fr); }
+  .app-retention .camp-main { grid-template-columns: 84px minmax(0, 1fr); }
   .app-retention .camp-rates { grid-column: 1 / -1; }
   .app-retention .variant-grid, .app-retention .segment-grid { grid-template-columns: 1fr; }
+}
+
+.app-retention .wow.is-drop { background: #FDE8EA; color: #C4233A; }
+.app-retention .attention {
+  background: #fff;
+  border: 1px solid #F3C3D8;
+  border-radius: 14px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.app-retention .attention h2 { font-size: 15px; }
+.app-retention .attention p { margin: 0; }
+.app-retention .flow-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.app-retention .flow-card {
+  background: #fff;
+  border: 1px solid #E7E3DF;
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.app-retention .flow-card header { display: flex; gap: 8px; align-items: flex-start; }
+.app-retention .flow-card header div { flex: 1; min-width: 0; }
+.app-retention .flow-card h3 { font-size: 15px; }
+.app-retention .flow-card header b { display: block; margin-top: 2px; font-size: 20px; letter-spacing: -0.03em; }
+.app-retention .flow-card header b.is-empty { color: #8A817C; font-size: 15px; }
+.app-retention .flow-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #FDE8F1;
+  color: #C2185B;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.app-retention .camp-row { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.app-retention .camp-main { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: center; }
+.app-retention .camp-open, .app-retention .spotlight-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.app-retention .spotlight-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.app-retention .camp-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-retention .email-thumb {
+  width: 84px;
+  height: 112px;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid #E7E3DF;
+  background: #fff;
+  position: relative;
+  flex: none;
+}
+.app-retention .email-thumb iframe {
+  width: 600px;
+  height: 800px;
+  border: 0;
+  transform: scale(0.14);
+  transform-origin: top left;
+  pointer-events: none;
+}
+.app-retention .email-scroll {
+  height: 460px;
+  overflow: auto;
+  border: 1px solid #E7E3DF;
+  border-radius: 12px;
+  background: #fff;
+}
+.app-retention .email-scroll iframe { width: 100%; height: 1400px; border: 0; background: #fff; }
+.app-retention .promo-strip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 8px; }
+.app-retention .promo-pill {
+  border: 0;
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 3px 10px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  background: #ED217A;
+  font-size: 12px;
+  font-weight: 750;
+}
+.app-retention .promo-pill.is-plum { background: #6E1844; }
+.app-retention:has(.cal-board) .main { padding-top: 16px; padding-bottom: 12px; }
+.app-retention .cal-board .page-head { margin-bottom: 6px; }
+.app-retention .cal-board h1 { font-size: 22px; }
+.app-retention .cal-board .metric-line { margin-top: 2px; }
+.app-retention .cal-board .callout { padding: 6px 10px; margin-bottom: 6px; font-size: 13px; }
+.app-retention .cal-board .cal-jump, .app-retention .cal-board .filter-pills { margin-bottom: 6px; }
+.app-retention .cal-board .cal-handoff, .app-retention .cal .cal-handoff { margin-top: 8px; padding: 8px 12px; }
+.app-retention .cal-board .cal-month { min-width: 0; gap: 4px; }
+.app-retention .cal-board .cal-month-week { gap: 4px; }
+.app-retention .cal-board .cal-cell { min-height: 0; max-height: 96px; padding: 4px 5px; gap: 2px; border-radius: 10px; overflow: hidden; }
+.app-retention .cal-board .cal-date b { font-size: 14px; }
+.app-retention .cal-board .cal-send.is-compact { flex-direction: row; align-items: center; padding: 2px 4px; gap: 4px; }
+.app-retention .cal-board .cal-send.is-compact .cal-thumb,
+.app-retention .cal-board .cal-send.is-compact .cal-html,
+.app-retention .cal-board .cal-send.is-compact .cal-placeholder { width: 18px; height: 18px; border-radius: 4px; }
+.app-retention .cal-board .cal-send.is-compact { min-width: 0; }
+.app-retention .cal-board .cal-send.is-compact > span { min-width: 0; overflow: hidden; }
+.app-retention .cal-board .cal-send.is-compact .cal-send-title {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-retention .cal-board .cal-send.is-compact .cal-pill { display: none; }
+.app-retention .cal-board .cal-add { margin-top: 0; font-size: 12px; }
+.app-retention .cal-board .cal-tag { font-size: 11px; }
+@media (max-width: 880px) {
+  .app-retention .flow-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .app-retention .cal-board .cal-month { min-width: 680px; }
+  .app-retention .camp-open { grid-template-columns: 1fr; }
 }
