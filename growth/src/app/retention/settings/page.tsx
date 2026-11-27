@@ -2,13 +2,17 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 import { ConnectionCard } from "@/components/connection";
 import { DataSkeleton } from "@/components/data-skeleton";
+import { NoteBoard } from "@/components/note-board";
 import { Callout, PageHeader, SyncFailure } from "@/components/page-header";
 import { RefreshActions } from "@/components/refresh-actions";
 import { connectionCopy } from "@/lib/connection";
+import { formatLondon } from "@/lib/dates";
 import { klaviyoMissing } from "@/lib/env";
 import { publicBase } from "@/lib/host";
+import { listNotes } from "@/lib/paidads/store";
 import { KLAVIYO_NOT_CONNECTED } from "@/lib/retention/klaviyo-copy";
 import { loadRetention } from "@/lib/retention/load";
+import { logSafe } from "@/lib/scrub";
 
 export const dynamic = "force-dynamic";
 
@@ -76,9 +80,31 @@ async function SettingsBody() {
           Opening Overview, Flows, Campaigns, Customers or Settings reads the figures already stored. If the last successful sync is more than 6 hours old, a new sync starts in the background and does not hold the page. A failed sync waits 10 minutes before the next attempt. Refresh runs a sync now, and gives up if Klaviyo or Shopify takes too long.
         </p>
         <p className="muted small">
-          The email calendar uses this same key when a send has a Klaviyo campaign ID. <a href={`${base}/calendar`}>Open the calendar</a>.
+          The email calendar uses this same key when a send has a Klaviyo campaign ID. <a href={`${base}/calendar`}>Open the calendar</a>. Campaign planning lives on the calendar.
         </p>
       </article>
+      <ReviewNotes />
     </>
   );
+}
+
+async function ReviewNotes() {
+  try {
+    const notes = await listNotes("retention", "review");
+    return (
+      <>
+        <h2 className="section-title">Retention review notes</h2>
+        <NoteBoard
+          title="Prep notes"
+          hint="Notes for the Retention Reviews. This is not a performance figure."
+          action="/api/retention/notes"
+          authors={["Millie", "Kyle"]}
+          notes={notes.map((note) => ({ id: note.id, author: note.author, body: note.body, when: formatLondon(note.createdAt) }))}
+        />
+      </>
+    );
+  } catch (error) {
+    logSafe("review notes", error);
+    return null;
+  }
 }

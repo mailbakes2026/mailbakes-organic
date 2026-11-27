@@ -260,3 +260,42 @@ model ReviewComment {
 
   @@index([campaignId, createdAt])
 }
+
+// One row per London day. Pages compare the latest row with the row from a week earlier.
+model RetentionPulse {
+  id                   String   @id @default(cuid())
+  capturedOn           String   @unique
+  flowRevenuePence     Int?
+  campaignRevenuePence Int?
+  currency             String   @default("GBP")
+  mixedCurrency        Boolean  @default(false)
+  repeatRate           Float?
+  repeatCustomers      Int?
+  customers            Int?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model FlowExperiment {
+  id         String   @id @default(cuid())
+  flowId     String   @default("")
+  flowName   String   @default("")
+  name       String
+  hypothesis String   @default("")
+  variantA   String   @default("")
+  variantB   String   @default("")
+  splitA     Int      @default(50)
+  status     String   @default("draft")
+  winner     String   @default("")
+  metricName String   @default("")
+  metricA    String   @default("")
+  metricB    String   @default("")
+  lift       String   @default("")
+  notes      String   @default("")
+  source     String   @default("manual")
+  updatedBy  String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([flowId, status])
+}

@@ -50,6 +50,39 @@ async function seedOnce(seedKey: string, create: (tx: Prisma.TransactionClient) 
   }
 }
 
+export async function listDesignLinks() {
+  await ensureCalendarSeed();
+  const rows = await prisma.calendarCampaign.findMany({
+    orderBy: { sendDate: "desc" },
+    select: {
+      id: true,
+      title: true,
+      klaviyoCampaignId: true,
+      sendDate: true,
+      audience: true,
+      subject: true,
+      designs: {
+        select: { id: true, mimeType: true, filename: true },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+  return rows.map((row) => {
+    const image = row.designs.find((design) => design.mimeType.startsWith("image/"));
+    const html = row.designs.find((design) => design.mimeType === "text/html");
+    const design = image ?? html ?? null;
+    return {
+      calendarId: row.id,
+      title: row.title,
+      klaviyoCampaignId: row.klaviyoCampaignId,
+      sendDate: row.sendDate,
+      audience: row.audience,
+      subject: row.subject,
+      design: design ? { id: design.id, mimeType: design.mimeType, filename: design.filename } : null,
+    };
+  });
+}
+
 export async function countNeedsOk() {
   await ensureCalendarSeed();
   return prisma.calendarCampaign.count({ where: { status: "built" } });

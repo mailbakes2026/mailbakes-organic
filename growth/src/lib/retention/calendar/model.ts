@@ -17,8 +17,8 @@ export type Verdict = (typeof VERDICTS)[number];
 export const STATUS_LABEL: Record<Status, string> = {
   sent: "Sent",
   scheduled: "Scheduled",
-  built: "Built, needs your OK",
-  planned: "Planned",
+  built: "Needs OK",
+  planned: "Draft",
   skipped: "Skipped",
   task: "Task",
 };

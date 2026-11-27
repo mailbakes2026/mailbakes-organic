@@ -1,9 +1,16 @@
-import { formatDay, formatMonth } from "@/lib/dates";
+import { formatDay, formatMonth, londonToday } from "@/lib/dates";
 import { formatRate } from "@/lib/format";
-import { cohortRetention, listGrowth, preferLatest, repeatPurchase, type ListPoint, type OrderFact, type SendFact } from "@/lib/retention/metrics";
+import { cohortRetention, customerPicture, listGrowth, preferLatest, repeatPurchase, type ListPoint, type OrderFact, type SendFact } from "@/lib/retention/metrics";
 
-export function buildRetentionView(input: { orders: OrderFact[]; lists: ListPoint[]; flows: SendFact[]; campaigns: SendFact[] }) {
+export function buildRetentionView(input: {
+  orders: Array<OrderFact & { totalPence?: number | null; currency?: string }>;
+  lists: ListPoint[];
+  flows: SendFact[];
+  campaigns: SendFact[];
+  today?: string;
+}) {
   const repeat = repeatPurchase(input.orders);
+  const customers = customerPicture(input.orders, input.today ?? londonToday());
   const cohorts = cohortRetention(input.orders);
   const lists = listGrowth(input.lists);
   return {
@@ -31,6 +38,7 @@ export function buildRetentionView(input: { orders: OrderFact[]; lists: ListPoin
       latestLabel: formatDay(row.latest.capturedOn),
       previousLabel: row.previous ? formatDay(row.previous.capturedOn) : null,
     })),
+    customers,
     flows: {
       "7d": preferLatest(input.flows.filter((row) => row.window === "7d")),
       "30d": preferLatest(input.flows.filter((row) => row.window === "30d")),

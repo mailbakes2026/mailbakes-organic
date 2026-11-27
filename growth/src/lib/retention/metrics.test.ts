@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cohortRetention, listGrowth, preferLatest, repeatPurchase } from "./metrics.ts";
+import { cohortRetention, customerPicture, listGrowth, listSummary, preferLatest, repeatPurchase } from "./metrics.ts";
 
 test("repeat rate ignores guest orders and does not treat one order as a repeat", () => {
   const summary = repeatPurchase([
@@ -34,6 +34,44 @@ test("cohort cells after the latest month stay blank", () => {
   assert.equal(august?.retained[0], 2);
   assert.equal(august?.retained[1], 1);
   assert.equal(august?.retained[2], null);
+});
+
+test("customer picture splits new and returning, and finds who to nudge", () => {
+  const picture = customerPicture(
+    [
+      { id: "1", customerId: "a", orderedOn: "2026-01-01", totalPence: 1000, currency: "GBP" },
+      { id: "2", customerId: "a", orderedOn: "2026-01-31", totalPence: 1000, currency: "GBP" },
+      { id: "3", customerId: "a", orderedOn: "2026-03-16", totalPence: 1000, currency: "GBP" },
+      { id: "4", customerId: "b", orderedOn: "2026-01-01", totalPence: 1000, currency: "GBP" },
+      { id: "5", customerId: "c", orderedOn: "2026-02-14", totalPence: 2000, currency: "GBP" },
+      { id: "6", customerId: "c", orderedOn: "2026-02-14", totalPence: 500, currency: "GBP" },
+      { id: "7", customerId: "", orderedOn: "2026-02-14", totalPence: 900, currency: "GBP" },
+    ],
+    "2026-04-15",
+  );
+  assert.equal(picture?.customers, 3);
+  assert.equal(picture?.newCustomers, 1);
+  assert.equal(picture?.returningCustomers, 2);
+  assert.equal(picture?.newRevenuePence, 1000);
+  assert.equal(picture?.returningRevenuePence, 5500);
+  assert.equal(picture?.avgDaysToSecond, 15);
+  assert.equal(picture?.guestOrders, 1);
+  assert.equal(picture?.vips.customers, 1);
+  assert.equal(picture?.due.customers, 2);
+  assert.equal(picture?.lapsed.customers, 1);
+  assert.equal(picture?.vips.avgSpendPence, 3000);
+  assert.equal(customerPicture([], "2026-04-15"), null);
+});
+
+test("list growth totals the latest snapshots", () => {
+  const summary = listSummary([
+    { latest: { profiles: 100 }, delta: 10 },
+    { latest: { profiles: 5 }, delta: -1 },
+    { latest: { profiles: null }, delta: null },
+  ]);
+  assert.equal(summary.total, 105);
+  assert.equal(summary.net, 9);
+  assert.equal(summary.missingProfiles, 1);
 });
 
 test("list growth needs two dates", () => {

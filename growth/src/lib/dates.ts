@@ -15,6 +15,13 @@ export function parseDateOnly(value: string): Date | null {
   return date;
 }
 
+export function daysBetween(from: string, to: string) {
+  const start = parseDateOnly(from);
+  const end = parseDateOnly(to);
+  if (!start || !end) return null;
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000);
+}
+
 export function addDays(day: string, days: number) {
   const parsed = parseDateOnly(day);
   if (!parsed) return day;
@@ -101,6 +108,21 @@ export function addMonths(month: string, count: number) {
   const year = date.getUTCFullYear();
   const next = String(date.getUTCMonth() + 1).padStart(2, "0");
   return `${year}-${next}`;
+}
+
+export function formatMonthLong(month: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return month;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1));
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", month: "long", year: "numeric" }).format(date);
+}
+
+export function monthGrid(month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) return null;
+  const start = `${month}-01`;
+  if (!parseDateOnly(start)) return null;
+  const end = addDays(`${addMonths(month, 1)}-01`, -1);
+  return { month, start, end, from: mondayOf(start), to: addDays(mondayOf(end), 6) };
 }
 
 export function formatMonth(month: string) {
